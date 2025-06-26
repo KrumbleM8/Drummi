@@ -1,0 +1,8 @@
+D:/UnityProjects/Unity Projects/Drummi 2/.utmp/RelWithDebInfo/616x6762/arm64-v8a/CMakeFiles/edit_cache.dir
+D:/UnityProjects/Unity Projects/Drummi 2/.utmp/RelWithDebInfo/616x6762/arm64-v8a/CMakeFiles/rebuild_cache.dir
+D:/UnityProjects/Unity Projects/Drummi 2/.utmp/RelWithDebInfo/616x6762/arm64-v8a/GameActivity/CMakeFiles/game.dir
+D:/UnityProjects/Unity Projects/Drummi 2/.utmp/RelWithDebInfo/616x6762/arm64-v8a/GameActivity/CMakeFiles/edit_cache.dir
+D:/UnityProjects/Unity Projects/Drummi 2/.utmp/RelWithDebInfo/616x6762/arm64-v8a/GameActivity/CMakeFiles/rebuild_cache.dir
+D:/UnityProjects/Unity Projects/Drummi 2/.utmp/RelWithDebInfo/616x6762/arm64-v8a/FramePacing/CMakeFiles/swappywrapper.dir
+D:/UnityProjects/Unity Projects/Drummi 2/.utmp/RelWithDebInfo/616x6762/arm64-v8a/FramePacing/CMakeFiles/edit_cache.dir
+D:/UnityProjects/Unity Projects/Drummi 2/.utmp/RelWithDebInfo/616x6762/arm64-v8a/FramePacing/CMakeFiles/rebuild_cache.dir
