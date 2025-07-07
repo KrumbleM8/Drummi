@@ -30,6 +30,8 @@ public class GameManager : MonoBehaviour
     public void SetDifficulty(int difficultyIndex)
     {
         beatGenerator.difficultyIndex = difficultyIndex;
+        beatGenerator.SetBPM();
+        //BroadcastMessage("SetBPM");
     }
 
     public void SetMusic(int index)
@@ -39,13 +41,19 @@ public class GameManager : MonoBehaviour
             case 0:
                 metronome.bpm = 105;
                 AudioManager.instance.selectedSongIndex = index;
+                BroadcastMessage("SetBPM");
                 break;
             case 1:
+                //metronome.bpm = SongItem.bpm etc
+                metronome.bpm = 111;
+                AudioManager.instance.selectedSongIndex = index;
+                BroadcastMessage("SetBPM");
                 break;
             case 2:
                 break;
             default:
                 metronome.bpm = 105;
+                BroadcastMessage("SetBPM");
                 AudioManager.instance.selectedSongIndex = index;
                 break;
 

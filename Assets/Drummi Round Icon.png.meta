@@ -173,7 +173,8 @@ TextureImporter:
     secondaryTextures: []
     spriteCustomMetadata:
       entries: []
-    nameFileIdTable: {}
+    nameFileIdTable:
+      Drummi Round Icon_0: 8512865832375976381
   mipmapLimitGroupName: 
   pSDRemoveMatte: 0
   userData: 

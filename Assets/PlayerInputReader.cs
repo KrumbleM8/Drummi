@@ -15,6 +15,9 @@ public class PlayerInputReader : MonoBehaviour
     public List<BongoInput> playerInputData = new List<BongoInput>();
     public PlayerInputVisualHandler playerInputVisualScheduler;
 
+    //Used for logging inputs as they are pressed:
+    public BeatEvaluator beatEvaluator;
+
     private void Awake()
     {
         if (actionMap != null)
@@ -26,6 +29,8 @@ public class PlayerInputReader : MonoBehaviour
         {
             Debug.LogError("Input Action Map is not assigned!");
         }
+
+        beatEvaluator = GetComponent<BeatEvaluator>();
     }
 
     private void OnEnable()
@@ -78,6 +83,8 @@ public class PlayerInputReader : MonoBehaviour
         playerInputData.Add(input);
 
         playerInputVisualScheduler?.SpawnInputIndicator(isRightBongo);
+
+        beatEvaluator.LogInput(input);
     }
 
     public void ResetInputs()

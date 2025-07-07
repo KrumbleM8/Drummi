@@ -101,6 +101,17 @@ public class Metronome : MonoBehaviour
     {
         return AudioSettings.dspTime - lastBeatTime; // Get the time since the last beat
     }
+    public double GetClosestBeatTime(double currentTime)
+    {
+        double beatInterval = 60.0 / bpm;
+        double elapsedSinceLastBeat = currentTime - lastBeatTime;
+
+        // Estimate total elapsed beats since the last known beat
+        int beatOffset = Mathf.RoundToInt((float)(elapsedSinceLastBeat / beatInterval));
+
+        // Calculate the actual closest beat time
+        return lastBeatTime + beatInterval * beatOffset;
+    }
 
     void OnTick()
     {

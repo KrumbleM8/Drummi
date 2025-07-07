@@ -16,7 +16,7 @@ public class BeatGenerator : MonoBehaviour
     public int maxBeats = 8;
     public int difficultyIndex = 0;
 
-    private readonly float[] starterBeatDurations = { 1f, 0.5f };
+    private readonly float[] starterBeatDurations = { 1f, 0.5f};
     private readonly float[] standardBeatDurations = { 1f, 0.5f, 0.25f };
     private readonly float[] spicyBeatDurations = { 1f, 0.75f, 0.5f, 0.25f };
     private float[] chosenBeatDurations;
@@ -50,12 +50,34 @@ public class BeatGenerator : MonoBehaviour
     {
         metronome.OnTickEvent += HandleOnTick;
         metronome.OnFreshBarEvent += HandleOnFreshBar;
+
+        SetBPM();
     }
 
     private void OnDisable()
     {
         metronome.OnTickEvent -= HandleOnTick;
         metronome.OnFreshBarEvent -= HandleOnFreshBar;
+    }
+
+    public void SetBPM()
+    {
+        beatInterval = 60.0 / metronome.bpm;
+        gracePeriodEndTime = VirtualDspTime() + (8 * beatInterval);
+        loopStartTime = VirtualDspTime();
+
+        switch (metronome.bpm)
+        {
+            case 111:
+                playbackOffset = 0;
+                break;
+            case 105:
+                playbackOffset = 0.05f;
+                break;
+            default:
+                playbackOffset = 0;
+                break;
+        }
     }
 
     private void Start()
@@ -67,10 +89,6 @@ public class BeatGenerator : MonoBehaviour
             2 => spicyBeatDurations,
             _ => spicyBeatDurations,
         };
-
-        beatInterval = 60.0 / metronome.bpm;
-        gracePeriodEndTime = VirtualDspTime() + (8 * beatInterval);
-        loopStartTime = VirtualDspTime();
     }
 
     private void Update()

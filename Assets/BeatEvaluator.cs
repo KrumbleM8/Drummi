@@ -5,6 +5,10 @@ using TMPro;
 public class BeatEvaluator : MonoBehaviour
 {
     public BeatGenerator beatGenerator;
+    public PlayerInputVisualHandler visualScheduler;
+    public HitGrader hitGrader;
+    public TMP_Text feedbackText;
+
     public CustardAnimationHandler custardAnimator;
     public float perfectThreshold = 0.05f;
     public float goodThreshold = 0.2f;
@@ -12,10 +16,55 @@ public class BeatEvaluator : MonoBehaviour
     public int score = 0;
     public bool hasFailedOnce = false;
 
+    // Optional: for input time debug logging
+    public void LogInput(BongoInput input)
+    {
+        Debug.Log($"Input pressed at time: {input.inputTime}, side: {(input.isRightBongo ? "Right" : "Left")}");
+        EvaluateSingleInput(input);
+    }
+
     private void Start()
     {
         hasFailedOnce = false;
     }
+
+    public void EvaluateSingleInput(BongoInput input)
+    {
+        if (Time.timeScale == 0) return;
+
+        List<ScheduledBeat> scheduledBeats = beatGenerator.scheduledBeats;
+        scheduledBeats.Sort((a, b) => a.scheduledTime.CompareTo(b.scheduledTime));
+
+        foreach (var beat in scheduledBeats)
+        {
+            double scheduledTime = beat.scheduledTime + (60.0 / beatGenerator.metronome.bpm * 4);
+            double delta = input.inputTime - scheduledTime;
+
+            if (Mathf.Abs((float)delta) <= goodThreshold)
+            {
+                if (beat.isRightBongo == input.isRightBongo)
+                {
+                    if (Mathf.Abs((float)delta) <= perfectThreshold)
+                    {
+                        ShowFeedback("Perfect!");
+                    }
+                    else
+                    {
+                        ShowFeedback("Good!");
+                    }
+                    return;
+                }
+                else
+                {
+                    ShowFeedback("Wrong Side!");
+                    return;
+                }
+            }
+        }
+
+        ShowFeedback("Miss!");
+    }
+
 
     public void EvaluatePlayerInput(List<BongoInput> playerInputs)
     {
@@ -36,13 +85,14 @@ public class BeatEvaluator : MonoBehaviour
             double inputTime = playerInputs[inputIndex].inputTime;
             double delta = inputTime - scheduledTime;
 
-
             if (delta < -goodThreshold)
             {
+                Debug.Log("Too Early - Missed");
                 inputIndex++;
             }
             else if (delta > goodThreshold)
             {
+                Debug.Log("Too Late - Missed");
                 beatIndex++;
             }
             else
@@ -50,15 +100,19 @@ public class BeatEvaluator : MonoBehaviour
                 if (scheduledBeats[beatIndex].isRightBongo == playerInputs[inputIndex].isRightBongo)
                 {
                     if (Mathf.Abs((float)delta) <= perfectThreshold)
-                        Debug.Log("Perfect!");
+                    {
+                        Debug.Log("Hit Grade: Perfect");
+                    }
                     else
-                        Debug.Log("Good!");
+                    {
+                        Debug.Log("Hit Grade: Good");
+                    }
 
                     correctHits++;
                 }
                 else
                 {
-                    Debug.Log("Wrong Side");
+                    Debug.Log("Hit Grade: Wrong Side");
                 }
 
                 beatIndex++;
@@ -103,4 +157,18 @@ public class BeatEvaluator : MonoBehaviour
             AudioManager.instance.PlayTotalFail();
         }
     }
+
+    private void ShowFeedback(string message)
+    {
+        feedbackText.text = message;
+        feedbackText.rectTransform.anchoredPosition = new Vector2(visualScheduler.GetCurrentSliderXPosition(), -236); //
+        CancelInvoke(nameof(ClearFeedback));
+        Invoke(nameof(ClearFeedback), 0.41f); // Hide after 0.41s (or adjust as needed)
+    }
+
+    private void ClearFeedback()
+    {
+        feedbackText.text = "";
+    }
+
 }

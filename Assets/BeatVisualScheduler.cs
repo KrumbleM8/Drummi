@@ -39,6 +39,16 @@ public class BeatVisualScheduler : MonoBehaviour
             return;
         }
 
+        SetBPM();
+    }
+
+    private void OnEnable()
+    {
+        SetBPM();
+    }
+
+    public void SetBPM()
+    {
         double beatDuration = 60.0 / metronome.bpm;
         barDuration = 4 * beatDuration;
         fullLoopDuration = fullLoopBeats * beatDuration;
@@ -113,13 +123,19 @@ public class BeatVisualScheduler : MonoBehaviour
             img.color = isRightBongo ? Color.red : Color.green;
         }
 
-        float parentWidth = indicatorParent.rect.width;
-        float posX = (barSlider.value * parentWidth) - (parentWidth / 2f);
+        float posX = GetCurrentSliderValueXPosition();
         RectTransform rt = indicator.GetComponent<RectTransform>();
         if (rt != null)
         {
             rt.anchoredPosition = new Vector2(posX, 0);
         }
+    }
+
+    public float GetCurrentSliderValueXPosition()
+    {
+        float parentWidth = indicatorParent.rect.width;
+        float posX = (barSlider.value * parentWidth) - (parentWidth / 2f);
+        return posX;
     }
 
     public void ResetVisuals()

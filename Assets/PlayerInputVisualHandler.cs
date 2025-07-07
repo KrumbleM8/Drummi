@@ -30,10 +30,25 @@ public class PlayerInputVisualHandler : MonoBehaviour
             return;
         }
 
+        InitializeBeatValues();
+    }
+
+    private void OnEnable()
+    {
+        SetBPM();
+    }
+
+    public void InitializeBeatValues()
+    {
         double beatDuration = 60.0 / metronome.bpm;
         barDuration = 4 * beatDuration;
         fullLoopDuration = fullLoopBeats * beatDuration;
         fullLoopStartDspTime = AudioSettings.dspTime;
+    }
+
+    public void SetBPM()
+    {
+        InitializeBeatValues();
     }
 
     private void Update()
@@ -77,13 +92,19 @@ public class PlayerInputVisualHandler : MonoBehaviour
             img.color = isRightBongo ? Color.red : Color.green;
         }
 
-        float parentWidth = indicatorParent.rect.width;
-        float posX = (inputSlider.value * parentWidth) - (parentWidth / 2f);
+        float posX = GetCurrentSliderXPosition();
         RectTransform rt = indicator.GetComponent<RectTransform>();
         if (rt != null)
         {
             rt.anchoredPosition = new Vector2(posX, 0);
         }
+    }
+
+    public float GetCurrentSliderXPosition()
+    {
+        float parentWidth = indicatorParent.rect.width;
+        float posX = (inputSlider.value * parentWidth) - (parentWidth / 2f);
+        return posX;
     }
 
     public void ResetVisuals()
