@@ -15,6 +15,7 @@ public class BeatEvaluator : MonoBehaviour
     public TMP_Text scoreText;
     public int score = 0;
     public bool hasFailedOnce = false;
+    public int perfectHits = 0;
 
     // Optional: for input time debug logging
     public void LogInput(BongoInput input)
@@ -72,6 +73,7 @@ public class BeatEvaluator : MonoBehaviour
 
         List<ScheduledBeat> scheduledBeats = beatGenerator.scheduledBeats;
         int correctHits = 0;
+        perfectHits = 0;
 
         scheduledBeats.Sort((a, b) => a.scheduledTime.CompareTo(b.scheduledTime));
         playerInputs.Sort((a, b) => a.inputTime.CompareTo(b.inputTime));
@@ -101,6 +103,7 @@ public class BeatEvaluator : MonoBehaviour
                 {
                     if (Mathf.Abs((float)delta) <= perfectThreshold)
                     {
+                        perfectHits++;
                         Debug.Log("Hit Grade: Perfect");
                     }
                     else
@@ -125,7 +128,7 @@ public class BeatEvaluator : MonoBehaviour
         if (scheduledBeats.Count == 0)
             return;
 
-        if (playerInputs.Count != scheduledBeats.Count || correctHits != scheduledBeats.Count)
+        if (playerInputs.Count != scheduledBeats.Count || correctHits != scheduledBeats.Count) //Change from here
         {
             Debug.Log("No Good :(");
             custardAnimator.HandleFailure();
