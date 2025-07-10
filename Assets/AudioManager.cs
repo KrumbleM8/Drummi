@@ -64,11 +64,20 @@ public class AudioManager : MonoBehaviour
         speakers[2].PlayOneShot(otherSounds[0]);
     }
 
+    public void PlayPassable()
+    {
+        speakers[2].PlayOneShot(otherSounds[4]);
+    }
     public void PlayCorrect()
     {
         speakers[2].PlayOneShot(otherSounds[1]);
     }
 
+    public void PlayAllPerfect()
+    {
+        Debug.Log("AudioManager - Perfect");
+        speakers[2].PlayOneShot(otherSounds[3]);
+    }
     public void PlayTotalFail()
     {
         speakers[2].PlayOneShot(otherSounds[2]);

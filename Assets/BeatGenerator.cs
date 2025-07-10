@@ -16,9 +16,11 @@ public class BeatGenerator : MonoBehaviour
     public int maxBeats = 8;
     public int difficultyIndex = 0;
 
-    private readonly float[] starterBeatDurations = { 1f, 0.5f};
-    private readonly float[] standardBeatDurations = { 1f, 0.5f, 0.25f };
-    private readonly float[] spicyBeatDurations = { 1f, 0.75f, 0.5f, 0.25f };
+    private readonly float[] starterBeatDurations = { 1f};
+    private readonly float[] standardBeatDurations = { 1f, 0.5f};
+    //private readonly float[] standardBeatDurations = { 1f, 0.5f, 0.25f };
+    private readonly float[] spicyBeatDurations = {0.75f, 0.5f, 0.25f };
+    //private readonly float[] spicyBeatDurations = { 1f, 0.75f, 0.5f, 0.25f };
     private float[] chosenBeatDurations;
 
     public float evaluationBeatThreshold = 7.5f;

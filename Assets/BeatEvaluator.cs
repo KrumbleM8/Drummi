@@ -17,6 +17,10 @@ public class BeatEvaluator : MonoBehaviour
     public bool hasFailedOnce = false;
     public int perfectHits = 0;
 
+    public int allowedMistakes = 1;
+    public int perfectReward = 200;
+    public int goodReward = 100;
+    public int passableReward = 50;
     // Optional: for input time debug logging
     public void LogInput(BongoInput input)
     {
@@ -128,32 +132,90 @@ public class BeatEvaluator : MonoBehaviour
         if (scheduledBeats.Count == 0)
             return;
 
-        if (playerInputs.Count != scheduledBeats.Count || correctHits != scheduledBeats.Count) //Change from here
+        //Score Handling
+        if (correctHits == scheduledBeats.Count - allowedMistakes) //Most Beats Hit
         {
-            Debug.Log("No Good :(");
-            custardAnimator.HandleFailure();
-            HandleFail();
+            if (playerInputs.Count != scheduledBeats.Count)
+            {
+                //Failed, mistake + incorrect amount of inputs
+                HandleFail();
+            }
+            else
+            {
+                //Passable ADD POINTS
+                HandleSuccess(passableReward);
+            }
+        }
+        else if (correctHits == scheduledBeats.Count) //All Beats Hit
+        {
+            if (playerInputs.Count != scheduledBeats.Count) //Too many or too little inputs
+            {
+                if (playerInputs.Count == scheduledBeats.Count - allowedMistakes || playerInputs.Count == scheduledBeats.Count + allowedMistakes)
+                {
+                    //Passable ADD POINTS
+                    HandleSuccess(passableReward);
+                }
+                else
+                {
+                    //Failed, too many inputs
+                    HandleFail();
+                }
+            }
+            else
+            {
+                if (perfectHits == scheduledBeats.Count) //All Perfect
+                {
+                    //All Perfect ADD POINTS
+                    HandleSuccess(perfectReward);
+                }
+                else
+                {
+                    //All Good ADD POINTS
+                    HandleSuccess(goodReward);
+                }
+            }
+
         }
         else
         {
-            Debug.Log("Successful Bar!");
-            custardAnimator.HandleSuccess();
-            AudioManager.instance.PlayCorrect();
-            score++;
-            scoreText.text = score.ToString();
-            hasFailedOnce = false;
+            HandleFail();
         }
+    }
+
+    private void HandleSuccess(int points)
+    {
+        Debug.Log("Successful Bar!");
+
+        if(points == perfectReward)
+        {
+            AudioManager.instance.PlayAllPerfect();
+        }
+        else if (points == goodReward)
+        {
+            AudioManager.instance.PlayCorrect();
+        }
+        else
+        {
+            AudioManager.instance.PlayPassable();
+        }
+        custardAnimator.HandleSuccess();
+
+        score += points;
+        scoreText.text = score.ToString();
+        hasFailedOnce = false;
     }
 
     private void HandleFail()
     {
+        Debug.Log("No Good :(");
+        custardAnimator.HandleFailure();
         AudioManager.instance.PlayIncorrect();
 
         if (!hasFailedOnce)
         {
             hasFailedOnce = true;
         }
-        else
+        else if (score != 0)
         {
             score = 0;
             scoreText.text = score.ToString();
