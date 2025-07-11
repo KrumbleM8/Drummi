@@ -77,6 +77,8 @@ public class PlayerInputReader : MonoBehaviour
 
     private void TriggerInput(bool isRightBongo)
     {
+        BongoAnimator.instance.PlayBongoAnimation(isRightBongo);
+
         if (!allowInput || Time.timeScale == 0) return;
 
         var input = new BongoInput(AudioSettings.dspTime, isRightBongo);
@@ -85,6 +87,8 @@ public class PlayerInputReader : MonoBehaviour
         playerInputVisualScheduler?.SpawnInputIndicator(isRightBongo);
 
         beatEvaluator.LogInput(input);
+
+        BongoAnimator.instance.PlayBongoAnimation(isRightBongo);
     }
 
     public void ResetInputs()
