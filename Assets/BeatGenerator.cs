@@ -15,11 +15,12 @@ public class BeatGenerator : MonoBehaviour
 
     public int maxBeats = 8;
     public int difficultyIndex = 0;
+    public int maxSameSideHits = 2;
 
-    private readonly float[] starterBeatDurations = { 1f};
-    private readonly float[] standardBeatDurations = { 1f, 0.5f};
+    private readonly float[] starterBeatDurations = { 1f };
+    private readonly float[] standardBeatDurations = { 1f, 0.5f };
     //private readonly float[] standardBeatDurations = { 1f, 0.5f, 0.25f };
-    private readonly float[] spicyBeatDurations = {0.75f, 0.5f, 0.25f };
+    private readonly float[] spicyBeatDurations = { 0.75f, 0.5f, 0.25f };
     //private readonly float[] spicyBeatDurations = { 1f, 0.75f, 0.5f, 0.25f };
     private float[] chosenBeatDurations;
 
@@ -47,6 +48,10 @@ public class BeatGenerator : MonoBehaviour
 
     private double gracePeriodEndTime = 0.0;
     private bool gracePeriodActive = true;
+
+    public bool normalGeneration = true;
+
+    private bool previousSide;
 
     private void OnEnable()
     {
@@ -123,11 +128,24 @@ public class BeatGenerator : MonoBehaviour
 
     private void HandleOnTick()
     {
+        // calculate these on every tick:
+        double quaver = metronome.timePerTick * 1.5;
+        double dspTime = AudioSettings.dspTime;
+        // or: double dspTime = VirtualDspTime();
+
+        // 1) on the 3rd beat
+        if (metronome.loopBeatCount == 3)
+        {
+            // first quaver warning
+            AudioManager.instance.PlayTurnSignal(VirtualDspTime() + quaver);
+        }
+
+        // 2) on the 4th beat, open the input window
         if (metronome.loopBeatCount == 4)
         {
-            inputStartTime = VirtualDspTime(); // Match this exactly to input timing
+            inputStartTime = VirtualDspTime();
             playerInputReader.allowInput = true;
-            Invoke(nameof(SetListenAnimation), (float)metronome.timePerTick / 1.5f);
+            Invoke(nameof(SetListenAnimation), (float)(metronome.timePerTick / 1.5f));
         }
     }
 
@@ -158,23 +176,50 @@ public class BeatGenerator : MonoBehaviour
         float measureLength = 3.5f;
         beatPattern.Clear();
 
+        // Single loop covers both “normal” and “else” modes
         while (timeSlot < measureLength)
         {
+            // pick a duration that will fit
             List<float> validDurations = new();
-            foreach (float duration in chosenBeatDurations)
-            {
-                if (timeSlot + duration <= measureLength)
-                    validDurations.Add(duration);
-            }
+            foreach (float d in chosenBeatDurations)
+                if (timeSlot + d <= measureLength)
+                    validDurations.Add(d);
 
             if (validDurations.Count == 0) break;
 
             float chosenDuration = validDurations[Random.Range(0, validDurations.Count)];
-            bool isBongoSide = Random.value > 0.5f;
+
+            // decide side, but check last maxSameSideHits entries
+            bool isBongoSide;
+            if (beatPattern.Count >= maxSameSideHits)
+            {
+                // look at the side of the last beat
+                bool lastSide = beatPattern[^1].isBongoSide;
+                // check if the previous maxSameSideHits are all the same
+                bool allSame = true;
+                for (int i = 1; i <= maxSameSideHits; i++)
+                {
+                    if (beatPattern[^i].isBongoSide != lastSide)
+                    {
+                        allSame = false;
+                        break;
+                    }
+                }
+                // if they were all the same, force a flip; otherwise, random
+                isBongoSide = allSame ? !lastSide : (Random.value > 0.5f);
+            }
+            else
+            {
+                // fewer than maxSameSideHits exist, so just random
+                isBongoSide = Random.value > 0.5f;
+            }
+
+            // add and advance
             beatPattern.Add(new Beat(chosenDuration, timeSlot, isBongoSide));
             timeSlot += chosenDuration;
         }
     }
+
 
     private readonly List<Beat> beatPattern = new();
 

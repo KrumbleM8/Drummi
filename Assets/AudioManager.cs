@@ -82,6 +82,10 @@ public class AudioManager : MonoBehaviour
     {
         speakers[2].PlayOneShot(otherSounds[2]);
     }
+    public void PlayTurnSignal(double time)
+    {
+        speakers[3].PlayScheduled(time);
+    }
 
     // Call this method when you want to pause all audio.
     public void PauseAllAudio()
