@@ -1,3 +1,4 @@
+using System.Collections;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
@@ -5,6 +6,7 @@ public class GameManager : MonoBehaviour
 {
     public Metronome metronome;
     public BeatGenerator beatGenerator;
+    public BeatEvaluator beatEvaluator;
     public BeatVisualScheduler visualScheduler;
     public PlayerInputVisualHandler playerInputVisualHandler;
 
@@ -16,6 +18,12 @@ public class GameManager : MonoBehaviour
     }
     public void StartGame()
     {
+        StartCoroutine(StartProcess());
+    }
+
+    IEnumerator StartProcess()
+    {
+        yield return new WaitForEndOfFrame();
         beatGenerator.enabled = true;
         visualScheduler.enabled = true;
         playerInputVisualHandler.enabled = true;
@@ -25,13 +33,14 @@ public class GameManager : MonoBehaviour
 
         AudioManager.instance.scheduledStartTime = metronome.GetNextBeatTime();
         AudioManager.instance.PlayMusic();
+
+        yield return null;
     }
 
     public void SetDifficulty(int difficultyIndex)
     {
         beatGenerator.difficultyIndex = difficultyIndex;
         beatGenerator.SetBPM();
-        //BroadcastMessage("SetBPM");
     }
 
     public void SetMusic(int index)
@@ -62,6 +71,7 @@ public class GameManager : MonoBehaviour
 
     public void TogglePause()
     {
+        beatEvaluator.SaveHighScore();
         if (Time.timeScale > 0)
         {
             Time.timeScale = 0;

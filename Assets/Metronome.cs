@@ -19,7 +19,7 @@ public class Metronome : MonoBehaviour
 
     public int beatCount = 0; // Counter for the beats (1 to 4)
     public int loopBeatCount = 0;
-    [NonSerialized] public double timePerTick;
+    public double timePerTick;
     [NonSerialized] public double nextBeatTime;
 
     private double lastBeatTime;
@@ -48,6 +48,12 @@ public class Metronome : MonoBehaviour
 
         beatInterval = 60.0 / bpm; // Calculate the interval between each beat in seconds
         lastBeatTime = AudioSettings.dspTime; // Start from the current DSP time (audio time)
+    }
+
+    public void RefreshValues() //This probably shouldn't be like this but who cares
+    {
+        Debug.Log("Metronome Values Refreshed");
+        timePerTick = 60.0 / bpm;
     }
 
     void LateUpdate()

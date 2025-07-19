@@ -57,8 +57,6 @@ public class BeatGenerator : MonoBehaviour
     {
         metronome.OnTickEvent += HandleOnTick;
         metronome.OnFreshBarEvent += HandleOnFreshBar;
-
-        SetBPM();
     }
 
     private void OnDisable()
@@ -85,6 +83,8 @@ public class BeatGenerator : MonoBehaviour
                 playbackOffset = 0;
                 break;
         }
+
+        metronome.RefreshValues();
     }
 
     private void Start()
@@ -128,26 +128,27 @@ public class BeatGenerator : MonoBehaviour
 
     private void HandleOnTick()
     {
-        // calculate these on every tick:
-        double quaver = metronome.timePerTick * 1.5;
-        double dspTime = AudioSettings.dspTime;
-        // or: double dspTime = VirtualDspTime();
+        double quaver = metronome.timePerTick * 0.5;
+        if (metronome.bpm == 111)
+        {
+            quaver = quaver - 0.05;
+        }
+        double beatTime = metronome.nextBeatTime;
 
-        // 1) on the 3rd beat
         if (metronome.loopBeatCount == 3)
         {
-            // first quaver warning
-            AudioManager.instance.PlayTurnSignal(VirtualDspTime() + quaver);
+            AudioManager.instance.PlayTurnSignal(beatTime + quaver);
         }
 
-        // 2) on the 4th beat, open the input window
         if (metronome.loopBeatCount == 4)
         {
-            inputStartTime = VirtualDspTime();
+            inputStartTime = metronome.nextBeatTime;
             playerInputReader.allowInput = true;
             Invoke(nameof(SetListenAnimation), (float)(metronome.timePerTick / 1.5f));
         }
     }
+
+
 
     private void SetListenAnimation()
     {

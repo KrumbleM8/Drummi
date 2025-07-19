@@ -61,7 +61,7 @@ public class BeatEvaluator : MonoBehaviour
                 }
                 else
                 {
-                    ShowFeedback("Wrong Side!");
+                    ShowFeedback("Oops!");
                     return;
                 }
             }
@@ -201,6 +201,7 @@ public class BeatEvaluator : MonoBehaviour
         custardAnimator.HandleSuccess();
 
         score += points;
+        SaveHighScore();
         scoreText.text = score.ToString();
         hasFailedOnce = false;
     }
@@ -217,10 +218,16 @@ public class BeatEvaluator : MonoBehaviour
         }
         else if (score != 0)
         {
+            SaveHighScore();
             score = 0;
             scoreText.text = score.ToString();
             AudioManager.instance.PlayTotalFail();
         }
+    }
+
+    public void SaveHighScore()
+    {
+        PlayerPrefs.SetInt("GlitchyHS", score);
     }
 
     private void ShowFeedback(string message)
@@ -236,4 +243,5 @@ public class BeatEvaluator : MonoBehaviour
         feedbackText.text = "";
     }
 
+    
 }

@@ -82,10 +82,24 @@ public class AudioManager : MonoBehaviour
     {
         speakers[2].PlayOneShot(otherSounds[2]);
     }
-    public void PlayTurnSignal(double time)
+    //public void PlayTurnSignal(double time)
+    //{
+    //    speakers[3].PlayScheduled(time);
+    //}
+
+    public void PlayTurnSignal(double scheduledDspTime)
     {
-        speakers[3].PlayScheduled(time);
+        var go = new GameObject("TurnSignalVoice");
+        go.transform.SetParent(transform);
+        var src = go.AddComponent<AudioSource>();
+        src.clip = otherSounds[5];
+        src.playOnAwake = false;
+        src.PlayScheduled(scheduledDspTime);
+
+        // destroy when done
+        Destroy(go, otherSounds[5].length + 0.1f);
     }
+
 
     // Call this method when you want to pause all audio.
     public void PauseAllAudio()
