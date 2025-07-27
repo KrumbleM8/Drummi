@@ -4873,6 +4873,8 @@ MonoBehaviour:
   inputIndicatorPrefab: {fileID: 2066059053099723872, guid: a64f9378c39e11f479d50bfb842dc6ab, type: 3}
   metronome: {fileID: 1433809952}
   fullLoopBeats: 8
+  leadInBeats: 1
+  offScreenPadding: -500
 --- !u!114 &891851650
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -7291,7 +7293,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0}
   m_AnchorMax: {x: 0.5, y: 0}
-  m_AnchoredPosition: {x: 6.1490173, y: 97.426025}
+  m_AnchoredPosition: {x: 6.148987, y: 97.426025}
   m_SizeDelta: {x: 1200.002, y: 586.052}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &1196828591
