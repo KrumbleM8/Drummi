@@ -1,23 +1,23 @@
 # ninja log v5
-17	1211	7639691238594505	GameActivity/CMakeFiles/game.dir/UGAApplication.cpp.o	58dc664bebacea15
-49	322	7639691229712222	FramePacing/CMakeFiles/swappywrapper.dir/UnitySwappyWrapper.cpp.o	59488a108004fc2
-323	505	7639691231573925	D:/UnityProjects/Unity Projects/Drummi 2/Library/Bee/Android/Prj/IL2CPP/Gradle/unityLibrary/build/intermediates/cxx/RelWithDebInfo/616x6762/obj/arm64-v8a/libswappywrapper.so	32d3777936bbc6f7
-12	953	7639691236007849	GameActivity/CMakeFiles/game.dir/UGAEntry.cpp.o	f62fcb9ad8ce4a43
-37	881	7639691235281832	GameActivity/CMakeFiles/game.dir/UGAInputKeyEvent.cpp.o	bebf652d3bd67d57
-21	898	7639691235471875	GameActivity/CMakeFiles/game.dir/UGAConfiguration.cpp.o	97c963a83f874bcd
-43	972	7639691236207893	GameActivity/CMakeFiles/game.dir/UGASoftKeyboard.cpp.o	1b288f0f374770c5
-26	910	7639691235591905	GameActivity/CMakeFiles/game.dir/UGAInputMotionEvent.cpp.o	d8062c8e0b99af3d
-7	1011	7639691236597982	GameActivity/CMakeFiles/game.dir/UGADebug.cpp.o	3ddc3905b43275d7
-31	1152	7639691238004372	GameActivity/CMakeFiles/game.dir/UGAInput.cpp.o	43d2a3fe92492672
-1211	1380	7639691240254883	D:/UnityProjects/Unity Projects/Drummi 2/Library/Bee/Android/Prj/IL2CPP/Gradle/unityLibrary/build/intermediates/cxx/RelWithDebInfo/616x6762/obj/arm64-v8a/libgame.so	e6af052670374f6
+4	1214	7738675376918599	GameActivity/CMakeFiles/game.dir/UGAApplication.cpp.o	58dc664bebacea15
 54	343	7738675368253599	FramePacing/CMakeFiles/swappywrapper.dir/UnitySwappyWrapper.cpp.o	59488a108004fc2
 343	683	7738675371670184	D:/UnityProjects/Unity Projects/Drummi 2/Library/Bee/Android/Prj/IL2CPP/Gradle/unityLibrary/build/intermediates/cxx/RelWithDebInfo/616x6762/obj/arm64-v8a/libswappywrapper.so	32d3777936bbc6f7
-40	868	7738675373456166	GameActivity/CMakeFiles/game.dir/UGAInputKeyEvent.cpp.o	bebf652d3bd67d57
-17	887	7738675373686217	GameActivity/CMakeFiles/game.dir/UGAConfiguration.cpp.o	97c963a83f874bcd
-34	897	7738675373776236	GameActivity/CMakeFiles/game.dir/UGAInputMotionEvent.cpp.o	d8062c8e0b99af3d
 22	942	7738675374187323	GameActivity/CMakeFiles/game.dir/UGAEntry.cpp.o	f62fcb9ad8ce4a43
+40	868	7738675373456166	GameActivity/CMakeFiles/game.dir/UGAInputKeyEvent.cpp.o	bebf652d3bd67d57
 48	950	7738675374287347	GameActivity/CMakeFiles/game.dir/UGASoftKeyboard.cpp.o	1b288f0f374770c5
+17	887	7738675373686217	GameActivity/CMakeFiles/game.dir/UGAConfiguration.cpp.o	97c963a83f874bcd
 11	999	7738675374747451	GameActivity/CMakeFiles/game.dir/UGADebug.cpp.o	3ddc3905b43275d7
+34	897	7738675373776236	GameActivity/CMakeFiles/game.dir/UGAInputMotionEvent.cpp.o	d8062c8e0b99af3d
 27	1134	7738675376098414	GameActivity/CMakeFiles/game.dir/UGAInput.cpp.o	43d2a3fe92492672
-4	1214	7738675376918599	GameActivity/CMakeFiles/game.dir/UGAApplication.cpp.o	58dc664bebacea15
 1214	1366	7738675378514002	D:/UnityProjects/Unity Projects/Drummi 2/Library/Bee/Android/Prj/IL2CPP/Gradle/unityLibrary/build/intermediates/cxx/RelWithDebInfo/616x6762/obj/arm64-v8a/libgame.so	e6af052670374f6
+79	446	7753424489699690	FramePacing/CMakeFiles/swappywrapper.dir/UnitySwappyWrapper.cpp.o	59488a108004fc2
+447	897	7753424494321158	D:/UnityProjects/Unity Projects/Drummi 2/Library/Bee/Android/Prj/IL2CPP/Gradle/unityLibrary/build/intermediates/cxx/RelWithDebInfo/616x6762/obj/arm64-v8a/libswappywrapper.so	32d3777936bbc6f7
+40	1124	7753424496308847	GameActivity/CMakeFiles/game.dir/UGAInputKeyEvent.cpp.o	bebf652d3bd67d57
+22	1125	7753424496538899	GameActivity/CMakeFiles/game.dir/UGAConfiguration.cpp.o	97c963a83f874bcd
+15	1126	7753424496538899	GameActivity/CMakeFiles/game.dir/UGAEntry.cpp.o	f62fcb9ad8ce4a43
+49	1149	7753424496808958	GameActivity/CMakeFiles/game.dir/UGAInputMotionEvent.cpp.o	d8062c8e0b99af3d
+69	1178	7753424497099022	GameActivity/CMakeFiles/game.dir/UGASoftKeyboard.cpp.o	1b288f0f374770c5
+6	1223	7753424497559125	GameActivity/CMakeFiles/game.dir/UGADebug.cpp.o	3ddc3905b43275d7
+59	1338	7753424498703824	GameActivity/CMakeFiles/game.dir/UGAInput.cpp.o	43d2a3fe92492672
+31	1463	7753424499949717	GameActivity/CMakeFiles/game.dir/UGAApplication.cpp.o	58dc664bebacea15
+1463	1567	7753424501035857	D:/UnityProjects/Unity Projects/Drummi 2/Library/Bee/Android/Prj/IL2CPP/Gradle/unityLibrary/build/intermediates/cxx/RelWithDebInfo/616x6762/obj/arm64-v8a/libgame.so	e6af052670374f6
