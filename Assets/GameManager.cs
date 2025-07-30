@@ -12,6 +12,9 @@ public class GameManager : MonoBehaviour
 
     public GameObject gameplayElementsObject;
 
+    //Refs to Disable
+    public EyeBlinker blinking;
+
     private void Start()
     {
         Time.timeScale = 1;
@@ -19,6 +22,8 @@ public class GameManager : MonoBehaviour
     public void StartGame()
     {
         StartCoroutine(StartProcess());
+        blinking.enabled = false;
+        blinking.transform.GetChild(0).gameObject.SetActive(false);
     }
 
     IEnumerator StartProcess()

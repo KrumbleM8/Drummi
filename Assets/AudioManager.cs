@@ -97,7 +97,7 @@ public class AudioManager : MonoBehaviour
         src.PlayScheduled(scheduledDspTime);
 
         // destroy when done
-        Destroy(go, otherSounds[5].length + 0.1f);
+        Destroy(go, otherSounds[5].length + 3f);
     }
 
 

@@ -16,7 +16,7 @@ public class CustardAnimationHandler : MonoBehaviour
     }
     public void HandleNeutral()
     {
-        spriteRenderer.sprite = sprites[0];
+        spriteRenderer.sprite = sprites[1];
     }
     public void HandleListening()
     {

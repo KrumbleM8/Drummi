@@ -228,8 +228,6 @@ public class BeatGenerator : MonoBehaviour
     {
         scheduledBeats.Clear();
         double beatIntervalLocal = 60.0 / metronome.bpm;
-
-        // Schedule beats at the NEXT bar start
         patternStartTime = metronome.GetNextBeatTime() + playbackOffset;
 
         foreach (Beat beat in beatPattern)
@@ -237,6 +235,7 @@ public class BeatGenerator : MonoBehaviour
             double scheduledTime = patternStartTime + (beat.timeSlot * beatIntervalLocal);
             scheduledBeats.Add(new ScheduledBeat(scheduledTime, beat.isBongoSide));
 
+            // 1. Schedule sound and visual
             if (beat.isBongoSide)
             {
                 rightBongoSources[rightBongoIndex].PlayScheduled(scheduledTime);
@@ -249,10 +248,58 @@ public class BeatGenerator : MonoBehaviour
                 beatVisualScheduler.ScheduleVisualBeat(scheduledTime, false);
                 leftBongoIndex = (leftBongoIndex + 1) % leftBongoSources.Count;
             }
+
+            // 2. Schedule Custard animations
+            double neutralTime = scheduledTime - 0.1;
+            if (neutralTime > AudioSettings.dspTime) // Only if it's not in the past
+            {
+                StartCoroutine(ScheduleAnimation(neutralTime, () => custardAnimator.HandleNeutral()));
+            }
+
+            if (beat.isBongoSide)
+            {
+                StartCoroutine(ScheduleBongoWithReturn(scheduledTime, true));
+            }
+            else
+            {
+                StartCoroutine(ScheduleBongoWithReturn(scheduledTime, false));
+            }
         }
 
-        // Important: Schedule inputStartTime for the **next bar**
         inputStartTime = patternStartTime + (4 * beatIntervalLocal);
+    }
+
+    private System.Collections.IEnumerator ScheduleAnimation(double dspTime, System.Action action)
+    {
+        double delay = dspTime - AudioSettings.dspTime;
+        if (delay > 0)
+            yield return new WaitForSecondsRealtime((float)delay);
+
+        action?.Invoke();
+    }
+    private System.Collections.IEnumerator ScheduleBongoWithReturn(double dspTime, bool isRight)
+    {
+        double delay = dspTime - AudioSettings.dspTime;
+        if (delay > 0)
+            yield return new WaitForSecondsRealtime((float)delay);
+
+        if (isRight)
+            custardAnimator.PlayRightBongo();
+        else
+            custardAnimator.PlayLeftBongo();
+
+        // Hold pose long enough for readability and impact
+        float holdDuration = Mathf.Max(0.3f, (float)(beatInterval * 0.9f));
+        yield return new WaitForSecondsRealtime(holdDuration);
+
+        if (custardAnimator.spriteRenderer.sprite == custardAnimator.sprites[4])
+        {
+
+        }
+        else
+        {
+            custardAnimator.HandleNeutral();
+        }
     }
 
 
