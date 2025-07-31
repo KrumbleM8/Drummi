@@ -227,6 +227,7 @@ public class BeatEvaluator : MonoBehaviour
 
     public void SaveHighScore()
     {
+        if(score > PlayerPrefs.GetInt("GlitchyHS")
         PlayerPrefs.SetInt("GlitchyHS", score);
     }
 
