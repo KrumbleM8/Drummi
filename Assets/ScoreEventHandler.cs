@@ -2,15 +2,12 @@ using UnityEngine;
 
 public class ScoreEventHandler : MonoBehaviour
 {
-    // Start is called once before the first execution of Update after the MonoBehaviour is created
-    void Start()
-    {
-        
-    }
+    public int[] scoreTriggers;
+    public GameObject[] eventObjects;
+    
+    public void OnScoreChange()
+{
 
-    // Update is called once per frame
-    void Update()
-    {
-        
-    }
+}
+
 }
