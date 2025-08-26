@@ -186,7 +186,7 @@ public class BeatEvaluator : MonoBehaviour
     {
         Debug.Log("Successful Bar!");
 
-        if(points == perfectReward)
+        if (points == perfectReward)
         {
             AudioManager.instance.PlayAllPerfect();
         }
@@ -227,8 +227,8 @@ public class BeatEvaluator : MonoBehaviour
 
     public void SaveHighScore()
     {
-        if(score > PlayerPrefs.GetInt("GlitchyHS")
-        PlayerPrefs.SetInt("GlitchyHS", score);
+        if (score > PlayerPrefs.GetInt("GlitchyHS"))
+            PlayerPrefs.SetInt("GlitchyHS", score);
     }
 
     private void ShowFeedback(string message)
@@ -244,5 +244,5 @@ public class BeatEvaluator : MonoBehaviour
         feedbackText.text = "";
     }
 
-    
+
 }

@@ -26,13 +26,6 @@ public class Metronome : MonoBehaviour
     private double beatInterval; // Time interval between each beat in seconds
     private double timeSinceLastBeat; // Track the time passed since the last beat
 
-    // Pause tracking
-    private bool isPaused = false;
-    private double pauseStartTime = 0.0;
-
-    // Public property to expose pause state (for other scripts)
-    public bool IsPaused { get { return isPaused; } }
-
     private void OnEnable()
     {
     }
@@ -58,7 +51,7 @@ public class Metronome : MonoBehaviour
 
     void LateUpdate()
     {
-        if (isPaused)
+        if (GameManager.instance.isPaused)
             return;
 
         // Check if it's time to tick
@@ -87,7 +80,7 @@ public class Metronome : MonoBehaviour
 
     void FixedUpdate()
     {
-        if (isPaused)
+        if (GameManager.instance.isPaused == true)
             return;
 
         double dspTime = AudioSettings.dspTime;
@@ -130,10 +123,9 @@ public class Metronome : MonoBehaviour
     /// </summary>
     public void OnPause()
     {
-        if (!isPaused)
+        if (!GameManager.instance.isPaused)
         {
-            isPaused = true;
-            pauseStartTime = AudioSettings.dspTime;
+            
         }
     }
 
@@ -143,13 +135,12 @@ public class Metronome : MonoBehaviour
     /// </summary>
     public void OnResume()
     {
-        if (isPaused)
+        if (GameManager.instance.isPaused)
         {
-            double pauseDuration = AudioSettings.dspTime - pauseStartTime;
+            double pauseDuration = AudioSettings.dspTime - GameManager.instance.pauseStartTime;
             nextTick += pauseDuration;
             nextBeatTime += pauseDuration;
             lastBeatTime += pauseDuration;
-            isPaused = false;
         }
     }
 }

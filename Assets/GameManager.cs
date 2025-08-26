@@ -4,6 +4,8 @@ using UnityEngine.SceneManagement;
 
 public class GameManager : MonoBehaviour
 {
+    public static GameManager instance;
+
     public Metronome metronome;
     public BeatGenerator beatGenerator;
     public BeatEvaluator beatEvaluator;
@@ -15,8 +17,14 @@ public class GameManager : MonoBehaviour
     //Refs to Disable
     public EyeBlinker blinking;
 
+    public double totalPausedTime = 0.0;
+    public double pauseStartTime = 0.0;
+    public bool isPaused = false;
+
+    public double VirtualDspTime() => AudioSettings.dspTime - totalPausedTime;
     private void Start()
     {
+        instance = this;
         Time.timeScale = 1;
     }
     public void StartGame()
@@ -80,21 +88,22 @@ public class GameManager : MonoBehaviour
         if (Time.timeScale > 0)
         {
             Time.timeScale = 0;
+            pauseStartTime = AudioSettings.dspTime;
             AudioManager.instance.PauseAllAudio();
 
+            isPaused = true;
             if (metronome.enabled) metronome.OnPause();
-            if (beatGenerator.enabled) beatGenerator.OnPause();
-            if (playerInputVisualHandler.enabled) playerInputVisualHandler.OnPause();
             if (visualScheduler.enabled) visualScheduler.OnPause();
         }
         else
         {
             Time.timeScale = 1;
+            double pauseDuration = AudioSettings.dspTime - pauseStartTime;
+            totalPausedTime += pauseDuration;
             AudioManager.instance.ResumeAllAudio();
 
+            isPaused = false;
             if (metronome.enabled) metronome.OnResume();
-            if (beatGenerator.enabled) beatGenerator.OnResume();
-            if (playerInputVisualHandler.enabled) playerInputVisualHandler.OnResume();
             if (visualScheduler.enabled) visualScheduler.OnResume();
         }
     }

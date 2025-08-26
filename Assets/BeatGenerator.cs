@@ -32,12 +32,10 @@ public class BeatGenerator : MonoBehaviour
 
     public List<ScheduledBeat> scheduledBeats = new List<ScheduledBeat>();
 
-    private double totalPausedTime = 0.0;
-    private double pauseStartTime = 0.0;
     private bool isPaused = false;
     public bool IsPaused => isPaused;
 
-    private double VirtualDspTime() => AudioSettings.dspTime - totalPausedTime;
+    private double VirtualDspTime() => AudioSettings.dspTime - GameManager.instance.totalPausedTime;
 
     private double loopStartTime = 0.0;
     public double patternStartTime = 0.0;
@@ -306,24 +304,5 @@ public class BeatGenerator : MonoBehaviour
     public void StartGame()
     {
         GenerateNewPattern();
-    }
-
-    public void OnPause()
-    {
-        if (!isPaused)
-        {
-            isPaused = true;
-            pauseStartTime = AudioSettings.dspTime;
-        }
-    }
-
-    public void OnResume()
-    {
-        if (isPaused)
-        {
-            double pauseDuration = AudioSettings.dspTime - pauseStartTime;
-            totalPausedTime += pauseDuration;
-            isPaused = false;
-        }
     }
 }
