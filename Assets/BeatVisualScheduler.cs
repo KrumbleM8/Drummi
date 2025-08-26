@@ -19,6 +19,10 @@ public class BeatVisualScheduler : MonoBehaviour
     private double fullLoopStartDspTime;
     public int fullLoopBeats = 8;
 
+    // For pause handling
+    private bool paused = false;
+    private double pauseStartTime = 0.0;
+
     private class ScheduledVisualEvent
     {
         public double scheduledTime;
@@ -53,10 +57,10 @@ public class BeatVisualScheduler : MonoBehaviour
 
     private void Update()
     {
-        if (GameManager.instance.isPaused == true)
+        if (paused)
             return; // Freeze updates while paused
 
-        double currentTime = GameManager.instance.VirtualDspTime();
+        double currentTime = AudioSettings.dspTime;
         double elapsedLoop = currentTime - fullLoopStartDspTime;
 
         if (elapsedLoop >= fullLoopDuration)
@@ -149,19 +153,21 @@ public class BeatVisualScheduler : MonoBehaviour
     // Call this when pausing.
     public void OnPause()
     {
-        if (!GameManager.instance.isPaused)
+        if (!paused)
         {
-
+            paused = true;
+            pauseStartTime = AudioSettings.dspTime;
         }
     }
 
     // Call this when resuming.
     public void OnResume()
     {
-        if (GameManager.instance.isPaused)
+        if (paused)
         {
-            double pauseDuration = AudioSettings.dspTime - GameManager.instance.pauseStartTime;
+            double pauseDuration = AudioSettings.dspTime - pauseStartTime;
             fullLoopStartDspTime += pauseDuration; // Adjust the reference time
+            paused = false;
         }
     }
 }

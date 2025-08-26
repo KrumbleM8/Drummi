@@ -21,6 +21,10 @@ public class PlayerInputVisualHandler : MonoBehaviour
     private double fullLoopStartDspTime;
     public int fullLoopBeats = 8;             // (opponent bar + player bar)
 
+    /* ──────────────  PAUSE TRACKING  ────────────── */
+    private bool paused = false;
+    private double pauseStartTime = 0.0;
+
     /* ──────────────  LEAD-IN SETTINGS  ────────────── */
     [Header("Lead-in")]
     [Tooltip("How many beats early the handle begins sliding in")]
@@ -76,9 +80,9 @@ public class PlayerInputVisualHandler : MonoBehaviour
     /* ──────────────────────────  RUNTIME UPDATE  ────────────────────────── */
     private void Update()
     {
-        if (GameManager.instance.isPaused) return;
+        if (paused) return;
 
-        double currentTime = GameManager.instance.VirtualDspTime();
+        double currentTime = AudioSettings.dspTime;
         double elapsedLoop = currentTime - fullLoopStartDspTime;
 
         /*  Restart loop timer every fullLoopDuration ---------------------- */
@@ -143,5 +147,23 @@ public class PlayerInputVisualHandler : MonoBehaviour
 
         for (int i = indicatorParent.childCount - 1; i >= 0; i--)
             Destroy(indicatorParent.GetChild(i).gameObject);
+    }
+
+    /* ──────────────────────────  PAUSE / RESUME  ────────────────────────── */
+    public void OnPause()
+    {
+        if (paused) return;
+
+        paused = true;
+        pauseStartTime = AudioSettings.dspTime;
+    }
+
+    public void OnResume()
+    {
+        if (!paused) return;
+
+        double pauseDuration = AudioSettings.dspTime - pauseStartTime;
+        fullLoopStartDspTime += pauseDuration;   // keep timing intact
+        paused = false;
     }
 }

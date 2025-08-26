@@ -41,7 +41,7 @@ public class BounceOnBeat : MonoBehaviour
 
     private void TriggerBounce()
     {
-        if (metronome == null || GameManager.instance.isPaused)
+        if (metronome == null || metronome.IsPaused)
             return;
 
         currentYScale = baseBounceScaleY * bounceIntensity;
