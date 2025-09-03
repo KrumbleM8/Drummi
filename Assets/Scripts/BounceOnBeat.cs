@@ -23,6 +23,11 @@ public class BounceOnBeat : MonoBehaviour
 
     private void Start()
     {
+        if(metronome == null)
+        {
+            metronome = GameManager.instance.metronome;
+        }
+
         if (metronome != null)
         {
             metronome.OnTickEvent += TriggerBounce;

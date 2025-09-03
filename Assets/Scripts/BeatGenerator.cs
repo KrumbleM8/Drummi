@@ -53,6 +53,8 @@ public class BeatGenerator : MonoBehaviour
 
     private bool previousSide;
 
+    private bool hasReceivedFirstFreshBar = false;
+
     private void OnEnable()
     {
         metronome.OnTickEvent += HandleOnTick;
@@ -110,10 +112,38 @@ public class BeatGenerator : MonoBehaviour
             gracePeriodActive = false;
         }
 
-        if (!evaluationTriggered && !gracePeriodActive && currentLoopTime >= evaluationBeatThreshold * beatInterval)
+        // TARGETED FIX: Add additional safety check to ensure we're in the correct timing window
+        // Only trigger if we're past 7.5 beats AND the metronome is in the right position
+        // This prevents the "1 crotchet early" issue
+        if (!evaluationTriggered && !gracePeriodActive &&
+            currentLoopTime >= evaluationBeatThreshold * beatInterval &&
+            IsCorrectTimingForGeneration())
         {
-            EvaluateOneQuaverBeforeBar();
+            Invoke("EvaluateOneQuaverBeforeBar", 0);
         }
+    }
+
+    // ADDED: Safety check to ensure we're generating at the right metronome position
+    private bool IsCorrectTimingForGeneration()
+    {
+        // We want to generate when we're approaching the end of the 8-beat cycle
+        // but NOT during the player's input window (beats 4-8 of the loop)
+
+        // If we're past beat 7 in the loop, we're in the safe zone for generation
+        if (metronome.loopBeatCount >= 8)
+        {
+            return true;
+        }
+
+        // If we're at beat 7 or early beat 8, check that we're not too early
+        if (metronome.loopBeatCount == 7)
+        {
+            // Make sure we're well into beat 7, not at the start of it
+            double timeSinceLastBeat = VirtualDspTime() - (metronome.GetNextBeatTime() - metronome.timePerTick);
+            return timeSinceLastBeat > (metronome.timePerTick * 0.6); // At least 60% through beat 7
+        }
+
+        return false;
     }
 
     private void EvaluateOneQuaverBeforeBar()
@@ -148,8 +178,6 @@ public class BeatGenerator : MonoBehaviour
         }
     }
 
-
-
     private void SetListenAnimation()
     {
         custardAnimator.HandleListening();
@@ -158,6 +186,15 @@ public class BeatGenerator : MonoBehaviour
     private void HandleOnFreshBar()
     {
         loopStartTime = VirtualDspTime();
+
+        if (!hasReceivedFirstFreshBar)
+        {
+            // This is the first fresh bar event - grace period ends now
+            hasReceivedFirstFreshBar = true;
+            gracePeriodActive = false;
+            Debug.Log("Grace period ended - ready for pattern generation");
+        }
+
         Invoke(nameof(DelayReset), 1);
     }
 
@@ -177,7 +214,7 @@ public class BeatGenerator : MonoBehaviour
         float measureLength = 3.5f;
         beatPattern.Clear();
 
-        // Single loop covers both “normal” and “else” modes
+        // Single loop covers both "normal" and "else" modes
         while (timeSlot < measureLength)
         {
             // pick a duration that will fit

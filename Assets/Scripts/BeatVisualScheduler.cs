@@ -19,13 +19,17 @@ public class BeatVisualScheduler : MonoBehaviour
     private double fullLoopStartDspTime;
     public int fullLoopBeats = 8;
 
-    // For pause handling
-    private bool paused = false;
+    // Updated pause handling to match BeatGenerator approach
+    private double totalPausedTime = 0.0;
     private double pauseStartTime = 0.0;
+    private bool isPaused = false;
+
+    // Virtual DSP time that accounts for paused time
+    private double VirtualDspTime() => AudioSettings.dspTime - totalPausedTime;
 
     private class ScheduledVisualEvent
     {
-        public double scheduledTime;
+        public double scheduledTime; // This will be in virtual time
         public bool isRightBongo;
     }
 
@@ -52,15 +56,15 @@ public class BeatVisualScheduler : MonoBehaviour
         double beatDuration = 60.0 / metronome.bpm;
         barDuration = 4 * beatDuration;
         fullLoopDuration = fullLoopBeats * beatDuration;
-        fullLoopStartDspTime = AudioSettings.dspTime;
+        fullLoopStartDspTime = VirtualDspTime(); // Use virtual time
     }
 
     private void Update()
     {
-        if (paused)
+        if (isPaused)
             return; // Freeze updates while paused
 
-        double currentTime = AudioSettings.dspTime;
+        double currentTime = VirtualDspTime(); // Use virtual time consistently
         double elapsedLoop = currentTime - fullLoopStartDspTime;
 
         if (elapsedLoop >= fullLoopDuration)
@@ -78,6 +82,7 @@ public class BeatVisualScheduler : MonoBehaviour
             barSlider.value = 1f;
         }
 
+        // Process scheduled events using virtual time
         List<ScheduledVisualEvent> triggeredEvents = new List<ScheduledVisualEvent>();
         foreach (var evt in scheduledEvents)
         {
@@ -95,9 +100,12 @@ public class BeatVisualScheduler : MonoBehaviour
 
     public void ScheduleVisualBeat(double scheduledTime, bool isRightBongo)
     {
+        // Convert the scheduled time to virtual time for consistent handling
+        double virtualScheduledTime = scheduledTime - totalPausedTime;
+
         ScheduledVisualEvent newEvent = new ScheduledVisualEvent
         {
-            scheduledTime = scheduledTime,
+            scheduledTime = virtualScheduledTime,
             isRightBongo = isRightBongo
         };
         scheduledEvents.Add(newEvent);
@@ -150,24 +158,27 @@ public class BeatVisualScheduler : MonoBehaviour
         }
     }
 
-    // Call this when pausing.
+    // Call this when pausing - now matches BeatGenerator approach
     public void OnPause()
     {
-        if (!paused)
+        if (!isPaused)
         {
-            paused = true;
+            isPaused = true;
             pauseStartTime = AudioSettings.dspTime;
         }
     }
 
-    // Call this when resuming.
+    // Call this when resuming - now properly accumulates pause time
     public void OnResume()
     {
-        if (paused)
+        if (isPaused)
         {
             double pauseDuration = AudioSettings.dspTime - pauseStartTime;
-            fullLoopStartDspTime += pauseDuration; // Adjust the reference time
-            paused = false;
+            totalPausedTime += pauseDuration;
+            isPaused = false;
+
+            // Update the loop start time to virtual time
+            fullLoopStartDspTime = VirtualDspTime() - (VirtualDspTime() - fullLoopStartDspTime);
         }
     }
 }

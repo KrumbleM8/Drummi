@@ -4,6 +4,8 @@ using UnityEngine.SceneManagement;
 
 public class GameManager : MonoBehaviour
 {
+    public static GameManager instance;
+
     public Metronome metronome;
     public BeatGenerator beatGenerator;
     public BeatEvaluator beatEvaluator;
@@ -14,6 +16,11 @@ public class GameManager : MonoBehaviour
 
     //Refs to Disable
     public EyeBlinker blinking;
+
+    private void Awake()
+    {
+        instance = this;
+    }
 
     private void Start()
     {
@@ -45,7 +52,6 @@ public class GameManager : MonoBehaviour
     public void SetDifficulty(int difficultyIndex)
     {
         beatGenerator.difficultyIndex = difficultyIndex;
-        beatGenerator.SetBPM();
     }
 
     public void SetMusic(int index)

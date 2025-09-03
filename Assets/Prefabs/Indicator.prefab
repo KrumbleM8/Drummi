@@ -11,6 +11,9 @@ GameObject:
   - component: {fileID: 7929056987792281754}
   - component: {fileID: 8470803032002656903}
   - component: {fileID: 1666776563546125002}
+  - component: {fileID: 1853624694362728758}
+  - component: {fileID: 4010056789375201481}
+  - component: {fileID: 5987658107051402754}
   m_Layer: 5
   m_Name: Indicator
   m_TagString: Untagged
@@ -35,7 +38,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
-  m_AnchoredPosition: {x: -300.5, y: -41.8}
+  m_AnchoredPosition: {x: 0, y: 0}
   m_SizeDelta: {x: 48.8035, y: 47.6288}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!222 &8470803032002656903
@@ -76,6 +79,106 @@ MonoBehaviour:
   m_FillOrigin: 0
   m_UseSpriteMesh: 0
   m_PixelsPerUnitMultiplier: 1
+--- !u!114 &1853624694362728758
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2066059053099723872}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fb1a9e599548ed849b813278792f5332, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  growScale: 1.4
+  growDuration: 0.07
+  recoilScale: 0.9
+  recoilDuration: 0.1
+  settleDuration: 0.1
+  rotateAngle: 22
+  bouncerRef: {fileID: 4010056789375201481}
+--- !u!114 &4010056789375201481
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2066059053099723872}
+  m_Enabled: 0
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d3804439577779344ab313f1e59e3e4d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  metronome: {fileID: 0}
+  baseBounceScaleY: 1.3
+  bounceIntensity: 0.9
+  smoothTime: 0.09
+  useCurve: 0
+  bounceCurve:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 3
+      time: 0
+      value: 1
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    - serializedVersion: 3
+      time: 1
+      value: 0
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 4
+--- !u!114 &5987658107051402754
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2066059053099723872}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fa71240cb0817f4438f1b174310678b0, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  metronome: {fileID: 0}
+  rotationAmount: 12
+  beatsPerCycle: 2
+  phaseOffsetBeats: 0
+  easeCurve:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 3
+      time: 0
+      value: 1
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    - serializedVersion: 3
+      time: 1
+      value: 1
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 4
 --- !u!1 &6112820547803501775
 GameObject:
   m_ObjectHideFlags: 0

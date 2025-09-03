@@ -12,6 +12,10 @@ public class CarouselController : MonoBehaviour
     [Tooltip("Deceleration rate when drag is released.")]
     public float deceleration = 5f;
 
+    [Header("Gesture")]
+    [Tooltip("Pixels the pointer must move before we treat the gesture as a drag (tap otherwise).")]
+    public float dragThreshold = 10f;
+
     private float currentOffset = 0f;
     private float velocity = 0f;
     private bool isDragging = false;
@@ -22,6 +26,17 @@ public class CarouselController : MonoBehaviour
     private InputAction pointerUpAction;
 
     private Vector2 previousPointerPos;
+
+    // Drag promotion & click suppression
+    private Vector2 pointerDownPos;
+    private bool promotedToDrag = false;
+    private float suppressClickUntil = 0f; // small grace window after release
+
+    /// <summary>
+    /// True when a drag was recognized (moved past threshold) OR within a short window after release.
+    /// Children should not treat the gesture as a tap when this is true.
+    /// </summary>
+    public bool SuppressChildTap => promotedToDrag || Time.unscaledTime < suppressClickUntil;
 
     void Awake()
     {
@@ -74,30 +89,23 @@ public class CarouselController : MonoBehaviour
     void UpdateCarouselItems()
     {
         int count = transform.childCount;
-        // Calculate half the total width for looping logic.
+        if (count == 0) return;
+
         float totalWidth = count * spacing;
         float halfWidth = totalWidth / 2f;
 
         for (int i = 0; i < count; i++)
         {
             RectTransform child = transform.GetChild(i) as RectTransform;
-            // Calculate the base x-position for the item.
+            if (!child) continue;
+
             float targetX = (i - (count - 1) / 2f) * spacing + currentOffset;
 
-            // Loop the item by adding/subtracting the total width.
-            while (targetX < -halfWidth)
-            {
-                targetX += totalWidth;
-            }
-            while (targetX > halfWidth)
-            {
-                targetX -= totalWidth;
-            }
+            while (targetX < -halfWidth) targetX += totalWidth;
+            while (targetX > halfWidth) targetX -= totalWidth;
 
-            // Update the position.
             child.anchoredPosition = new Vector2(targetX, child.anchoredPosition.y);
 
-            // Compute scale based on how close the item is to the center.
             float distance = Mathf.Abs(targetX);
             float scale = Mathf.Lerp(1f, 1f - scaleFactor, distance / halfWidth);
             scale = Mathf.Clamp(scale, 0.5f, 1f);
@@ -109,22 +117,43 @@ public class CarouselController : MonoBehaviour
     {
         isDragging = true;
         velocity = 0f;
-        previousPointerPos = Mouse.current.position.ReadValue();
+
+        previousPointerPos = Mouse.current != null ? Mouse.current.position.ReadValue() : previousPointerPos;
+        pointerDownPos = previousPointerPos;
+
+        promotedToDrag = false;
+        suppressClickUntil = 0f; // clear suppression at new gesture start
     }
 
     void OnPointerUp(InputAction.CallbackContext context)
     {
         isDragging = false;
+
         Vector2 lastDelta = dragAction.ReadValue<Vector2>();
-        velocity = lastDelta.x / Time.deltaTime;
+        float dt = Mathf.Max(Time.deltaTime, 0.0001f);
+        velocity = lastDelta.x / dt;
+
+        // If this gesture was promoted to a drag, suppress taps briefly to avoid click firing on release frame.
+        if (promotedToDrag)
+            suppressClickUntil = Time.unscaledTime + 0.05f;
+
+        promotedToDrag = false;
     }
 
     void OnDragPerformed(InputAction.CallbackContext context)
     {
-        if (isDragging)
+        if (!isDragging) return;
+
+        Vector2 delta = context.ReadValue<Vector2>();
+        currentOffset += delta.x;
+
+        // Promote to drag if moved beyond threshold (so children should not tap)
+        Vector2 posNow = Mouse.current != null ? Mouse.current.position.ReadValue() : previousPointerPos + delta;
+        if (!promotedToDrag && (posNow - pointerDownPos).sqrMagnitude >= dragThreshold * dragThreshold)
         {
-            Vector2 delta = context.ReadValue<Vector2>();
-            currentOffset += delta.x;
+            promotedToDrag = true;
         }
+
+        previousPointerPos = posNow;
     }
 }
