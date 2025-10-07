@@ -91,6 +91,8 @@ public class BeatGenerator : MonoBehaviour
 
     private void Start()
     {
+        HandleOnFreshBar(); //This is here to trigger the grace period on start, reducing the time the game starts from 2 bars to 1
+
         chosenBeatDurations = difficultyIndex switch
         {
             0 => starterBeatDurations,
@@ -106,11 +108,6 @@ public class BeatGenerator : MonoBehaviour
 
         double currentTime = VirtualDspTime();
         double currentLoopTime = currentTime - loopStartTime;
-
-        if (gracePeriodActive && currentTime >= gracePeriodEndTime)
-        {
-            gracePeriodActive = false;
-        }
 
         // TARGETED FIX: Add additional safety check to ensure we're in the correct timing window
         // Only trigger if we're past 7.5 beats AND the metronome is in the right position

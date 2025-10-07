@@ -8,6 +8,7 @@ public class BeatEvaluator : MonoBehaviour
     public PlayerInputVisualHandler visualScheduler;
     public HitGrader hitGrader;
     public TMP_Text feedbackText;
+    public float feedbackYOffset = -250f; // Y position for feedback text
 
     public CustardAnimationHandler custardAnimator;
     public float perfectThreshold = 0.05f;
@@ -234,7 +235,7 @@ public class BeatEvaluator : MonoBehaviour
     private void ShowFeedback(string message)
     {
         feedbackText.text = message;
-        feedbackText.rectTransform.anchoredPosition = new Vector2(visualScheduler.GetCurrentSliderXPosition(), -236); //
+        feedbackText.rectTransform.anchoredPosition = new Vector2(visualScheduler.GetCurrentSliderXPosition(), feedbackYOffset); //
         CancelInvoke(nameof(ClearFeedback));
         Invoke(nameof(ClearFeedback), 0.41f); // Hide after 0.41s (or adjust as needed)
     }
