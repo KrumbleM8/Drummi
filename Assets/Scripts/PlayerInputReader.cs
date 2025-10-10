@@ -65,19 +65,22 @@ public class PlayerInputReader : MonoBehaviour
 
     private void OnLeft(InputAction.CallbackContext context)
     {
-        AudioManager.instance?.PlayBongoLeft();
         TriggerInput(false);
     }
 
     private void OnRight(InputAction.CallbackContext context)
     {
-        AudioManager.instance?.PlayBongoRight();
         TriggerInput(true);
     }
 
-    private void TriggerInput(bool isRightBongo)
+    public void TriggerInput(bool isRightBongo)
     {
         BongoAnimator.instance.PlayBongoAnimation(isRightBongo);
+
+        if (isRightBongo)
+            AudioManager.instance?.PlayBongoRight();
+        else
+            AudioManager.instance?.PlayBongoLeft();
 
         if (!allowInput || Time.timeScale == 0) return;
 
@@ -87,8 +90,6 @@ public class PlayerInputReader : MonoBehaviour
         playerInputVisualScheduler?.SpawnInputIndicator(isRightBongo);
 
         beatEvaluator.LogInput(input);
-
-        BongoAnimator.instance.PlayBongoAnimation(isRightBongo);
     }
 
     public void ResetInputs()
