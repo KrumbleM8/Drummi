@@ -70,6 +70,10 @@ public class GameManager : MonoBehaviour
                 BroadcastMessage("SetBPM");
                 break;
             case 2:
+                //metronome.bpm = SongItem.bpm etc
+                metronome.bpm = 150;
+                AudioManager.instance.selectedSongIndex = index;
+                BroadcastMessage("SetBPM");
                 break;
             default:
                 metronome.bpm = 105;

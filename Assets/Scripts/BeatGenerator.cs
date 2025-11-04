@@ -79,7 +79,7 @@ public class BeatGenerator : MonoBehaviour
                 playbackOffset = 0;
                 break;
             case 105:
-                playbackOffset = 0.05f;
+                playbackOffset = 0.05f; //? do we need this?
                 break;
             default:
                 playbackOffset = 0;
@@ -156,10 +156,6 @@ public class BeatGenerator : MonoBehaviour
     private void HandleOnTick()
     {
         double quaver = metronome.timePerTick * 0.5;
-        if (metronome.bpm == 111)
-        {
-            quaver = quaver - 0.05;
-        }
         double beatTime = metronome.nextBeatTime;
 
         if (metronome.loopBeatCount == 3)

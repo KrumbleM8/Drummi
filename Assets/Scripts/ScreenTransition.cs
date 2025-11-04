@@ -122,9 +122,14 @@ public class ScreenTransition : MonoBehaviour
     {
         _isTransitioning = true;
 
+        // Get the width of the RectTransform (assumes horizontal wipe).
         float width = _rectTransform.rect.width;
-        // Starting position: off-screen to the left (x = -width)
-        Vector2 startPos = _rectTransform.anchoredPosition;
+
+        // Starting position: off-screen to the right (x = +width)
+        Vector2 startPos = new Vector2(width, 0f);
+        // Ensure the rect starts at the off-screen-right position so the cover always moves left.
+        _rectTransform.anchoredPosition = startPos;
+
         // End position: fully covering (x = 0)
         Vector2 endPos = Vector2.zero;
 
@@ -136,6 +141,8 @@ public class ScreenTransition : MonoBehaviour
             elapsed += Time.deltaTime;
             yield return null;
         }
+
+        // Snap to final position.
         _rectTransform.anchoredPosition = endPos;
         _isCovered = true;
         _isTransitioning = false;
