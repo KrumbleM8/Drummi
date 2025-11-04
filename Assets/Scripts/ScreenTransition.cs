@@ -28,6 +28,7 @@ public class ScreenTransition : MonoBehaviour
 
     void Awake()
     {
+        Debug.Log("ScreenTransition Awake called.");
         // Get the RectTransform component if not assigned.
         _rectTransform = GetComponent<RectTransform>();
         if (_rectTransform == null)
@@ -141,7 +142,6 @@ public class ScreenTransition : MonoBehaviour
             elapsed += Time.deltaTime;
             yield return null;
         }
-
         // Snap to final position.
         _rectTransform.anchoredPosition = endPos;
         _isCovered = true;

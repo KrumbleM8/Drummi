@@ -9,56 +9,56 @@ public class AndroidDeviceFeatureDetection : MonoBehaviour
 
     private void Start()
     {
-        DetectHapticsSupport();
+        //DetectHapticsSupport();
         DetectMultiTouchSupport();
         DetectBluetoothAudio();
         DetectMaxFramerate();
     }
 
-    private void DetectHapticsSupport()
-    {
-#if UNITY_ANDROID && !UNITY_EDITOR
-        try
-        {
-            var unityPlayer = new AndroidJavaClass("com.unity3d.player.UnityPlayer");
-            var activity = unityPlayer.GetStatic<AndroidJavaObject>("currentActivity");
-            var vibrator = activity.Call<AndroidJavaObject>("getSystemService", "vibrator");
+//    private void DetectHapticsSupport()
+//    {
+//#if UNITY_ANDROID && !UNITY_EDITOR
+//        try
+//        {
+//            var unityPlayer = new AndroidJavaClass("com.unity3d.player.UnityPlayer");
+//            var activity = unityPlayer.GetStatic<AndroidJavaObject>("currentActivity");
+//            var vibrator = activity.Call<AndroidJavaObject>("getSystemService", "vibrator");
 
-            if (vibrator != null)
-            {
-                // hasVibrator() exists on most Android API levels
-                hapticsSupported = vibrator.Call<bool>("hasVibrator");
+//            if (vibrator != null)
+//            {
+//                // hasVibrator() exists on most Android API levels
+//                hapticsSupported = vibrator.Call<bool>("hasVibrator");
 
-                // Optional: check for amplitude control (API 26+)
-                var version = new AndroidJavaClass("android.os.Build$VERSION");
-                int sdkInt = version.GetStatic<int>("SDK_INT");
-                if (sdkInt >= 26)
-                {
-                    try
-                    {
-                        bool hasAmp = vibrator.Call<bool>("hasAmplitudeControl");
-                        Debug.Log("Has amplitude control: " + hasAmp);
-                    }
-                    catch (Exception) { /* method may not exist on some OEMs */ }
-                }
-            }
-            else
-            {
-                hapticsSupported = false;
-            }
-        }
-        catch (Exception e)
-        {
-            Debug.LogWarning("Error checking vibrator: " + e);
-            hapticsSupported = false;
-        }
-#else
-        // Editor, iOS or other platforms - fallback
-        hapticsSupported = false;
-#endif
+//                // Optional: check for amplitude control (API 26+)
+//                var version = new AndroidJavaClass("android.os.Build$VERSION");
+//                int sdkInt = version.GetStatic<int>("SDK_INT");
+//                if (sdkInt >= 26)
+//                {
+//                    try
+//                    {
+//                        bool hasAmp = vibrator.Call<bool>("hasAmplitudeControl");
+//                        Debug.Log("Has amplitude control: " + hasAmp);
+//                    }
+//                    catch (Exception) { /* method may not exist on some OEMs */ }
+//                }
+//            }
+//            else
+//            {
+//                hapticsSupported = false;
+//            }
+//        }
+//        catch (Exception e)
+//        {
+//            Debug.LogWarning("Error checking vibrator: " + e);
+//            hapticsSupported = false;
+//        }
+//#else
+//        // Editor, iOS or other platforms - fallback
+//        hapticsSupported = false;
+//#endif
 
-        Debug.Log("Haptics Supported: " + hapticsSupported);
-    }
+//        Debug.Log("Haptics Supported: " + hapticsSupported);
+//    }
 
     private void DetectMultiTouchSupport()
     {

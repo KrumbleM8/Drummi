@@ -2626,7 +2626,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 3fbbfedbfdfa92d4f99ff5c7be2b647d, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  transitionDuration: 0.2
+  transitionDuration: 0.3
   autoRevealOnStart: 1
 --- !u!1 &463733839
 GameObject:
@@ -5891,6 +5891,7 @@ GameObject:
   - component: {fileID: 891851649}
   - component: {fileID: 891851650}
   - component: {fileID: 891851651}
+  - component: {fileID: 891851652}
   m_Layer: 0
   m_Name: GameManager
   m_TagString: Untagged
@@ -6054,6 +6055,8 @@ MonoBehaviour:
   playerInputVisualHandler: {fileID: 891851649}
   gameplayElementsObject: {fileID: 1850612188}
   blinking: {fileID: 1762856860}
+  pauseHandler: {fileID: 891851652}
+  sceneLoader: {fileID: 0}
 --- !u!114 &891851649
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -6103,6 +6106,23 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   scoreTriggers: 
   eventObjects: []
+--- !u!114 &891851652
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 891851642}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 780c71d3b6a6e3a4e8f24a54a50ff595, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  metronome: {fileID: 1433809952}
+  beatGenerator: {fileID: 891851644}
+  beatEvaluator: {fileID: 891851647}
+  visualScheduler: {fileID: 891851645}
+  playerInputVisualHandler: {fileID: 891851649}
 --- !u!224 &897368736 stripped
 RectTransform:
   m_CorrespondingSourceObject: {fileID: 2040462333756127397, guid: 09a82d829ba59174cac0e9f9b91043b3, type: 3}

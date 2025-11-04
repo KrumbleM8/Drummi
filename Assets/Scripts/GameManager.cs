@@ -1,121 +1,115 @@
 using System.Collections;
+using Unity.VisualScripting;
 using UnityEngine;
-using UnityEngine.SceneManagement;
 
 public class GameManager : MonoBehaviour
 {
     public static GameManager instance;
 
+    [Header("Core Gameplay")]
     public Metronome metronome;
     public BeatGenerator beatGenerator;
     public BeatEvaluator beatEvaluator;
     public BeatVisualScheduler visualScheduler;
     public PlayerInputVisualHandler playerInputVisualHandler;
 
+    [Header("Gameplay Root")]
     public GameObject gameplayElementsObject;
 
-    //Refs to Disable
+    [Header("Misc")]
     public EyeBlinker blinking;
+
+    [Header("Delegates")]
+    [SerializeField] private PauseHandler pauseHandler;
+    [SerializeField] private SceneLoadManager sceneLoader;
 
     private void Awake()
     {
+        if (instance != null && instance != this)
+        {
+            Destroy(this.gameObject);
+            return;
+        }
         instance = this;
     }
 
     private void Start()
     {
-        Time.timeScale = 1;
+        Time.timeScale = 1f;
+
+        pauseHandler = GetComponent<PauseHandler>();
+        sceneLoader = SceneLoadManager.instance;
     }
+
     public void StartGame()
     {
         StartCoroutine(StartProcess());
-        blinking.enabled = false;
-        blinking.transform.GetChild(0).gameObject.SetActive(false);
+        if (blinking != null)
+        {
+            blinking.enabled = false;
+            if (blinking.transform.childCount > 0)
+                blinking.transform.GetChild(0).gameObject.SetActive(false);
+        }
     }
 
-    IEnumerator StartProcess()
+    private IEnumerator StartProcess()
     {
         yield return new WaitForEndOfFrame();
-        beatGenerator.enabled = true;
-        visualScheduler.enabled = true;
-        playerInputVisualHandler.enabled = true;
-        metronome.enabled = true;
 
-        gameplayElementsObject.SetActive(true);
+        if (beatGenerator) beatGenerator.enabled = true;
+        if (visualScheduler) visualScheduler.enabled = true;
+        if (playerInputVisualHandler) playerInputVisualHandler.enabled = true;
+        if (metronome) metronome.enabled = true;
 
-        AudioManager.instance.scheduledStartTime = metronome.GetNextBeatTime();
-        AudioManager.instance.PlayMusic();
+        if (gameplayElementsObject) gameplayElementsObject.SetActive(true);
+
+        if (AudioManager.instance != null && metronome != null)
+        {
+            AudioManager.instance.scheduledStartTime = metronome.GetNextBeatTime();
+            AudioManager.instance.PlayMusic();
+        }
 
         yield return null;
     }
 
     public void SetDifficulty(int difficultyIndex)
     {
-        beatGenerator.difficultyIndex = difficultyIndex;
+        if (beatGenerator) beatGenerator.difficultyIndex = difficultyIndex;
     }
 
     public void SetMusic(int index)
     {
+        if (metronome == null) return;
+
         switch (index)
         {
             case 0:
                 metronome.bpm = 105;
-                AudioManager.instance.selectedSongIndex = index;
-                BroadcastMessage("SetBPM");
                 break;
             case 1:
-                //metronome.bpm = SongItem.bpm etc
                 metronome.bpm = 111;
-                AudioManager.instance.selectedSongIndex = index;
-                BroadcastMessage("SetBPM");
                 break;
             case 2:
-                //metronome.bpm = SongItem.bpm etc
                 metronome.bpm = 150;
-                AudioManager.instance.selectedSongIndex = index;
-                BroadcastMessage("SetBPM");
                 break;
             default:
                 metronome.bpm = 105;
-                BroadcastMessage("SetBPM");
-                AudioManager.instance.selectedSongIndex = index;
                 break;
-
         }
+
+        if (AudioManager.instance != null) AudioManager.instance.selectedSongIndex = index;
+        BroadcastMessage("SetBPM", SendMessageOptions.DontRequireReceiver);
     }
 
+    // Preserved public API. Logic delegated.
     public void TogglePause()
     {
-        beatEvaluator.SaveHighScore();
-        if (Time.timeScale > 0)
-        {
-            Time.timeScale = 0;
-            AudioManager.instance.PauseAllAudio();
-
-            if (metronome.enabled) metronome.OnPause();
-            if (beatGenerator.enabled) beatGenerator.OnPause();
-            if (playerInputVisualHandler.enabled) playerInputVisualHandler.OnPause();
-            if (visualScheduler.enabled) visualScheduler.OnPause();
-        }
-        else
-        {
-            Time.timeScale = 1;
-            AudioManager.instance.ResumeAllAudio();
-
-            if (metronome.enabled) metronome.OnResume();
-            if (beatGenerator.enabled) beatGenerator.OnResume();
-            if (playerInputVisualHandler.enabled) playerInputVisualHandler.OnResume();
-            if (visualScheduler.enabled) visualScheduler.OnResume();
-        }
+        if (pauseHandler != null) pauseHandler.TogglePause();
     }
 
-    public void ResetDrummi() //Maybe add a confirm check window so people dont accidentally lose all their progress
+    // Preserved public API. Logic delegated.
+    public void ResetDrummi()
     {
-        //Handle saving playerprefs, etc
-
-        //Transition Screen here
-
-        //PUT THIS IN A COROUTINE OR INVOKE TO ADD DELAY FOR TRANSITION TO FINISH
-        SceneManager.LoadScene(0); //Does not go back to bootstrap, this may be an issue later
+        if (sceneLoader != null) sceneLoader.ResetDrummi();
     }
 }

@@ -259,7 +259,7 @@ public class UIMenuManager : MonoBehaviour
     {
         isTransitioning = true;
         screenTransitioner.StartCover();
-        yield return new WaitForSeconds(screenTransitioner.transitionDuration);
+        yield return new WaitForSeconds(screenTransitioner.transitionDuration *= 1.13f);
         onTransitionComplete?.Invoke();
         SceneManager.LoadScene(sceneName);
     }
