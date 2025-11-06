@@ -23,6 +23,8 @@ public class BeatEvaluator : MonoBehaviour
     public int goodReward = 100;
     public int passableReward = 50;
     // Optional: for input time debug logging
+
+    private bool isFinalEvaluation = false;
     public void LogInput(BongoInput input)
     {
         Debug.Log($"Input pressed at time: {input.inputTime}, side: {(input.isRightBongo ? "Right" : "Left")}");
@@ -75,6 +77,19 @@ public class BeatEvaluator : MonoBehaviour
     public void EvaluatePlayerInput(List<BongoInput> playerInputs)
     {
         if (Time.timeScale == 0) return;
+
+        if (beatGenerator.totalBeatsInSong > 0)
+        {
+            double currentTime = beatGenerator.VirtualDspTime();
+            double timeUntilEnd = beatGenerator.songEndTime - currentTime;
+            double beatsUntilEnd = timeUntilEnd / (60.0 / beatGenerator.metronome.bpm);
+
+            if (beatsUntilEnd <= 8) // Within the last bar
+            {
+                isFinalEvaluation = true;
+                Debug.Log("This is the FINAL evaluation!");
+            }
+        }
 
         List<ScheduledBeat> scheduledBeats = beatGenerator.scheduledBeats;
         int correctHits = 0;

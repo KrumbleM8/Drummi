@@ -264,6 +264,10 @@ public class UIMenuManager : MonoBehaviour
         SceneManager.LoadScene(sceneName);
     }
 
+    public void SetScoreToCurrentPage()
+    {
+        currentPage = menuPages[5];
+    }    
     public bool IsTransitioning() => isTransitioning;
 
     public string GetCurrentPageName() => currentPage?.pageName ?? string.Empty;

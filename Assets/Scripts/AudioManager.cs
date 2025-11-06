@@ -41,7 +41,7 @@ public class AudioManager : MonoBehaviour
     public void PlayMusic()
     {
         speakers[0].clip = musicTracks[selectedSongIndex];
-        speakers[0].loop = true;
+        speakers[0].loop = false;
         // Adjust the scheduled start time by any accumulated pause duration.
         double adjustedStartTime = scheduledStartTime + accumulatedPauseDuration;
         speakers[0].PlayScheduled(adjustedStartTime);

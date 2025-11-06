@@ -22,6 +22,11 @@ public class GameManager : MonoBehaviour
     [Header("Delegates")]
     [SerializeField] private PauseHandler pauseHandler;
     [SerializeField] private SceneLoadManager sceneLoader;
+    [SerializeField] private ScreenTransition screenTransition;
+    [SerializeField] private GameObject pageToCloseOnStart;
+    [SerializeField] private GameObject gameplayElements;
+    [SerializeField] private BeatVisualScheduler beatVisualScheduler;
+    [SerializeField] private PlayerInputVisualHandler playerInputVisual;
 
     private void Awake()
     {
@@ -39,6 +44,26 @@ public class GameManager : MonoBehaviour
 
         pauseHandler = GetComponent<PauseHandler>();
         sceneLoader = SceneLoadManager.instance;
+
+        beatGenerator.OnSongComplete += HandleSongComplete;
+    }
+
+    private void HandleSongComplete()
+    {
+        // Your transition logic here
+        Debug.Log("Song complete! Show results screen");
+
+        // Example options:
+        // 1. Show results panel
+        // resultsPanel.SetActive(true);
+        // resultsPanel.DisplayScore(beatEvaluator.score);
+
+        // 2. Or trigger animation
+        // transitionAnimator.SetTrigger("FadeToResults");
+
+        // 3. Or simply enable a results UI object
+        // resultsScreen.gameObject.SetActive(true);
+        // resultsScreen.Initialize(beatEvaluator.score, beatEvaluator.perfectHits);
     }
 
     public void StartGame()
@@ -54,7 +79,55 @@ public class GameManager : MonoBehaviour
 
     private IEnumerator StartProcess()
     {
-        yield return new WaitForEndOfFrame();
+        screenTransition.StartCover();
+
+        while (!screenTransition.IsScreenCovered)
+        {
+            yield return null;
+        }
+        pageToCloseOnStart.SetActive(false);
+        screenTransition.StartReveal();
+
+        Debug.Log("=== STARTING GAME ===");
+
+
+        // 3. Re-enable all scripts
+        if (beatGenerator != null)
+        {
+            beatGenerator.enabled = true;
+            Debug.Log("BeatGenerator enabled");
+        }
+
+        if (beatVisualScheduler != null)
+        {
+            beatVisualScheduler.enabled = true;
+            Debug.Log("BeatVisualScheduler enabled");
+        }
+
+        if (playerInputVisual != null)
+        {
+            playerInputVisual.enabled = true;
+            Debug.Log("PlayerInputVisualHandler enabled");
+        }
+
+        if (metronome != null)
+        {
+            metronome.enabled = true;
+            Debug.Log("Metronome enabled");
+        }
+
+        // 4. Re-enable gameplay UI
+        if (gameplayElements != null)
+        {
+            gameplayElements.SetActive(true);
+            Debug.Log("GameplayElements enabled");
+        }
+
+        //// 7. Start pattern generation      //THIS IS BREAKING THE GAME BUT WHY!?!?!?
+        //if (beatGenerator != null)
+        //{
+        //    beatGenerator.StartGame();
+        //}
 
         if (beatGenerator) beatGenerator.enabled = true;
         if (visualScheduler) visualScheduler.enabled = true;
@@ -84,7 +157,7 @@ public class GameManager : MonoBehaviour
         switch (index)
         {
             case 0:
-                metronome.bpm = 105;
+                metronome.bpm = 111;
                 break;
             case 1:
                 metronome.bpm = 111;
@@ -111,5 +184,34 @@ public class GameManager : MonoBehaviour
     public void ResetDrummi()
     {
         if (sceneLoader != null) sceneLoader.ResetDrummi();
+    }
+    public void ResetGameValues()
+    {
+        if (beatGenerator != null)
+        {
+            beatGenerator.ResetToInitialState();
+        }
+
+        if (beatVisualScheduler != null)
+        {
+            beatVisualScheduler.ResetToInitialState();
+        }
+
+        if (playerInputVisual != null)
+        {
+            playerInputVisual.ResetToInitialState();
+        }
+
+        if (metronome != null)
+        {
+            metronome.ResetToInitialState();
+        }
+    }
+
+    private void OnDestroy()
+    {
+        // Unsubscribe to prevent memory leaks
+        if (beatGenerator != null)
+            beatGenerator.OnSongComplete -= HandleSongComplete;
     }
 }

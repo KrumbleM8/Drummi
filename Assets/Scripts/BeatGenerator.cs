@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
 
 public class BeatGenerator : MonoBehaviour
@@ -19,9 +20,7 @@ public class BeatGenerator : MonoBehaviour
 
     private readonly float[] starterBeatDurations = { 1f };
     private readonly float[] standardBeatDurations = { 1f, 0.5f };
-    //private readonly float[] standardBeatDurations = { 1f, 0.5f, 0.25f };
     private readonly float[] spicyBeatDurations = { 0.75f, 0.5f, 0.25f };
-    //private readonly float[] spicyBeatDurations = { 1f, 0.75f, 0.5f, 0.25f };
     private float[] chosenBeatDurations;
 
     public float evaluationBeatThreshold = 7.5f;
@@ -37,9 +36,10 @@ public class BeatGenerator : MonoBehaviour
     private bool isPaused = false;
     public bool IsPaused => isPaused;
 
-    private double VirtualDspTime() => AudioSettings.dspTime - totalPausedTime;
+    public double VirtualDspTime() => AudioSettings.dspTime - totalPausedTime;
 
     private double loopStartTime = 0.0;
+    private double gameStartTime = 0.0;
     public double patternStartTime = 0.0;
     public double inputStartTime { get; private set; }
 
@@ -54,6 +54,29 @@ public class BeatGenerator : MonoBehaviour
     private bool previousSide;
 
     private bool hasReceivedFirstFreshBar = false;
+
+    [Header("Song End Detection")]
+    public int barsBeforeEndToStopGeneration = 2;
+    public int barsBeforeEndForFinalBar = 1;
+    public float delayBeforeTransition = 2f;
+    public int totalBeatsInSong = 0;
+    private bool songEndDetected = false;
+    public double songEndTime = 0.0;
+    private double finalBarEndTime = 0.0;
+    private bool isFinalPattern = false;
+    private bool finalEvaluationTriggered = false;
+    private bool gameTimingInitialized = false;
+    public System.Action OnSongComplete;
+    public System.Action OnFinalBarComplete;
+
+    private readonly List<Beat> beatPattern = new();
+
+    private AudioClip selectedClip;
+
+    [Header("Screen Transition")]
+    public ScreenTransition screenTransition;
+    public GameObject scoreScreenMenu;
+    public GameObject gameplayElements;
 
     private void OnEnable()
     {
@@ -75,23 +98,39 @@ public class BeatGenerator : MonoBehaviour
 
         switch (metronome.bpm)
         {
-            case 111:
-                playbackOffset = 0;
-                break;
-            case 105:
-                playbackOffset = 0.05f; //? do we need this?
-                break;
             default:
-                playbackOffset = 0;
+                playbackOffset = 0.001f;
                 break;
         }
 
         metronome.RefreshValues();
+
+        if (AudioManager.instance != null &&
+            AudioManager.instance.musicTracks != null &&
+            AudioManager.instance.selectedSongIndex < AudioManager.instance.musicTracks.Length)
+        {
+            selectedClip = AudioManager.instance.musicTracks[AudioManager.instance.selectedSongIndex];
+
+            if (selectedClip != null)
+            {
+                double clipDuration = selectedClip.length;
+                totalBeatsInSong = Mathf.FloorToInt((float)(clipDuration / beatInterval));
+                Debug.Log($"[SetBPM] Song '{selectedClip.name}' has {totalBeatsInSong} beats. Timing will be initialized when game starts.");
+            }
+            else
+            {
+                Debug.LogError("[SetBPM] Selected music track is null!");
+            }
+        }
+        else
+        {
+            Debug.LogError("[SetBPM] AudioManager or music tracks not available!");
+        }
     }
 
     private void Start()
     {
-        HandleOnFreshBar(); //This is here to trigger the grace period on start, reducing the time the game starts from 2 bars to 1
+        HandleOnFreshBar();
 
         chosenBeatDurations = difficultyIndex switch
         {
@@ -104,14 +143,14 @@ public class BeatGenerator : MonoBehaviour
 
     private void Update()
     {
-        if (isPaused) return;
+        if (isPaused || songEndDetected || finalEvaluationTriggered)
+        {
+            return;
+        }
 
         double currentTime = VirtualDspTime();
         double currentLoopTime = currentTime - loopStartTime;
 
-        // TARGETED FIX: Add additional safety check to ensure we're in the correct timing window
-        // Only trigger if we're past 7.5 beats AND the metronome is in the right position
-        // This prevents the "1 crotchet early" issue
         if (!evaluationTriggered && !gracePeriodActive &&
             currentLoopTime >= evaluationBeatThreshold * beatInterval &&
             IsCorrectTimingForGeneration())
@@ -120,24 +159,17 @@ public class BeatGenerator : MonoBehaviour
         }
     }
 
-    // ADDED: Safety check to ensure we're generating at the right metronome position
     private bool IsCorrectTimingForGeneration()
     {
-        // We want to generate when we're approaching the end of the 8-beat cycle
-        // but NOT during the player's input window (beats 4-8 of the loop)
-
-        // If we're past beat 7 in the loop, we're in the safe zone for generation
         if (metronome.loopBeatCount >= 8)
         {
             return true;
         }
 
-        // If we're at beat 7 or early beat 8, check that we're not too early
         if (metronome.loopBeatCount == 7)
         {
-            // Make sure we're well into beat 7, not at the start of it
             double timeSinceLastBeat = VirtualDspTime() - (metronome.GetNextBeatTime() - metronome.timePerTick);
-            return timeSinceLastBeat > (metronome.timePerTick * 0.6); // At least 60% through beat 7
+            return timeSinceLastBeat > (metronome.timePerTick * 0.6);
         }
 
         return false;
@@ -148,13 +180,51 @@ public class BeatGenerator : MonoBehaviour
         evaluator.EvaluatePlayerInput(playerInputReader.playerInputData);
         playerInputReader.allowInput = false;
         playerInputReader.ResetInputs();
-        GenerateNewPattern();
-        PlayPattern();
+
+        if (isFinalPattern)
+        {
+            finalEvaluationTriggered = true;
+            Debug.Log("*** FINAL PATTERN EVALUATED - ENDING GAME ***");
+
+            OnFinalBarComplete?.Invoke();
+
+            Invoke(nameof(HandleFinalEvaluationComplete), 0.5f);
+        }
+        else
+        {
+            GenerateNewPattern();
+            PlayPattern();
+        }
+
         evaluationTriggered = true;
+    }
+
+    private void HandleFinalEvaluationComplete()
+    {
+        songEndDetected = true;
+
+        Debug.Log("*** FREEZING GAME - SONG COMPLETE ***");
+
+        StopAllCoroutines();
+        CancelInvoke();
+
+        if (evaluator != null)
+        {
+            Debug.Log($"Final Score: {evaluator.score}");
+        }
+
+        if (playerInputReader != null)
+        {
+            playerInputReader.allowInput = false;
+        }
+
+        Invoke(nameof(TriggerSongComplete), delayBeforeTransition);
     }
 
     private void HandleOnTick()
     {
+        if (songEndDetected || finalEvaluationTriggered) return;
+
         double quaver = metronome.timePerTick * 0.5;
         double beatTime = metronome.nextBeatTime;
 
@@ -173,44 +243,107 @@ public class BeatGenerator : MonoBehaviour
 
     private void SetListenAnimation()
     {
+        if (songEndDetected || finalEvaluationTriggered) return;
         custardAnimator.HandleListening();
     }
 
     private void HandleOnFreshBar()
     {
+        if (songEndDetected || finalEvaluationTriggered) return;
+
         loopStartTime = VirtualDspTime();
 
         if (!hasReceivedFirstFreshBar)
         {
-            // This is the first fresh bar event - grace period ends now
             hasReceivedFirstFreshBar = true;
             gracePeriodActive = false;
-            Debug.Log("Grace period ended - ready for pattern generation");
+            Debug.Log("[HandleOnFreshBar] Grace period ended - ready for pattern generation");
+
+            InitializeGameTiming();
         }
 
-        Invoke(nameof(DelayReset), 1);
+        if (!finalEvaluationTriggered)
+        {
+            Invoke(nameof(DelayReset), 1);
+        }
+    }
+
+    private void InitializeGameTiming()
+    {
+        if (gameTimingInitialized)
+        {
+            Debug.LogWarning("[InitializeGameTiming] Already initialized - ignoring duplicate call");
+            return;
+        }
+
+        gameTimingInitialized = true;
+
+        gameStartTime = VirtualDspTime();
+        loopStartTime = gameStartTime;
+        songEndTime = gameStartTime + (totalBeatsInSong * beatInterval);
+
+        int beatsForFinalBar = totalBeatsInSong - (barsBeforeEndForFinalBar * 8);
+        finalBarEndTime = gameStartTime + (beatsForFinalBar * beatInterval);
+
+        Debug.Log("=== GAME TIMING INITIALIZED ===");
+        Debug.Log($"Song: {selectedClip?.name ?? "Unknown"}");
+        Debug.Log($"Total beats: {totalBeatsInSong} at {metronome.bpm} BPM");
+        Debug.Log($"Game starts at: {gameStartTime:F2}");
+        Debug.Log($"Song will end at: {songEndTime:F2}");
+        Debug.Log($"Final bar ends at beat {beatsForFinalBar} (time: {finalBarEndTime:F2})");
+        Debug.Log($"Current DSP time: {AudioSettings.dspTime:F2}");
+        Debug.Log($"Bars before end to stop gen: {barsBeforeEndToStopGeneration}");
+        Debug.Log($"Bars before end for final bar: {barsBeforeEndForFinalBar}");
+        Debug.Log("================================");
     }
 
     private void DelayReset()
     {
+        if (finalEvaluationTriggered || songEndDetected) return;
         evaluationTriggered = false;
     }
 
     public void GenerateNewPattern()
     {
+        if (isFinalPattern)
+        {
+            Debug.LogWarning("[GenerateNewPattern] Called after final pattern - ignoring");
+            return;
+        }
+
         beatVisualScheduler.ResetVisuals();
         playerInputVisual.ResetVisuals();
         scheduledBeats.Clear();
-        evaluationTriggered = false;
+
+        if (gameTimingInitialized && totalBeatsInSong > 0 && !isFinalPattern)
+        {
+            double currentTime = VirtualDspTime();
+            double elapsedTimeSinceGameStart = currentTime - gameStartTime;
+            int absoluteBeatCount = Mathf.FloorToInt((float)(elapsedTimeSinceGameStart / beatInterval));
+            int beatsUntilEnd = totalBeatsInSong - absoluteBeatCount;
+
+            int bufferBeats = barsBeforeEndForFinalBar * 8;
+            int beatsNeededForCompleteCycle = 8 + bufferBeats;
+
+            Debug.Log($"[GenerateNewPattern] absoluteBeat={absoluteBeatCount}/{totalBeatsInSong}, beatsUntilEnd={beatsUntilEnd}, threshold={beatsNeededForCompleteCycle}, buffer={bufferBeats}");
+
+            if (beatsUntilEnd <= beatsNeededForCompleteCycle && beatsUntilEnd > bufferBeats)
+            {
+                isFinalPattern = true;
+                Debug.Log($"*** GENERATING FINAL PATTERN *** (absoluteBeat: {absoluteBeatCount}, beatsUntilEnd: {beatsUntilEnd})");
+            }
+        }
+        else if (!gameTimingInitialized)
+        {
+            Debug.Log("[GenerateNewPattern] Game timing not yet initialized - skipping final pattern check");
+        }
 
         float timeSlot = 0f;
         float measureLength = 3.5f;
         beatPattern.Clear();
 
-        // Single loop covers both "normal" and "else" modes
         while (timeSlot < measureLength)
         {
-            // pick a duration that will fit
             List<float> validDurations = new();
             foreach (float d in chosenBeatDurations)
                 if (timeSlot + d <= measureLength)
@@ -220,13 +353,10 @@ public class BeatGenerator : MonoBehaviour
 
             float chosenDuration = validDurations[Random.Range(0, validDurations.Count)];
 
-            // decide side, but check last maxSameSideHits entries
             bool isBongoSide;
             if (beatPattern.Count >= maxSameSideHits)
             {
-                // look at the side of the last beat
                 bool lastSide = beatPattern[^1].isBongoSide;
-                // check if the previous maxSameSideHits are all the same
                 bool allSame = true;
                 for (int i = 1; i <= maxSameSideHits; i++)
                 {
@@ -236,23 +366,17 @@ public class BeatGenerator : MonoBehaviour
                         break;
                     }
                 }
-                // if they were all the same, force a flip; otherwise, random
                 isBongoSide = allSame ? !lastSide : (Random.value > 0.5f);
             }
             else
             {
-                // fewer than maxSameSideHits exist, so just random
                 isBongoSide = Random.value > 0.5f;
             }
 
-            // add and advance
             beatPattern.Add(new Beat(chosenDuration, timeSlot, isBongoSide));
             timeSlot += chosenDuration;
         }
     }
-
-
-    private readonly List<Beat> beatPattern = new();
 
     public void PlayPattern()
     {
@@ -265,7 +389,6 @@ public class BeatGenerator : MonoBehaviour
             double scheduledTime = patternStartTime + (beat.timeSlot * beatIntervalLocal);
             scheduledBeats.Add(new ScheduledBeat(scheduledTime, beat.isBongoSide));
 
-            // 1. Schedule sound and visual
             if (beat.isBongoSide)
             {
                 rightBongoSources[rightBongoIndex].PlayScheduled(scheduledTime);
@@ -279,9 +402,8 @@ public class BeatGenerator : MonoBehaviour
                 leftBongoIndex = (leftBongoIndex + 1) % leftBongoSources.Count;
             }
 
-            // 2. Schedule Custard animations
             double neutralTime = scheduledTime - 0.1;
-            if (neutralTime > AudioSettings.dspTime) // Only if it's not in the past
+            if (neutralTime > AudioSettings.dspTime)
             {
                 StartCoroutine(ScheduleAnimation(neutralTime, () => custardAnimator.HandleNeutral()));
             }
@@ -305,22 +427,28 @@ public class BeatGenerator : MonoBehaviour
         if (delay > 0)
             yield return new WaitForSecondsRealtime((float)delay);
 
+        if (songEndDetected || finalEvaluationTriggered) yield break;
+
         action?.Invoke();
     }
+
     private System.Collections.IEnumerator ScheduleBongoWithReturn(double dspTime, bool isRight)
     {
         double delay = dspTime - AudioSettings.dspTime;
         if (delay > 0)
             yield return new WaitForSecondsRealtime((float)delay);
 
+        if (songEndDetected || finalEvaluationTriggered) yield break;
+
         if (isRight)
             custardAnimator.PlayRightBongo();
         else
             custardAnimator.PlayLeftBongo();
 
-        // Hold pose long enough for readability and impact
         float holdDuration = Mathf.Max(0.3f, (float)(beatInterval * 0.9f));
         yield return new WaitForSecondsRealtime(holdDuration);
+
+        if (songEndDetected || finalEvaluationTriggered) yield break;
 
         if (custardAnimator.spriteRenderer.sprite == custardAnimator.sprites[4])
         {
@@ -331,7 +459,6 @@ public class BeatGenerator : MonoBehaviour
             custardAnimator.HandleNeutral();
         }
     }
-
 
     public void StartGame()
     {
@@ -344,6 +471,7 @@ public class BeatGenerator : MonoBehaviour
         {
             isPaused = true;
             pauseStartTime = AudioSettings.dspTime;
+            Debug.Log($"[OnPause] Game paused at DSP time: {AudioSettings.dspTime:F2}");
         }
     }
 
@@ -354,6 +482,194 @@ public class BeatGenerator : MonoBehaviour
             double pauseDuration = AudioSettings.dspTime - pauseStartTime;
             totalPausedTime += pauseDuration;
             isPaused = false;
+
+            if (gameTimingInitialized)
+            {
+                songEndTime += pauseDuration;
+                finalBarEndTime += pauseDuration;
+                gameStartTime += pauseDuration;
+
+                Debug.Log($"[OnResume] Game resumed after {pauseDuration:F2}s pause");
+                Debug.Log($"[OnResume] Updated songEndTime: {songEndTime:F2}");
+                Debug.Log($"[OnResume] Updated finalBarEndTime: {finalBarEndTime:F2}");
+                Debug.Log($"[OnResume] Updated gameStartTime: {gameStartTime:F2}");
+            }
+            else
+            {
+                Debug.Log($"[OnResume] Game resumed but timing not yet initialized");
+            }
         }
+    }
+
+    private void TriggerSongComplete()
+    {
+        Debug.Log("=== TRANSITIONING TO RESULTS ===");
+
+        StopAllCoroutines();
+        CancelInvoke();
+
+        if (playerInputReader != null)
+        {
+            playerInputReader.allowInput = false;
+        }
+
+        scheduledBeats.Clear();
+
+        OnSongComplete?.Invoke();
+
+        Debug.Log($"FINAL SCORE: {evaluator?.score ?? 0}");
+
+        if (screenTransition != null)
+        {
+            screenTransition.StartCover();
+            StartCoroutine(WaitForTransitionThenShowResults());
+        }
+        else
+        {
+            Debug.LogError("ScreenTransition reference is missing! Assign it in Inspector.");
+            ShowResultsScreen();
+        }
+    }
+
+    private IEnumerator WaitForTransitionThenShowResults()
+    {
+        Debug.Log("[WaitForTransitionThenShowResults] Waiting for screen transition to cover...");
+
+        while (!screenTransition.IsScreenCovered)
+        {
+            yield return null;
+        }
+
+        Debug.Log("[WaitForTransitionThenShowResults] Screen fully covered - showing results");
+        screenTransition.StartReveal();
+        ShowResultsScreen();
+    }
+
+    private void ShowResultsScreen()
+    {
+        Debug.Log("=== SHOWING RESULTS SCREEN ===");
+        GameManager.instance.ResetGameValues();
+        // Disable GameplayElements (contains sliders, indicators, UI)
+        if (gameplayElements != null)
+        {
+            gameplayElements.SetActive(false);
+            Debug.Log("GameplayElements disabled");
+        }
+        else
+        {
+            Debug.LogWarning("GameplayElements reference missing! Assign in Inspector.");
+        }
+
+
+        if (beatVisualScheduler != null)
+        {
+            beatVisualScheduler.CleanupAndDisable();
+            Debug.Log("BeatVisualScheduler cleaned up and disabled");
+        }
+
+        if (playerInputVisual != null)
+        {
+            playerInputVisual.CleanupAndDisable();
+            Debug.Log("PlayerInputVisualHandler cleaned up and disabled");
+        }
+
+        if (metronome != null && metronome.enabled)
+        {
+            metronome.enabled = false;
+            Debug.Log("Metronome disabled");
+        }
+
+        // Stop all audio
+        if (AudioManager.instance != null)
+        {
+            AudioManager.instance.PauseMusic();
+            Debug.Log("Music stopped");
+        }
+
+        // Show score screen
+        if (scoreScreenMenu != null)
+        {
+            UIMenuManager menuManager = FindFirstObjectByType<UIMenuManager>();
+
+            scoreScreenMenu.SetActive(true);
+            menuManager.SetScoreToCurrentPage();
+            var scoreScreen = scoreScreenMenu.GetComponent<ScoreScreen>();
+            if (scoreScreen != null && evaluator != null)
+            {
+                scoreScreen.DisplayScore(evaluator.score, evaluator.perfectHits);
+            }
+
+            Debug.Log("ScoreScreenMenu enabled");
+        }
+        else
+        {
+            Debug.LogError("ScoreScreenMenu reference is missing! Assign it in Inspector.");
+        }
+
+        CleanupAndDisable();
+        Debug.Log("BeatGenerator cleaned up and disabled");
+        Debug.Log("=== RESULTS SCREEN READY ===");
+    }
+
+    private void CleanupAndDisable()
+    {
+        Debug.Log("[BeatGenerator] Cleaning up before disable");
+
+        // Stop everything
+        StopAllCoroutines();
+        CancelInvoke();
+
+        // Clear beats
+        scheduledBeats.Clear();
+        beatPattern.Clear();
+
+        // Disable the component
+        enabled = false;
+
+        Debug.Log("[BeatGenerator] Cleanup complete");
+    }
+
+    public void ResetToInitialState()
+    {
+        Debug.Log("[BeatGenerator] Resetting to initial state");
+
+        // Stop everything
+        StopAllCoroutines();
+        CancelInvoke();
+
+        // Reset flags - INCLUDING gameTimingInitialized!
+        evaluationTriggered = false;
+        songEndDetected = false;
+        finalEvaluationTriggered = false;
+        isFinalPattern = false;
+        gameTimingInitialized = false;  // CRITICAL: Allow timing to be re-initialized
+        hasReceivedFirstFreshBar = false;  // CRITICAL: Allow fresh bar to trigger again
+        gracePeriodActive = true;
+        isPaused = false;
+
+        // Reset timing
+        totalPausedTime = 0.0;
+        pauseStartTime = 0.0;
+        loopStartTime = 0.0;
+        gameStartTime = 0.0;
+        songEndTime = 0.0;
+        finalBarEndTime = 0.0;
+        totalBeatsInSong = 0;  // ADDED: Reset beat count
+
+        // Clear beats
+        scheduledBeats.Clear();
+        beatPattern.Clear();
+
+        // Reset indices
+        leftBongoIndex = 0;
+        rightBongoIndex = 0;
+
+        Debug.Log("[BeatGenerator] Reset complete - ready for fresh start");
+    }
+
+    public void InitializeForNewGame()
+    {
+        Debug.Log("[BeatGenerator] Initializing for new game - triggering grace period");
+        HandleOnFreshBar(); // This sets up loopStartTime and grace period, just like Start() did
     }
 }

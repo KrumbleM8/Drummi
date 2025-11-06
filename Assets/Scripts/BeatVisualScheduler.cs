@@ -14,22 +14,26 @@ public class BeatVisualScheduler : MonoBehaviour
     [Header("Metronome Reference")]
     public Metronome metronome;
 
+    [Header("Beat Generator Reference")]
+    public BeatGenerator beatGenerator;
+
     private double barDuration;
     private double fullLoopDuration;
     private double fullLoopStartDspTime;
     public int fullLoopBeats = 8;
 
-    // Updated pause handling to match BeatGenerator approach
     private double totalPausedTime = 0.0;
     private double pauseStartTime = 0.0;
     private bool isPaused = false;
 
-    // Virtual DSP time that accounts for paused time
     private double VirtualDspTime() => AudioSettings.dspTime - totalPausedTime;
+
+    private bool isFrozen = false;
+    private float frozenSliderValue = 1f;
 
     private class ScheduledVisualEvent
     {
-        public double scheduledTime; // This will be in virtual time
+        public double scheduledTime;
         public bool isRightBongo;
     }
 
@@ -39,16 +43,29 @@ public class BeatVisualScheduler : MonoBehaviour
     {
         if (metronome == null)
         {
-            Debug.LogError("Metronome reference is missing!");
+            Debug.LogError("BeatVisualScheduler: Metronome reference is missing!");
             return;
         }
 
         SetBPM();
+
+        if (beatGenerator != null)
+        {
+            beatGenerator.OnFinalBarComplete += FreezeVisuals;
+            Debug.Log("BeatVisualScheduler: Subscribed to OnFinalBarComplete");
+        }
+        else
+        {
+            Debug.LogError("BeatVisualScheduler: BeatGenerator reference is missing! Assign it in Inspector.");
+        }
     }
 
-    private void OnEnable()
+    private void OnDisable()
     {
-        SetBPM();
+        if (beatGenerator != null)
+        {
+            beatGenerator.OnFinalBarComplete -= FreezeVisuals;
+        }
     }
 
     public void SetBPM()
@@ -56,15 +73,21 @@ public class BeatVisualScheduler : MonoBehaviour
         double beatDuration = 60.0 / metronome.bpm;
         barDuration = 4 * beatDuration;
         fullLoopDuration = fullLoopBeats * beatDuration;
-        fullLoopStartDspTime = VirtualDspTime(); // Use virtual time
+        fullLoopStartDspTime = VirtualDspTime();
     }
 
     private void Update()
     {
-        if (isPaused)
-            return; // Freeze updates while paused
+        if (isPaused || isFrozen)
+        {
+            if (isFrozen)
+            {
+                barSlider.value = frozenSliderValue;
+            }
+            return;
+        }
 
-        double currentTime = VirtualDspTime(); // Use virtual time consistently
+        double currentTime = VirtualDspTime();
         double elapsedLoop = currentTime - fullLoopStartDspTime;
 
         if (elapsedLoop >= fullLoopDuration)
@@ -82,7 +105,6 @@ public class BeatVisualScheduler : MonoBehaviour
             barSlider.value = 1f;
         }
 
-        // Process scheduled events using virtual time
         List<ScheduledVisualEvent> triggeredEvents = new List<ScheduledVisualEvent>();
         foreach (var evt in scheduledEvents)
         {
@@ -98,9 +120,31 @@ public class BeatVisualScheduler : MonoBehaviour
         }
     }
 
+    public void FreezeVisuals()
+    {
+        if (isFrozen)
+        {
+            Debug.LogWarning("BeatVisualScheduler: Already frozen!");
+            return;
+        }
+
+        isFrozen = true;
+        frozenSliderValue = barSlider.value;
+        scheduledEvents.Clear();
+
+        Debug.Log($"BeatVisualScheduler: FROZEN at slider value {frozenSliderValue:F2}");
+    }
+
+    public void UnfreezeVisuals()
+    {
+        isFrozen = false;
+        Debug.Log("BeatVisualScheduler: Visuals unfrozen");
+    }
+
     public void ScheduleVisualBeat(double scheduledTime, bool isRightBongo)
     {
-        // Convert the scheduled time to virtual time for consistent handling
+        if (isFrozen) return;
+
         double virtualScheduledTime = scheduledTime - totalPausedTime;
 
         ScheduledVisualEvent newEvent = new ScheduledVisualEvent
@@ -113,6 +157,8 @@ public class BeatVisualScheduler : MonoBehaviour
 
     private void CreateBeatIndicator(bool isRightBongo)
     {
+        if (isFrozen) return;
+
         if (beatIndicatorPrefab == null || indicatorParent == null || barSlider == null)
         {
             Debug.LogWarning("BeatVisualScheduler is missing required references.");
@@ -148,6 +194,8 @@ public class BeatVisualScheduler : MonoBehaviour
 
     public void ResetVisuals()
     {
+        if (isFrozen) return;
+
         scheduledEvents.Clear();
         if (indicatorParent != null)
         {
@@ -158,7 +206,6 @@ public class BeatVisualScheduler : MonoBehaviour
         }
     }
 
-    // Call this when pausing - now matches BeatGenerator approach
     public void OnPause()
     {
         if (!isPaused)
@@ -168,7 +215,6 @@ public class BeatVisualScheduler : MonoBehaviour
         }
     }
 
-    // Call this when resuming - now properly accumulates pause time
     public void OnResume()
     {
         if (isPaused)
@@ -177,8 +223,77 @@ public class BeatVisualScheduler : MonoBehaviour
             totalPausedTime += pauseDuration;
             isPaused = false;
 
-            // Update the loop start time to virtual time
             fullLoopStartDspTime = VirtualDspTime() - (VirtualDspTime() - fullLoopStartDspTime);
         }
+    }
+
+    public void CleanupAndDisable()
+    {
+        Debug.Log("[BeatVisualScheduler] Cleaning up before disable");
+
+        // Stop any ongoing transitions
+        StopAllCoroutines();
+
+        // Clear all scheduled events
+        scheduledEvents.Clear();
+
+        // Remove all spawned indicators
+        if (indicatorParent != null)
+        {
+            for (int i = indicatorParent.childCount - 1; i >= 0; i--)
+            {
+                Destroy(indicatorParent.GetChild(i).gameObject);
+            }
+        }
+
+        // Reset slider to start
+        if (barSlider != null)
+        {
+            barSlider.value = 0f;
+            frozenSliderValue = 0f;
+        }
+
+        // Disable the component
+        enabled = false;
+
+        Debug.Log("[BeatVisualScheduler] Cleanup complete");
+    }
+
+    public void ResetToInitialState()
+    {
+        Debug.Log("[BeatVisualScheduler] Resetting to initial state");
+
+        // Stop everything
+        StopAllCoroutines();
+
+        // Clear events
+        scheduledEvents.Clear();
+
+        // Remove all indicators
+        if (indicatorParent != null)
+        {
+            for (int i = indicatorParent.childCount - 1; i >= 0; i--)
+            {
+                Destroy(indicatorParent.GetChild(i).gameObject);
+            }
+        }
+
+        // Reset slider
+        if (barSlider != null)
+        {
+            barSlider.value = 0f;
+        }
+
+        // Reset state
+        isFrozen = false;
+        frozenSliderValue = 0f;
+        isPaused = false;
+        totalPausedTime = 0.0;
+        pauseStartTime = 0.0;
+
+        // Re-initialize timing will happen in SetBPM or on first update
+        fullLoopStartDspTime = AudioSettings.dspTime - totalPausedTime;
+
+        Debug.Log("[BeatVisualScheduler] Reset complete");
     }
 }

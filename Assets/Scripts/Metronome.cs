@@ -252,4 +252,25 @@ public class Metronome : MonoBehaviour
             lastDspTime = AudioSettings.dspTime;
         }
     }
+
+    public void ResetToInitialState()
+    {
+        Debug.Log("[Metronome] Resetting to initial state");
+
+        beatCount = 0;
+        loopBeatCount = 0;
+        ticked = false;
+        isPaused = false;
+        pauseStartTime = 0.0;
+        hasStarted = false;
+
+        startTick = AudioSettings.dspTime;
+        nextTick = startTick + timePerTick;
+        nextBeatTime = nextTick;
+        lastBeatTime = AudioSettings.dspTime;
+        lastDspTime = AudioSettings.dspTime;
+        lastProcessedTick = startTick;
+
+        Debug.Log("[Metronome] Reset complete");
+    }
 }
