@@ -31,12 +31,14 @@ public class BeatGenerator : MonoBehaviour
 
     public List<ScheduledBeat> scheduledBeats = new List<ScheduledBeat>();
 
-    private double totalPausedTime = 0.0;
     private double pauseStartTime = 0.0;
     private bool isPaused = false;
     public bool IsPaused => isPaused;
 
-    public double VirtualDspTime() => AudioSettings.dspTime - totalPausedTime;
+    public double VirtualDspTime()
+    {
+        return metronome != null ? metronome.VirtualDspTime : AudioSettings.dspTime;
+    }
 
     private double loopStartTime = 0.0;
     private double gameStartTime = 0.0;
@@ -480,7 +482,6 @@ public class BeatGenerator : MonoBehaviour
         if (isPaused)
         {
             double pauseDuration = AudioSettings.dspTime - pauseStartTime;
-            totalPausedTime += pauseDuration;
             isPaused = false;
 
             if (gameTimingInitialized)
@@ -648,7 +649,6 @@ public class BeatGenerator : MonoBehaviour
         isPaused = false;
 
         // Reset timing
-        totalPausedTime = 0.0;
         pauseStartTime = 0.0;
         loopStartTime = 0.0;
         gameStartTime = 0.0;

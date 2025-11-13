@@ -23,7 +23,8 @@ public class PlayerInputVisualHandler : MonoBehaviour
     public int fullLoopBeats = 8;
 
     private bool paused = false;
-    private double pauseStartTime = 0.0;
+
+    private double VirtualDspTime => metronome != null ? metronome.VirtualDspTime : AudioSettings.dspTime;
 
     [Header("Lead-in")]
     [Tooltip("How many beats early the handle begins sliding in")]
@@ -87,7 +88,7 @@ public class PlayerInputVisualHandler : MonoBehaviour
         beatDuration = 60.0 / metronome.bpm;
         barDuration = 4 * beatDuration;
         fullLoopDuration = fullLoopBeats * beatDuration;
-        fullLoopStartDspTime = AudioSettings.dspTime;
+        fullLoopStartDspTime = VirtualDspTime;
     }
 
     private void CacheHandlePositions()
@@ -107,7 +108,7 @@ public class PlayerInputVisualHandler : MonoBehaviour
         if (paused) return;
         if (isFrozen) return;
 
-        double currentTime = AudioSettings.dspTime;
+        double currentTime = VirtualDspTime;
         double elapsedLoop = currentTime - fullLoopStartDspTime;
 
         if (elapsedLoop >= fullLoopDuration)
@@ -174,15 +175,12 @@ public class PlayerInputVisualHandler : MonoBehaviour
         if (paused) return;
 
         paused = true;
-        pauseStartTime = AudioSettings.dspTime;
     }
 
     public void OnResume()
     {
         if (!paused) return;
 
-        double pauseDuration = AudioSettings.dspTime - pauseStartTime;
-        fullLoopStartDspTime += pauseDuration;
         paused = false;
     }
 
@@ -240,8 +238,7 @@ public class PlayerInputVisualHandler : MonoBehaviour
         // Reset state
         isFrozen = false;
         paused = false;
-        pauseStartTime = 0.0;
-        fullLoopStartDspTime = AudioSettings.dspTime;
+        fullLoopStartDspTime = VirtualDspTime;
 
         // Re-initialize timing
         if (metronome != null)
