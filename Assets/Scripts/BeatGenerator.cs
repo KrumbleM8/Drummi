@@ -576,6 +576,7 @@ public class BeatGenerator : MonoBehaviour
 
         if (metronome != null && metronome.enabled)
         {
+            metronome.ResetToInitialState();
             metronome.enabled = false;
             Debug.Log("Metronome disabled");
         }
