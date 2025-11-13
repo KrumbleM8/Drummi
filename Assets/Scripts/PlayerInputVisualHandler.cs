@@ -23,8 +23,7 @@ public class PlayerInputVisualHandler : MonoBehaviour
     public int fullLoopBeats = 8;
 
     private bool paused = false;
-
-    private double VirtualDspTime => metronome != null ? metronome.VirtualDspTime : AudioSettings.dspTime;
+    private double pauseStartTime = 0.0;
 
     [Header("Lead-in")]
     [Tooltip("How many beats early the handle begins sliding in")]
@@ -38,6 +37,47 @@ public class PlayerInputVisualHandler : MonoBehaviour
     private Vector2 parkedPos;
 
     private bool isFrozen = false;
+    private bool hasInitialized = false;
+
+    private void OnEnable()
+    {
+        if (metronome == null)
+        {
+            Debug.LogError("PlayerInputVisualHandler: Metronome reference is missing!");
+            enabled = false;
+            return;
+        }
+
+        ResetLoopStartTime();
+        paused = false;
+        isFrozen = false;
+
+        if (inputSlider != null)
+        {
+            inputSlider.value = 0f;
+        }
+
+        if (hasInitialized && handleRect != null)
+        {
+            handleRect.anchoredPosition = parkedPos;
+        }
+
+        if (beatGenerator != null)
+        {
+            // Ensure we don't double-subscribe
+            beatGenerator.OnFinalBarComplete -= FreezeVisuals;
+            beatGenerator.OnFinalBarComplete += FreezeVisuals;
+
+            if (hasInitialized)
+            {
+                Debug.Log("PlayerInputVisualHandler: Subscribed to OnFinalBarComplete");
+            }
+        }
+        else
+        {
+            Debug.LogError("PlayerInputVisualHandler: BeatGenerator reference is missing! Assign it in Inspector.");
+        }
+    }
 
     private void Start()
     {
@@ -50,16 +90,11 @@ public class PlayerInputVisualHandler : MonoBehaviour
 
         InitializeBeatValues();
         CacheHandlePositions();
+        hasInitialized = true;
 
-        // Subscribe to final bar event
         if (beatGenerator != null)
         {
-            beatGenerator.OnFinalBarComplete += FreezeVisuals;
             Debug.Log("PlayerInputVisualHandler: Subscribed to OnFinalBarComplete");
-        }
-        else
-        {
-            Debug.LogError("PlayerInputVisualHandler: BeatGenerator reference is missing! Assign it in Inspector.");
         }
     }
 
@@ -88,7 +123,7 @@ public class PlayerInputVisualHandler : MonoBehaviour
         beatDuration = 60.0 / metronome.bpm;
         barDuration = 4 * beatDuration;
         fullLoopDuration = fullLoopBeats * beatDuration;
-        fullLoopStartDspTime = VirtualDspTime;
+        fullLoopStartDspTime = AudioSettings.dspTime;
     }
 
     private void CacheHandlePositions()
@@ -108,10 +143,11 @@ public class PlayerInputVisualHandler : MonoBehaviour
         if (paused) return;
         if (isFrozen) return;
 
-        double currentTime = VirtualDspTime;
+        double currentTime = AudioSettings.dspTime;
         double elapsedLoop = currentTime - fullLoopStartDspTime;
 
-        if (elapsedLoop >= fullLoopDuration)
+        // Use while instead of if to handle large jumps (e.g. after hiccups)
+        while (elapsedLoop >= fullLoopDuration)
         {
             fullLoopStartDspTime += fullLoopDuration;
             elapsedLoop = currentTime - fullLoopStartDspTime;
@@ -231,14 +267,14 @@ public class PlayerInputVisualHandler : MonoBehaviour
         // Reset handle to parked position
         if (handleRect != null)
         {
-            CacheHandlePositions();  // Recalculate positions
             handleRect.anchoredPosition = parkedPos;
         }
 
         // Reset state
         isFrozen = false;
         paused = false;
-        fullLoopStartDspTime = VirtualDspTime;
+        pauseStartTime = 0.0;
+        ResetLoopStartTime();
 
         // Re-initialize timing
         if (metronome != null)
@@ -247,5 +283,10 @@ public class PlayerInputVisualHandler : MonoBehaviour
         }
 
         Debug.Log("[PlayerInputVisualHandler] Reset complete");
+    }
+
+    private void ResetLoopStartTime()
+    {
+        fullLoopStartDspTime = AudioSettings.dspTime;
     }
 }
