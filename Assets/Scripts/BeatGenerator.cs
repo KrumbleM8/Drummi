@@ -290,7 +290,7 @@ public class BeatGenerator : MonoBehaviour
             _ => spicyBeatDurations,
         };
 
-        // DO NOT call HandleOnFreshBar() manually - it will be triggered by the metronome's
+        HandleOnFreshBar();
         // OnFreshBarEvent when the first bar actually completes, ensuring proper timing sync
 
         Debug.Log("[BeatGenerator] Replay preparation complete - waiting for first metronome fresh bar event");

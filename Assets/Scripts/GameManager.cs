@@ -151,16 +151,7 @@ public class GameManager : MonoBehaviour
             Debug.Log($"Next beat time: {nextBeatTime:F4} at DSP: {AudioSettings.dspTime:F4}");
         }
 
-        // Sync visual schedulers
-        if (beatVisualScheduler != null)
-        {
-            beatVisualScheduler.SyncWithMetronome(nextBeatTime);
-        }
 
-        if (playerInputVisual != null)
-        {
-            playerInputVisual.SyncWithMetronome(nextBeatTime);
-        }
 
         // Prepare metronome timing while DISABLED
         if (isReplay && metronome != null)
@@ -183,6 +174,17 @@ public class GameManager : MonoBehaviour
             metronome.enabled = true;
             Debug.Log($"Metronome enabled AFTER music scheduled");
             Debug.Log($"Beat count: {metronome.beatCount}, Loop beat count: {metronome.loopBeatCount}");
+        }
+
+        // Sync visual schedulers
+        if (beatVisualScheduler != null)
+        {
+            beatVisualScheduler.SyncWithMetronome(nextBeatTime);
+        }
+
+        if (playerInputVisual != null)
+        {
+            playerInputVisual.SyncWithMetronome(nextBeatTime);
         }
 
         yield return null;
