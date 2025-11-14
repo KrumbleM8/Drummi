@@ -50,7 +50,9 @@ public class BeatVisualScheduler : MonoBehaviour
             return;
         }
 
-        ResetLoopStartTime();
+        // DON'T call ResetLoopStartTime() here!
+        // Timing will be set explicitly when synchronized with metronome
+
         isFrozen = false;
 
         if (barSlider != null)
@@ -61,7 +63,6 @@ public class BeatVisualScheduler : MonoBehaviour
 
         if (beatGenerator != null)
         {
-            // Ensure we don't double-subscribe
             beatGenerator.OnFinalBarComplete -= FreezeVisuals;
             beatGenerator.OnFinalBarComplete += FreezeVisuals;
 
@@ -298,13 +299,9 @@ public class BeatVisualScheduler : MonoBehaviour
     {
         Debug.Log("[BeatVisualScheduler] Resetting to initial state");
 
-        // Stop everything
         StopAllCoroutines();
-
-        // Clear events
         scheduledEvents.Clear();
 
-        // Remove all indicators
         if (indicatorParent != null)
         {
             for (int i = indicatorParent.childCount - 1; i >= 0; i--)
@@ -313,25 +310,36 @@ public class BeatVisualScheduler : MonoBehaviour
             }
         }
 
-        // Reset slider
         if (barSlider != null)
         {
             barSlider.value = 0f;
         }
 
-        // Reset state
         isFrozen = false;
         frozenSliderValue = 0f;
         isPaused = false;
         totalPausedTime = 0.0;
         pauseStartTime = 0.0;
 
-        // Re-initialize timing will happen in SetBPM or on first update
-        ResetLoopStartTime();
+        // DON'T call ResetLoopStartTime() here!
+        // Timing will be synchronized when game starts
 
         Debug.Log("[BeatVisualScheduler] Reset complete");
     }
+    // In BeatVisualScheduler.cs - MODIFY to accept cached time
+    public void SyncWithMetronome(double nextBeatTime)
+    {
+        if (metronome == null)
+        {
+            Debug.LogError("[BeatVisualScheduler] Cannot sync - metronome is null");
+            return;
+        }
 
+        SetBPM();
+        fullLoopStartDspTime = nextBeatTime - totalPausedTime;
+
+        Debug.Log($"[BeatVisualScheduler] Synced - nextBeat: {nextBeatTime:F4}, fullLoopStartDspTime: {fullLoopStartDspTime:F4}");
+    }
     private void ResetLoopStartTime()
     {
         fullLoopStartDspTime = VirtualDspTime();

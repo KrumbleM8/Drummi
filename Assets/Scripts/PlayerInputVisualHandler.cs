@@ -39,6 +39,7 @@ public class PlayerInputVisualHandler : MonoBehaviour
     private bool isFrozen = false;
     private bool hasInitialized = false;
 
+    // In PlayerInputVisualHandler.cs - MODIFY OnEnable to NOT call ResetLoopStartTime
     private void OnEnable()
     {
         if (metronome == null)
@@ -48,7 +49,8 @@ public class PlayerInputVisualHandler : MonoBehaviour
             return;
         }
 
-        ResetLoopStartTime();
+        // DON'T call ResetLoopStartTime() here - timing will be synced explicitly
+
         paused = false;
         isFrozen = false;
 
@@ -64,7 +66,6 @@ public class PlayerInputVisualHandler : MonoBehaviour
 
         if (beatGenerator != null)
         {
-            // Ensure we don't double-subscribe
             beatGenerator.OnFinalBarComplete -= FreezeVisuals;
             beatGenerator.OnFinalBarComplete += FreezeVisuals;
 
@@ -252,35 +253,25 @@ public class PlayerInputVisualHandler : MonoBehaviour
     {
         Debug.Log("[PlayerInputVisualHandler] Resetting to initial state");
 
-        // Stop everything
         StopAllCoroutines();
-
-        // Remove all indicators
         ResetVisuals();
 
-        // Reset slider
         if (inputSlider != null)
         {
             inputSlider.value = 0f;
         }
 
-        // Reset handle to parked position
         if (handleRect != null)
         {
             handleRect.anchoredPosition = parkedPos;
         }
 
-        // Reset state
         isFrozen = false;
         paused = false;
         pauseStartTime = 0.0;
-        ResetLoopStartTime();
 
-        // Re-initialize timing
-        if (metronome != null)
-        {
-            InitializeBeatValues();
-        }
+        // DON'T call ResetLoopStartTime() or InitializeBeatValues() here
+        // Timing will be synced when game starts
 
         Debug.Log("[PlayerInputVisualHandler] Reset complete");
     }
@@ -288,5 +279,21 @@ public class PlayerInputVisualHandler : MonoBehaviour
     private void ResetLoopStartTime()
     {
         fullLoopStartDspTime = AudioSettings.dspTime;
+    }
+
+    // In PlayerInputVisualHandler.cs - ADD SyncWithMetronome method
+    // In PlayerInputVisualHandler.cs - MODIFY to accept cached time
+    public void SyncWithMetronome(double nextBeatTime)
+    {
+        if (metronome == null)
+        {
+            Debug.LogError("[PlayerInputVisualHandler] Cannot sync - metronome is null");
+            return;
+        }
+
+        InitializeBeatValues();
+        fullLoopStartDspTime = nextBeatTime;
+
+        Debug.Log($"[PlayerInputVisualHandler] Synced - nextBeat: {nextBeatTime:F4}");
     }
 }

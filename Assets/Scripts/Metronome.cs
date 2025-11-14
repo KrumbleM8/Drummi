@@ -11,7 +11,7 @@ public class Metronome : MonoBehaviour
 
     public double bpm = 140.0F;
 
-    double nextTick = 0.0F; // The next tick in dspTime
+    public double nextTick = 0.0F; // The next tick in dspTime
     double sampleRate = 0.0F;
     bool ticked = false;
 
@@ -46,6 +46,8 @@ public class Metronome : MonoBehaviour
     // Public property to expose pause state (for other scripts)
     public bool IsPaused { get { return isPaused; } }
 
+    public bool hasEverStarted = false;
+
     public double VirtualDspTime
     {
         get
@@ -71,35 +73,52 @@ public class Metronome : MonoBehaviour
 
     private void OnEnable()
     {
+
     }
 
     void Start()
     {
-        startTick = AudioSettings.dspTime;
+        hasEverStarted = true;
         sampleRate = AudioSettings.outputSampleRate;
 
+        // Initialize timing
+        InitializeTimingNow();
+    }
+    private void InitializeTimingNow()
+    {
+        double currentDsp = AudioSettings.dspTime;
+
+        startTick = currentDsp;
         timePerTick = 60.0 / bpm;
         nextTick = startTick + timePerTick;
         nextBeatTime = nextTick;
 
-        beatInterval = 60.0 / bpm; // Calculate the interval between each beat in seconds
-        lastBeatTime = AudioSettings.dspTime; // Start from the current DSP time (audio time)
-        lastDspTime = AudioSettings.dspTime; // Initialize last DSP time tracking
+        beatInterval = 60.0 / bpm;
+        lastBeatTime = currentDsp;
+        lastDspTime = currentDsp;
+        lastProcessedTick = startTick;
 
         totalPausedTime = 0.0;
-        virtualDspTime = AudioSettings.dspTime - totalPausedTime;
+        virtualDspTime = currentDsp;
 
-        // Initialize the last processed tick to ensure first tick fires properly
-        lastProcessedTick = startTick;
+        beatCount = 0;
+        loopBeatCount = 0;
+        ticked = false;
+        hasStarted = false;
+
+        Debug.Log($"[Metronome] Timing initialized - DSP: {currentDsp:F4}, nextTick: {nextTick:F4}");
     }
-
     public void RefreshValues() //This probably shouldn't be like this but who cares
     {
         Debug.Log("Metronome Values Refreshed");
         timePerTick = 60.0 / bpm;
         beatInterval = 60.0 / bpm;
     }
-
+    public void RefreshTimingForGameStart()
+    {
+        InitializeTimingNow();
+        Debug.Log("[Metronome] Timing refreshed for game start");
+    }
     void LateUpdate()
     {
         if (isPaused)
@@ -161,6 +180,7 @@ public class Metronome : MonoBehaviour
         {
             ticked = false;
             nextTick += timePerTick;
+            nextBeatTime = nextTick;
         }
     }
 
@@ -244,6 +264,31 @@ public class Metronome : MonoBehaviour
     {
         if (playTick)
             speaker.PlayOneShot(speaker.clip);
+    }
+
+    public void InitializeForNewRound()
+    {
+        Debug.Log("[Metronome] Initializing for new round");
+
+        // Reset everything to clean state
+        beatCount = 0;
+        loopBeatCount = 0;
+        ticked = false;
+        isPaused = false;
+        hasStarted = false;
+
+        // Set timing to RIGHT NOW
+        startTick = AudioSettings.dspTime;
+        nextTick = startTick + timePerTick;
+        nextBeatTime = nextTick;
+        lastBeatTime = AudioSettings.dspTime;
+        lastDspTime = AudioSettings.dspTime;
+        lastProcessedTick = startTick;
+
+        totalPausedTime = 0.0;
+        virtualDspTime = AudioSettings.dspTime;
+
+        Debug.Log($"[Metronome] Initialized - startTick: {startTick:F4}, nextTick: {nextTick:F4}");
     }
 
     /// <summary>

@@ -77,6 +77,8 @@ public class GameManager : MonoBehaviour
         }
     }
 
+    // In GameManager.cs - THE REAL FIX
+    // In GameManager.cs - KEEP METRONOME DISABLED UNTIL THE END
     private IEnumerator StartProcess()
     {
         screenTransition.StartCover();
@@ -85,13 +87,17 @@ public class GameManager : MonoBehaviour
         {
             yield return null;
         }
+
         pageToCloseOnStart.SetActive(false);
         screenTransition.StartReveal();
 
         Debug.Log("=== STARTING GAME ===");
 
+        bool isReplay = metronome != null && metronome.hasEverStarted;
 
-        // 3. Re-enable all scripts
+ 
+
+        // Enable non-metronome components
         if (beatGenerator != null)
         {
             beatGenerator.enabled = true;
@@ -110,36 +116,73 @@ public class GameManager : MonoBehaviour
             Debug.Log("PlayerInputVisualHandler enabled");
         }
 
-        if (metronome != null)
+        // === DO NOT ENABLE METRONOME YET ===
+        // On first playthrough, we need to enable it to trigger Start()
+        // On second playthrough, we keep it disabled until after scheduling
+
+        if (!isReplay && metronome != null)
         {
+            // First playthrough: enable metronome so Start() runs
             metronome.enabled = true;
-            Debug.Log("Metronome enabled");
+            Debug.Log("Metronome enabled (first playthrough - Start will run)");
         }
 
-        // 4. Re-enable gameplay UI
+        // Initialize BeatGenerator
+        if (isReplay && beatGenerator != null)
+        {
+            beatGenerator.PrepareForReplay();
+            Debug.Log("BeatGenerator prepared");
+        }
+
+        // Enable UI
         if (gameplayElements != null)
         {
             gameplayElements.SetActive(true);
-            Debug.Log("GameplayElements enabled");
         }
 
-        //// 7. Start pattern generation      //THIS IS BREAKING THE GAME BUT WHY!?!?!?
-        //if (beatGenerator != null)
-        //{
-        //    beatGenerator.StartGame();
-        //}
+        if (gameplayElementsObject)
+            gameplayElementsObject.SetActive(true);
 
-        if (beatGenerator) beatGenerator.enabled = true;
-        if (visualScheduler) visualScheduler.enabled = true;
-        if (playerInputVisualHandler) playerInputVisualHandler.enabled = true;
-        if (metronome) metronome.enabled = true;
-
-        if (gameplayElementsObject) gameplayElementsObject.SetActive(true);
-
-        if (AudioManager.instance != null && metronome != null)
+        // Get next beat time (metronome is disabled on replay, so just read the value)
+        double nextBeatTime = 0;
+        if (metronome != null)
         {
-            AudioManager.instance.scheduledStartTime = metronome.GetNextBeatTime();
+            nextBeatTime = metronome.nextTick; // Read directly, don't call method
+            Debug.Log($"Next beat time: {nextBeatTime:F4} at DSP: {AudioSettings.dspTime:F4}");
+        }
+
+        // Sync visual schedulers
+        if (beatVisualScheduler != null)
+        {
+            beatVisualScheduler.SyncWithMetronome(nextBeatTime);
+        }
+
+        if (playerInputVisual != null)
+        {
+            playerInputVisual.SyncWithMetronome(nextBeatTime);
+        }
+
+        // Prepare metronome timing while DISABLED
+        if (isReplay && metronome != null)
+        {
+            metronome.RefreshTimingForGameStart();
+            Debug.Log("Metronome timing refreshed (while DISABLED)");
+        }
+
+        // Schedule music
+        if (AudioManager.instance != null)
+        {
+            AudioManager.instance.scheduledStartTime = nextBeatTime;
             AudioManager.instance.PlayMusic();
+            Debug.Log($"Music scheduled at: {nextBeatTime:F4}");
+        }
+
+        // === NOW enable metronome for second playthrough ===
+        if (isReplay && metronome != null)
+        {
+            metronome.enabled = true;
+            Debug.Log($"Metronome enabled AFTER music scheduled");
+            Debug.Log($"Beat count: {metronome.beatCount}, Loop beat count: {metronome.loopBeatCount}");
         }
 
         yield return null;
@@ -163,7 +206,7 @@ public class GameManager : MonoBehaviour
                 metronome.bpm = 111;
                 break;
             case 2:
-                metronome.bpm = 150;
+                metronome.bpm = 79;
                 break;
             default:
                 metronome.bpm = 105;

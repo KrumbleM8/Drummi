@@ -9126,7 +9126,7 @@ MonoBehaviour:
   musicTracks:
   - {fileID: 8300000, guid: 18417d6443a7fb04bb4105ec5eff712b, type: 3}
   - {fileID: 8300000, guid: 83a7a8a481b489244ac4a683264864bd, type: 3}
-  - {fileID: 8300000, guid: 5b5082cf1c179d648ac3149ceeca2a5a, type: 3}
+  - {fileID: 8300000, guid: 7bb09fd544796c946b1f2554041ad786, type: 3}
   bongoSounds:
   - {fileID: 8300000, guid: 3e52228fda3fad64aabad0a85443b431, type: 3}
   - {fileID: 8300000, guid: 25fccdb7f43f5304bb52b298b37d100e, type: 3}
@@ -11812,6 +11812,7 @@ MonoBehaviour:
   beatCount: 0
   loopBeatCount: 0
   timePerTick: 0
+  hasEverStarted: 0
 --- !u!4 &1433809953
 Transform:
   m_ObjectHideFlags: 0
@@ -14059,33 +14060,33 @@ MonoBehaviour:
   - pageName: Intro
     pageTransform: {fileID: 685055644}
     onScreenPosition: {x: 0, y: 0}
-    offScreenLeftPosition: {x: -846.2, y: 0}
-    offScreenRightPosition: {x: 846.2, y: 0}
+    offScreenLeftPosition: {x: -682.44, y: 0}
+    offScreenRightPosition: {x: 682.44, y: 0}
   - pageName: Main
     pageTransform: {fileID: 686828141}
     onScreenPosition: {x: 0, y: 0}
-    offScreenLeftPosition: {x: -846.2, y: 0}
-    offScreenRightPosition: {x: 846.2, y: 0}
+    offScreenLeftPosition: {x: -682.44, y: 0}
+    offScreenRightPosition: {x: 682.44, y: 0}
   - pageName: Song
     pageTransform: {fileID: 498961237}
     onScreenPosition: {x: 0, y: 0}
-    offScreenLeftPosition: {x: -846.2, y: 0}
-    offScreenRightPosition: {x: 846.2, y: 0}
+    offScreenLeftPosition: {x: -682.44, y: 0}
+    offScreenRightPosition: {x: 682.44, y: 0}
   - pageName: Difficulty
     pageTransform: {fileID: 1373578963}
     onScreenPosition: {x: 0, y: 0}
-    offScreenLeftPosition: {x: -846.2, y: 0}
-    offScreenRightPosition: {x: 846.2, y: 0}
+    offScreenLeftPosition: {x: -682.44, y: 0}
+    offScreenRightPosition: {x: 682.44, y: 0}
   - pageName: Customize
     pageTransform: {fileID: 1030085468}
     onScreenPosition: {x: 0, y: 0}
-    offScreenLeftPosition: {x: -846.2, y: 0}
-    offScreenRightPosition: {x: 846.2, y: 0}
+    offScreenLeftPosition: {x: -682.44, y: 0}
+    offScreenRightPosition: {x: 682.44, y: 0}
   - pageName: Score
     pageTransform: {fileID: 373518197}
     onScreenPosition: {x: 0, y: 0}
-    offScreenLeftPosition: {x: -846.2, y: 0}
-    offScreenRightPosition: {x: 846.2, y: 0}
+    offScreenLeftPosition: {x: -682.44, y: 0}
+    offScreenRightPosition: {x: 682.44, y: 0}
   startingPageName: Intro
   transitionDuration: 0.5
   transitionCurve:
@@ -14638,7 +14639,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 8955039649062183717, guid: 09a82d829ba59174cac0e9f9b91043b3, type: 3}
       propertyPath: bpm
-      value: 150
+      value: 79
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []

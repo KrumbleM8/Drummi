@@ -132,4 +132,9 @@ public class AudioManager : MonoBehaviour
             }
         }
     }
+
+    public void StopMusic()
+    {
+        speakers[0].Stop();
+    }
 }
