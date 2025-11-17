@@ -39,7 +39,7 @@ public class UIMenuManager : MonoBehaviour
     [Tooltip("Include left/right safe-area gutters (notch/rounded corners) in the margin calculation.")]
     [SerializeField] private bool includeSafeAreaGutter = true;
 
-    private MenuPage currentPage;
+    public MenuPage currentPage;
     private Coroutine activeTransition;
     private Dictionary<string, MenuPage> pageDict;
     private bool isTransitioning = false;
@@ -187,7 +187,7 @@ public class UIMenuManager : MonoBehaviour
         ShowPage(menuPages[index].pageName, swipeLeft);
     }
 
-    private void ShowPageImmediate(string pageName)
+    public void ShowPageImmediate(string pageName)
     {
         if (!pageDict.TryGetValue(pageName, out MenuPage targetPage))
         {
@@ -195,9 +195,10 @@ public class UIMenuManager : MonoBehaviour
             return;
         }
 
+        currentPage = targetPage;
+
         if (currentPage != null) currentPage.pageTransform.gameObject.SetActive(false);
 
-        currentPage = targetPage;
         currentPage.pageTransform.anchoredPosition = currentPage.onScreenPosition;
         currentPage.pageTransform.gameObject.SetActive(true);
     }

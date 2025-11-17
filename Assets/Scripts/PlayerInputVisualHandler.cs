@@ -34,7 +34,6 @@ public class PlayerInputVisualHandler : MonoBehaviour
     private Vector2 parkedPos;
 
     private bool isFrozen = false;
-    private bool hasInitialized = false;
 
     // In PlayerInputVisualHandler.cs - MODIFY OnEnable to NOT call ResetLoopStartTime
     private void OnEnable()
@@ -46,7 +45,6 @@ public class PlayerInputVisualHandler : MonoBehaviour
             return;
         }
 
-        // DON'T call ResetLoopStartTime() here - timing will be synced explicitly
         isFrozen = false;
 
         if (inputSlider != null)
@@ -54,7 +52,7 @@ public class PlayerInputVisualHandler : MonoBehaviour
             inputSlider.value = 0f;
         }
 
-        if (hasInitialized && handleRect != null)
+        if (handleRect != null)
         {
             handleRect.anchoredPosition = parkedPos;
         }
@@ -64,10 +62,6 @@ public class PlayerInputVisualHandler : MonoBehaviour
             beatGenerator.OnFinalBarComplete -= FreezeVisuals;
             beatGenerator.OnFinalBarComplete += FreezeVisuals;
 
-            if (hasInitialized)
-            {
-                Debug.Log("PlayerInputVisualHandler: Subscribed to OnFinalBarComplete");
-            }
         }
         else
         {
@@ -77,21 +71,7 @@ public class PlayerInputVisualHandler : MonoBehaviour
 
     private void Start()
     {
-        if (metronome == null)
-        {
-            Debug.LogError("PlayerInputVisualHandler: Metronome reference is missing!");
-            enabled = false;
-            return;
-        }
-
-        InitializeBeatValues();
         CacheHandlePositions();
-        hasInitialized = true;
-
-        if (beatGenerator != null)
-        {
-            Debug.Log("PlayerInputVisualHandler: Subscribed to OnFinalBarComplete");
-        }
     }
 
     private void OnDisable()
@@ -114,7 +94,7 @@ public class PlayerInputVisualHandler : MonoBehaviour
         Debug.Log("PlayerInputVisualHandler: FROZEN");
     }
 
-    private void InitializeBeatValues()
+    public void InitializeBeatValues()
     {
         beatDuration = 60.0 / metronome.bpm;
         barDuration = 4 * beatDuration;
@@ -280,8 +260,9 @@ public class PlayerInputVisualHandler : MonoBehaviour
             return;
         }
 
+        inputSlider.value = 0f;
+
         InitializeBeatValues();
-        fullLoopStartDspTime = nextBeatTime;
 
         Debug.Log($"[PlayerInputVisualHandler] Synced - nextBeat: {nextBeatTime:F4}");
     }

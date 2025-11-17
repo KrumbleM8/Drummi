@@ -27,6 +27,7 @@ public class GameManager : MonoBehaviour
     [SerializeField] private GameObject gameplayElements;
     [SerializeField] private BeatVisualScheduler beatVisualScheduler;
     [SerializeField] private PlayerInputVisualHandler playerInputVisual;
+    [SerializeField] private UIMenuManager menuManager;
 
     private void Awake()
     {
@@ -48,22 +49,76 @@ public class GameManager : MonoBehaviour
         beatGenerator.OnSongComplete += HandleSongComplete;
     }
 
-    private void HandleSongComplete()
+    public void HandleSongComplete()
     {
         // Your transition logic here
         Debug.Log("Song complete! Show results screen");
 
-        // Example options:
-        // 1. Show results panel
-        // resultsPanel.SetActive(true);
-        // resultsPanel.DisplayScore(beatEvaluator.score);
+        ShowResultsScreen();
+        beatGenerator.CleanupAndDisable();
+    }
 
-        // 2. Or trigger animation
-        // transitionAnimator.SetTrigger("FadeToResults");
+    private void ShowResultsScreen()
+    {
+        Debug.Log("=== SHOWING RESULTS SCREEN ===");
+        GameManager.instance.ResetGameValues();
+        // Disable GameplayElements (contains sliders, indicators, UI)
+        if (gameplayElements != null)
+        {
+            gameplayElements.SetActive(false);
+            Debug.Log("GameplayElements disabled");
+        }
+        else
+        {
+            Debug.LogWarning("GameplayElements reference missing! Assign in Inspector.");
+        }
 
-        // 3. Or simply enable a results UI object
-        // resultsScreen.gameObject.SetActive(true);
-        // resultsScreen.Initialize(beatEvaluator.score, beatEvaluator.perfectHits);
+
+        if (beatVisualScheduler != null)
+        {
+            beatVisualScheduler.CleanupAndDisable();
+            Debug.Log("BeatVisualScheduler cleaned up and disabled");
+        }
+
+        if (playerInputVisual != null)
+        {
+            playerInputVisual.CleanupAndDisable();
+            Debug.Log("PlayerInputVisualHandler cleaned up and disabled");
+        }
+
+        if (metronome != null && metronome.enabled)
+        {
+            metronome.ResetToInitialState();
+            metronome.enabled = false;
+            Debug.Log("Metronome disabled");
+        }
+
+        // Stop all audio
+        if (AudioManager.instance != null)
+        {
+            AudioManager.instance.StopMusic();
+            Debug.Log("Music stopped");
+        }
+
+        // Show score screen
+        if (menuManager != null)
+        {
+            menuManager.ShowPageImmediate("Score");
+            var scoreScreen = menuManager.currentPage.pageTransform.GetComponent<ScoreScreen>();
+            if (scoreScreen != null && beatEvaluator != null)
+            {
+                scoreScreen.DisplayScore(beatEvaluator.score, beatEvaluator.perfectHits);
+            }
+
+            Debug.Log("ScoreScreenMenu enabled");
+        }
+        else
+        {
+            Debug.LogError("ScoreScreenMenu reference is missing! Assign it in Inspector.");
+        }
+
+        Debug.Log("BeatGenerator cleaned up and disabled");
+        Debug.Log("=== RESULTS SCREEN READY ===");
     }
 
     public void StartGame()
@@ -93,7 +148,7 @@ public class GameManager : MonoBehaviour
 
         bool isReplay = metronome != null && metronome.hasEverStarted;
 
- 
+
 
         // Enable non-metronome components
         if (beatGenerator != null)
@@ -105,19 +160,18 @@ public class GameManager : MonoBehaviour
 
         if (beatVisualScheduler != null)
         {
+            beatVisualScheduler.InitalizeBeatValues();
             beatVisualScheduler.enabled = true;
             Debug.Log("BeatVisualScheduler enabled");
         }
 
         if (playerInputVisual != null)
         {
+            playerInputVisual.InitializeBeatValues();
             playerInputVisual.enabled = true;
             Debug.Log("PlayerInputVisualHandler enabled");
         }
 
-        // === DO NOT ENABLE METRONOME YET ===
-        // On first playthrough, we need to enable it to trigger Start()
-        // On second playthrough, we keep it disabled until after scheduling
 
         if (!isReplay && metronome != null)
         {
@@ -181,6 +235,7 @@ public class GameManager : MonoBehaviour
 
         if (playerInputVisual != null)
         {
+
             playerInputVisual.SyncWithMetronome(nextBeatTime);
         }
 
@@ -214,7 +269,7 @@ public class GameManager : MonoBehaviour
         }
 
         if (AudioManager.instance != null) AudioManager.instance.selectedSongIndex = index;
-        BroadcastMessage("SetBPM", SendMessageOptions.DontRequireReceiver);
+        BroadcastMessage("InitalizeBeatValues", SendMessageOptions.DontRequireReceiver);
     }
 
     // Preserved public API. Logic delegated.

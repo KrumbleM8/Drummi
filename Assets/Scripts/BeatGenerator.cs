@@ -117,7 +117,7 @@ public class BeatGenerator : MonoBehaviour
     public void SetBPM()
     {
         beatInterval = 60.0 / metronome.bpm;
-        gracePeriodEndTime = VirtualDspTime() + (8 * beatInterval);
+        gracePeriodEndTime = VirtualDspTime() + (4 * beatInterval);
         loopStartTime = VirtualDspTime();
 
         switch (metronome.bpm)
@@ -142,16 +142,16 @@ public class BeatGenerator : MonoBehaviour
             {
                 double clipDuration = selectedClip.length;
                 totalBeatsInSong = Mathf.FloorToInt((float)(clipDuration / beatInterval));
-                Debug.Log($"[SetBPM] Song '{selectedClip.name}' has {totalBeatsInSong} beats. Timing will be initialized when game starts.");
+                Debug.Log($"[InitalizeBeatValues] Song '{selectedClip.name}' has {totalBeatsInSong} beats. Timing will be initialized when game starts.");
             }
             else
             {
-                Debug.LogError("[SetBPM] Selected music track is null!");
+                Debug.LogError("[InitalizeBeatValues] Selected music track is null!");
             }
         }
         else
         {
-            Debug.LogError("[SetBPM] AudioManager or music tracks not available!");
+            Debug.LogError("[InitalizeBeatValues] AudioManager or music tracks not available!");
         }
     }
 
@@ -548,7 +548,7 @@ public class BeatGenerator : MonoBehaviour
         else
         {
             Debug.LogError("ScreenTransition reference is missing! Assign it in Inspector.");
-            ShowResultsScreen();
+            GameManager.instance.HandleSongComplete();
         }
     }
 
@@ -563,77 +563,10 @@ public class BeatGenerator : MonoBehaviour
 
         Debug.Log("[WaitForTransitionThenShowResults] Screen fully covered - showing results");
         screenTransition.StartReveal();
-        ShowResultsScreen();
+        GameManager.instance.HandleSongComplete();
     }
 
-    private void ShowResultsScreen()
-    {
-        Debug.Log("=== SHOWING RESULTS SCREEN ===");
-        GameManager.instance.ResetGameValues();
-        // Disable GameplayElements (contains sliders, indicators, UI)
-        if (gameplayElements != null)
-        {
-            gameplayElements.SetActive(false);
-            Debug.Log("GameplayElements disabled");
-        }
-        else
-        {
-            Debug.LogWarning("GameplayElements reference missing! Assign in Inspector.");
-        }
-
-
-        if (beatVisualScheduler != null)
-        {
-            beatVisualScheduler.CleanupAndDisable();
-            Debug.Log("BeatVisualScheduler cleaned up and disabled");
-        }
-
-        if (playerInputVisual != null)
-        {
-            playerInputVisual.CleanupAndDisable();
-            Debug.Log("PlayerInputVisualHandler cleaned up and disabled");
-        }
-
-        if (metronome != null && metronome.enabled)
-        {
-            metronome.ResetToInitialState();
-            metronome.enabled = false;
-            Debug.Log("Metronome disabled");
-        }
-
-        // Stop all audio
-        if (AudioManager.instance != null)
-        {
-            AudioManager.instance.StopMusic();
-            Debug.Log("Music stopped");
-        }
-
-        // Show score screen
-        if (scoreScreenMenu != null)
-        {
-            UIMenuManager menuManager = FindFirstObjectByType<UIMenuManager>();
-
-            scoreScreenMenu.SetActive(true);
-            menuManager.SetScoreToCurrentPage();
-            var scoreScreen = scoreScreenMenu.GetComponent<ScoreScreen>();
-            if (scoreScreen != null && evaluator != null)
-            {
-                scoreScreen.DisplayScore(evaluator.score, evaluator.perfectHits);
-            }
-
-            Debug.Log("ScoreScreenMenu enabled");
-        }
-        else
-        {
-            Debug.LogError("ScoreScreenMenu reference is missing! Assign it in Inspector.");
-        }
-
-        CleanupAndDisable();
-        Debug.Log("BeatGenerator cleaned up and disabled");
-        Debug.Log("=== RESULTS SCREEN READY ===");
-    }
-
-    private void CleanupAndDisable()
+    public void CleanupAndDisable()
     {
         Debug.Log("[BeatGenerator] Cleaning up before disable");
 
