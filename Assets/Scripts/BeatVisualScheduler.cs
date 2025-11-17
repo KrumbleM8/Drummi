@@ -22,11 +22,7 @@ public class BeatVisualScheduler : MonoBehaviour
     private double fullLoopStartDspTime;
     public int fullLoopBeats = 8;
 
-    private double totalPausedTime = 0.0;
-    private double pauseStartTime = 0.0;
-    private bool isPaused = false;
-
-    private double VirtualDspTime() => AudioSettings.dspTime - totalPausedTime;
+    private double VirtualDspTime() => metronome.VirtualDspTime;
 
     private bool isFrozen = false;
     private float frozenSliderValue = 1f;
@@ -112,7 +108,7 @@ public class BeatVisualScheduler : MonoBehaviour
 
     private void Update()
     {
-        if (isPaused || isFrozen)
+        if (GameClock.Instance.IsPaused || isFrozen)
         {
             if (isFrozen)
             {
@@ -180,7 +176,7 @@ public class BeatVisualScheduler : MonoBehaviour
     {
         if (isFrozen) return;
 
-        double virtualScheduledTime = scheduledTime - totalPausedTime;
+        double virtualScheduledTime = scheduledTime - GameClock.Instance.GetTotalPauseTime();
 
         ScheduledVisualEvent newEvent = new ScheduledVisualEvent
         {
@@ -243,20 +239,14 @@ public class BeatVisualScheduler : MonoBehaviour
 
     public void OnPause()
     {
-        if (!isPaused)
-        {
-            isPaused = true;
-            pauseStartTime = AudioSettings.dspTime;
-        }
+
     }
 
     public void OnResume()
     {
-        if (isPaused)
+        if (GameClock.Instance.IsPaused)
         {
-            double pauseDuration = AudioSettings.dspTime - pauseStartTime;
-            totalPausedTime += pauseDuration;
-            isPaused = false;
+            double pauseDuration = AudioSettings.dspTime - GameClock.Instance.GetPauseStartTime();
 
             // Preserve current loop phase when resuming
             fullLoopStartDspTime = VirtualDspTime() - (VirtualDspTime() - fullLoopStartDspTime);
@@ -317,9 +307,6 @@ public class BeatVisualScheduler : MonoBehaviour
 
         isFrozen = false;
         frozenSliderValue = 0f;
-        isPaused = false;
-        totalPausedTime = 0.0;
-        pauseStartTime = 0.0;
 
         // DON'T call ResetLoopStartTime() here!
         // Timing will be synchronized when game starts
@@ -336,7 +323,7 @@ public class BeatVisualScheduler : MonoBehaviour
         }
 
         SetBPM();
-        fullLoopStartDspTime = nextBeatTime - totalPausedTime;
+        fullLoopStartDspTime = nextBeatTime - GameClock.Instance.GetTotalPauseTime();
 
         Debug.Log($"[BeatVisualScheduler] Synced - nextBeat: {nextBeatTime:F4}, fullLoopStartDspTime: {fullLoopStartDspTime:F4}");
     }

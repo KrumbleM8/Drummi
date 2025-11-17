@@ -22,9 +22,6 @@ public class PlayerInputVisualHandler : MonoBehaviour
     private double fullLoopStartDspTime;
     public int fullLoopBeats = 8;
 
-    private bool paused = false;
-    private double pauseStartTime = 0.0;
-
     [Header("Lead-in")]
     [Tooltip("How many beats early the handle begins sliding in")]
     [Range(1, 3)] public int leadInBeats = 1;
@@ -50,8 +47,6 @@ public class PlayerInputVisualHandler : MonoBehaviour
         }
 
         // DON'T call ResetLoopStartTime() here - timing will be synced explicitly
-
-        paused = false;
         isFrozen = false;
 
         if (inputSlider != null)
@@ -141,7 +136,7 @@ public class PlayerInputVisualHandler : MonoBehaviour
 
     private void Update()
     {
-        if (paused) return;
+        if (GameClock.Instance.IsPaused) return;
         if (isFrozen) return;
 
         double currentTime = AudioSettings.dspTime;
@@ -209,16 +204,12 @@ public class PlayerInputVisualHandler : MonoBehaviour
 
     public void OnPause()
     {
-        if (paused) return;
 
-        paused = true;
     }
 
     public void OnResume()
     {
-        if (!paused) return;
 
-        paused = false;
     }
 
     public void CleanupAndDisable()
@@ -267,8 +258,6 @@ public class PlayerInputVisualHandler : MonoBehaviour
         }
 
         isFrozen = false;
-        paused = false;
-        pauseStartTime = 0.0;
 
         // DON'T call ResetLoopStartTime() or InitializeBeatValues() here
         // Timing will be synced when game starts

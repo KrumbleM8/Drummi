@@ -28,7 +28,6 @@ public class Metronome : MonoBehaviour
     private double beatInterval; // Time interval between each beat in seconds
     private double timeSinceLastBeat; // Track the time passed since the last beat
 
-    private double totalPausedTime = 0.0; // Tracks accumulated pause duration for virtual DSP time
     private double virtualDspTime = 0.0; // Cached virtual DSP clock shared with other systems
 
     // Timing synchronization variables
@@ -36,15 +35,8 @@ public class Metronome : MonoBehaviour
     private const double MAX_FRAME_GAP = 0.1; // Maximum expected gap between frames (100ms)
     private bool hasStarted = false; // Track if we've had our first tick
 
-    // Pause tracking
-    private bool isPaused = false;
-    private double pauseStartTime = 0.0;
-
     // ADDED: Track the last tick time we processed to prevent double-processing
     private double lastProcessedTick = 0.0;
-
-    // Public property to expose pause state (for other scripts)
-    public bool IsPaused { get { return isPaused; } }
 
     public bool hasEverStarted = false;
 
@@ -52,9 +44,9 @@ public class Metronome : MonoBehaviour
     {
         get
         {
-            if (!isPaused)
+            if (!GameClock.Instance.IsPaused)
             {
-                virtualDspTime = AudioSettings.dspTime - totalPausedTime;
+                virtualDspTime = AudioSettings.dspTime - GameClock.Instance.GetTotalPauseTime();
             }
 
             return virtualDspTime;
@@ -63,12 +55,12 @@ public class Metronome : MonoBehaviour
 
     public double ToVirtualDspTime(double dspTime)
     {
-        return dspTime - totalPausedTime;
+        return dspTime - GameClock.Instance.GetTotalPauseTime();
     }
 
     public double ToActualDspTime(double virtualTime)
     {
-        return virtualTime + totalPausedTime;
+        return virtualTime + GameClock.Instance.GetTotalPauseTime();
     }
 
     private void OnEnable()
@@ -98,7 +90,6 @@ public class Metronome : MonoBehaviour
         lastDspTime = currentDsp;
         lastProcessedTick = startTick;
 
-        totalPausedTime = 0.0;
         virtualDspTime = currentDsp;
 
         beatCount = 0;
@@ -121,7 +112,7 @@ public class Metronome : MonoBehaviour
     }
     void LateUpdate()
     {
-        if (isPaused)
+        if (GameClock.Instance.IsPaused)
             return;
 
         double currentDspTime = AudioSettings.dspTime;
@@ -171,7 +162,7 @@ public class Metronome : MonoBehaviour
 
     void FixedUpdate()
     {
-        if (isPaused)
+        if (GameClock.Instance.IsPaused)
             return;
 
         double dspTime = AudioSettings.dspTime;
@@ -274,7 +265,6 @@ public class Metronome : MonoBehaviour
         beatCount = 0;
         loopBeatCount = 0;
         ticked = false;
-        isPaused = false;
         hasStarted = false;
 
         // Set timing to RIGHT NOW
@@ -285,7 +275,6 @@ public class Metronome : MonoBehaviour
         lastDspTime = AudioSettings.dspTime;
         lastProcessedTick = startTick;
 
-        totalPausedTime = 0.0;
         virtualDspTime = AudioSettings.dspTime;
 
         Debug.Log($"[Metronome] Initialized - startTick: {startTick:F4}, nextTick: {nextTick:F4}");
@@ -296,11 +285,9 @@ public class Metronome : MonoBehaviour
     /// </summary>
     public void OnPause()
     {
-        if (!isPaused)
+        if (!GameClock.Instance.IsPaused)
         {
-            isPaused = true;
-            pauseStartTime = AudioSettings.dspTime;
-            virtualDspTime = AudioSettings.dspTime - totalPausedTime;
+            virtualDspTime = AudioSettings.dspTime - GameClock.Instance.GetTotalPauseTime();
         }
     }
 
@@ -310,9 +297,9 @@ public class Metronome : MonoBehaviour
     /// </summary>
     public void OnResume()
     {
-        if (isPaused)
+        if (GameClock.Instance.IsPaused)
         {
-            double pauseDuration = AudioSettings.dspTime - pauseStartTime;
+            double pauseDuration = AudioSettings.dspTime - GameClock.Instance.GetPauseStartTime();
             nextTick += pauseDuration;
             nextBeatTime += pauseDuration;
             lastBeatTime += pauseDuration;
@@ -321,10 +308,7 @@ public class Metronome : MonoBehaviour
             // ADDED: Also adjust lastProcessedTick during resume
             lastProcessedTick += pauseDuration;
 
-            totalPausedTime += pauseDuration;
-            virtualDspTime = AudioSettings.dspTime - totalPausedTime;
-
-            isPaused = false;
+            virtualDspTime = AudioSettings.dspTime - GameClock.Instance.GetTotalPauseTime();
 
             // Reset DSP time tracking after resume
             lastDspTime = AudioSettings.dspTime;
@@ -338,8 +322,6 @@ public class Metronome : MonoBehaviour
         beatCount = 0;
         loopBeatCount = 0;
         ticked = false;
-        isPaused = false;
-        pauseStartTime = 0.0;
         hasStarted = false;
 
         startTick = AudioSettings.dspTime;
@@ -348,7 +330,6 @@ public class Metronome : MonoBehaviour
         lastBeatTime = AudioSettings.dspTime;
         lastDspTime = AudioSettings.dspTime;
         lastProcessedTick = startTick;
-        totalPausedTime = 0.0;
         virtualDspTime = AudioSettings.dspTime;
 
         Debug.Log("[Metronome] Reset complete");

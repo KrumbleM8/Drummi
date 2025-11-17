@@ -31,10 +31,6 @@ public class BeatGenerator : MonoBehaviour
 
     public List<ScheduledBeat> scheduledBeats = new List<ScheduledBeat>();
 
-    private double pauseStartTime = 0.0;
-    private bool isPaused = false;
-    public bool IsPaused => isPaused;
-
     public double VirtualDspTime()
     {
         return metronome != null ? metronome.VirtualDspTime : AudioSettings.dspTime;
@@ -148,7 +144,7 @@ public class BeatGenerator : MonoBehaviour
 
     private void Update()
     {
-        if (isPaused || songEndDetected || finalEvaluationTriggered)
+        if (GameClock.Instance.IsPaused || songEndDetected || finalEvaluationTriggered)
         {
             return;
         }
@@ -495,31 +491,23 @@ public class BeatGenerator : MonoBehaviour
 
     public void OnPause()
     {
-        if (!isPaused)
+        if (!GameClock.Instance.IsPaused)
         {
-            isPaused = true;
-            pauseStartTime = AudioSettings.dspTime;
-            Debug.Log($"[OnPause] Game paused at DSP time: {AudioSettings.dspTime:F2}");
+
         }
     }
 
     public void OnResume()
     {
-        if (isPaused)
+        if (GameClock.Instance.IsPaused)
         {
-            double pauseDuration = AudioSettings.dspTime - pauseStartTime;
-            isPaused = false;
+            double pauseDuration = AudioSettings.dspTime - GameClock.Instance.GetPauseStartTime();
 
             if (gameTimingInitialized)
             {
                 songEndTime += pauseDuration;
                 finalBarEndTime += pauseDuration;
                 gameStartTime += pauseDuration;
-
-                Debug.Log($"[OnResume] Game resumed after {pauseDuration:F2}s pause");
-                Debug.Log($"[OnResume] Updated songEndTime: {songEndTime:F2}");
-                Debug.Log($"[OnResume] Updated finalBarEndTime: {finalBarEndTime:F2}");
-                Debug.Log($"[OnResume] Updated gameStartTime: {gameStartTime:F2}");
             }
             else
             {
@@ -672,10 +660,8 @@ public class BeatGenerator : MonoBehaviour
         gameTimingInitialized = false;
         hasReceivedFirstFreshBar = false;
         gracePeriodActive = true;
-        isPaused = false;
 
         // Reset timing
-        pauseStartTime = 0.0;
         loopStartTime = 0.0;
         gameStartTime = 0.0;
         songEndTime = 0.0;
