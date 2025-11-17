@@ -53,7 +53,27 @@ public class GameManager : MonoBehaviour
     {
         // Your transition logic here
         Debug.Log("Song complete! Show results screen");
+        if (screenTransition != null)
+        {
+            screenTransition.StartCover();
+            StartCoroutine(WaitForTransitionThenShowResults());
+        }
+        else
+        {
+            Debug.LogError("ScreenTransition reference is missing! Assign it in Inspector.");
+        }
+    }
+    private IEnumerator WaitForTransitionThenShowResults()
+    {
+        Debug.Log("[WaitForTransitionThenShowResults] Waiting for screen transition to cover...");
 
+        while (!screenTransition.IsScreenCovered)
+        {
+            yield return null;
+        }
+
+        Debug.Log("[WaitForTransitionThenShowResults] Screen fully covered - showing results");
+        screenTransition.StartReveal();
         ShowResultsScreen();
         beatGenerator.CleanupAndDisable();
     }
@@ -148,8 +168,6 @@ public class GameManager : MonoBehaviour
 
         bool isReplay = metronome != null && metronome.hasEverStarted;
 
-
-
         // Enable non-metronome components
         if (beatGenerator != null)
         {
@@ -160,6 +178,7 @@ public class GameManager : MonoBehaviour
 
         if (beatVisualScheduler != null)
         {
+            beatGenerator.ResetToInitialState();
             beatVisualScheduler.InitalizeBeatValues();
             beatVisualScheduler.enabled = true;
             Debug.Log("BeatVisualScheduler enabled");
@@ -180,12 +199,6 @@ public class GameManager : MonoBehaviour
             Debug.Log("Metronome enabled (first playthrough - Start will run)");
         }
 
-        // Initialize BeatGenerator
-        if (isReplay && beatGenerator != null)
-        {
-            beatGenerator.ResetToInitialState();
-            Debug.Log("BeatGenerator prepared");
-        }
 
         // Enable UI
         if (gameplayElements != null)

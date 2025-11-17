@@ -6680,7 +6680,7 @@ MonoBehaviour:
   metronome: {fileID: 1433809952}
   beatGenerator: {fileID: 891851644}
   fullLoopBeats: 8
-  scheduledTimeOffset: 0.003
+  scheduledTimeOffset: 0.01
 --- !u!114 &891851646
 MonoBehaviour:
   m_ObjectHideFlags: 0

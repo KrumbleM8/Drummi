@@ -539,32 +539,9 @@ public class BeatGenerator : MonoBehaviour
         OnSongComplete?.Invoke();
 
         Debug.Log($"FINAL SCORE: {evaluator?.score ?? 0}");
-
-        if (screenTransition != null)
-        {
-            screenTransition.StartCover();
-            StartCoroutine(WaitForTransitionThenShowResults());
-        }
-        else
-        {
-            Debug.LogError("ScreenTransition reference is missing! Assign it in Inspector.");
-            GameManager.instance.HandleSongComplete();
-        }
     }
 
-    private IEnumerator WaitForTransitionThenShowResults()
-    {
-        Debug.Log("[WaitForTransitionThenShowResults] Waiting for screen transition to cover...");
 
-        while (!screenTransition.IsScreenCovered)
-        {
-            yield return null;
-        }
-
-        Debug.Log("[WaitForTransitionThenShowResults] Screen fully covered - showing results");
-        screenTransition.StartReveal();
-        GameManager.instance.HandleSongComplete();
-    }
 
     public void CleanupAndDisable()
     {
