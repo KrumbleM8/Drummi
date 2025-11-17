@@ -77,8 +77,6 @@ public class GameManager : MonoBehaviour
         }
     }
 
-    // In GameManager.cs - THE REAL FIX
-    // In GameManager.cs - KEEP METRONOME DISABLED UNTIL THE END
     private IEnumerator StartProcess()
     {
         screenTransition.StartCover();
@@ -101,6 +99,7 @@ public class GameManager : MonoBehaviour
         if (beatGenerator != null)
         {
             beatGenerator.enabled = true;
+            beatGenerator.Initialize();
             Debug.Log("BeatGenerator enabled");
         }
 
@@ -130,7 +129,7 @@ public class GameManager : MonoBehaviour
         // Initialize BeatGenerator
         if (isReplay && beatGenerator != null)
         {
-            beatGenerator.PrepareForReplay();
+            beatGenerator.ResetToInitialState();
             Debug.Log("BeatGenerator prepared");
         }
 
@@ -150,8 +149,6 @@ public class GameManager : MonoBehaviour
             nextBeatTime = metronome.nextTick; // Read directly, don't call method
             Debug.Log($"Next beat time: {nextBeatTime:F4} at DSP: {AudioSettings.dspTime:F4}");
         }
-
-
 
         // Prepare metronome timing while DISABLED
         if (isReplay && metronome != null)
@@ -187,6 +184,7 @@ public class GameManager : MonoBehaviour
             playerInputVisual.SyncWithMetronome(nextBeatTime);
         }
 
+        beatGenerator.StartGameplay(nextBeatTime);
         yield return null;
     }
 

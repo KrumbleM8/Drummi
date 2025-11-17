@@ -19,6 +19,7 @@ public class PauseHandler : MonoBehaviour
         if (Time.timeScale > 0f)
         {
             Time.timeScale = 0f;
+            GameClock.Instance.Pause();
             if (AudioManager.instance != null) AudioManager.instance.PauseAllAudio();
 
             if (metronome && metronome.enabled) metronome.OnPause();
@@ -29,6 +30,7 @@ public class PauseHandler : MonoBehaviour
         else
         {
             Time.timeScale = 1f;
+            GameClock.Instance.Resume();
             if (AudioManager.instance != null) AudioManager.instance.ResumeAllAudio();
 
             if (metronome && metronome.enabled) metronome.OnResume();

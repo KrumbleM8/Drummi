@@ -88,6 +88,32 @@ public class BeatGenerator : MonoBehaviour
         metronome.OnFreshBarEvent -= HandleOnFreshBar;
     }
 
+    public void Initialize()
+    {
+        beatInterval = 60.0 / metronome.bpm;
+        selectedClip = AudioManager.instance.musicTracks[AudioManager.instance.selectedSongIndex];
+        totalBeatsInSong = Mathf.FloorToInt((float)(selectedClip.length / beatInterval));
+
+        SetDifficultyDurations();
+    }
+
+    public void StartGameplay(double startTime)
+    {
+        // Clear all state
+        scheduledBeats.Clear();
+        beatPattern.Clear();
+        evaluationTriggered = false;
+        songEndDetected = false;
+        isFinalPattern = false;
+
+        // Set timing
+        gameStartTime = startTime;
+        songEndTime = startTime + (totalBeatsInSong * beatInterval);
+        finalBarEndTime = gameStartTime + ((totalBeatsInSong - 8) * beatInterval);
+
+        HandleOnFreshBar();
+    }
+
     public void SetBPM()
     {
         beatInterval = 60.0 / metronome.bpm;
@@ -131,15 +157,7 @@ public class BeatGenerator : MonoBehaviour
 
     private void Start()
     {
-        HandleOnFreshBar();
 
-        chosenBeatDurations = difficultyIndex switch
-        {
-            0 => starterBeatDurations,
-            1 => standardBeatDurations,
-            2 => spicyBeatDurations,
-            _ => spicyBeatDurations,
-        };
     }
 
     private void Update()
@@ -269,15 +287,8 @@ public class BeatGenerator : MonoBehaviour
         }
     }
 
-    public void PrepareForReplay()
+    private void SetDifficultyDurations()
     {
-        Debug.Log("[BeatGenerator] Preparing for replay");
-
-        // Reset flags - let the metronome's OnFreshBarEvent trigger timing initialization naturally
-        gracePeriodActive = true;
-        hasReceivedFirstFreshBar = false;
-
-        // Set difficulty-based beat durations (done in Start() originally)
         chosenBeatDurations = difficultyIndex switch
         {
             0 => starterBeatDurations,
@@ -285,11 +296,6 @@ public class BeatGenerator : MonoBehaviour
             2 => spicyBeatDurations,
             _ => spicyBeatDurations,
         };
-
-        HandleOnFreshBar();
-        // OnFreshBarEvent when the first bar actually completes, ensuring proper timing sync
-
-        Debug.Log("[BeatGenerator] Replay preparation complete - waiting for first metronome fresh bar event");
     }
 
     private void InitializeGameTiming()
@@ -676,22 +682,7 @@ public class BeatGenerator : MonoBehaviour
         leftBongoIndex = 0;
         rightBongoIndex = 0;
 
+        Initialize();
         Debug.Log("[BeatGenerator] Reset complete - ready for fresh start");
-    }
-
-    public void InitializeForNewGame()
-    {
-        Debug.Log("[BeatGenerator] Initializing for new game");
-        // Let the metronome's OnFreshBarEvent trigger it naturally
-
-        // Instead, just ensure we're ready to receive the event
-        gracePeriodActive = true; // Will be cleared on first fresh bar
-        hasReceivedFirstFreshBar = false;
-
-        // Make sure SetBPM has been called (should happen before this)
-        if (beatInterval == 0)
-        {
-            Debug.LogError("[InitializeForNewGame] SetBPM must be called before InitializeForNewGame!");
-        }
     }
 }
