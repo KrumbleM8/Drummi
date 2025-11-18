@@ -157,11 +157,11 @@ public class BeatVisualScheduler : MonoBehaviour
         Debug.Log("BeatVisualScheduler: Visuals unfrozen");
     }
 
-    public void ScheduleVisualBeat(double scheduledTime, bool isRightBongo)
+    public void ScheduleVisualBeat(double scheduledTimeDsp, bool isRightBongo)
     {
         if (isFrozen) return;
 
-        double virtualScheduledTime = (scheduledTime + scheduledTimeOffset) - GameClock.Instance.GetTotalPauseTime(); // Offset to prevent first indicator spawning too early.
+        double virtualScheduledTime = scheduledTimeDsp + scheduledTimeOffset;
 
         ScheduledVisualEvent newEvent = new ScheduledVisualEvent
         {

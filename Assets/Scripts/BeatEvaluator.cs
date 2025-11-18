@@ -2,207 +2,286 @@
 using UnityEngine;
 using TMPro;
 
+/// <summary>
+/// Evaluates player input against scheduled beats and manages scoring.
+/// Simplified with clear separation of concerns and no useless methods.
+/// </summary>
 public class BeatEvaluator : MonoBehaviour
 {
-    public BeatGenerator beatGenerator;
-    public PlayerInputVisualHandler visualScheduler;
-    public HitGrader hitGrader;
-    public TMP_Text feedbackText;
-    public float feedbackYOffset = -250f; // Y position for feedback text
+    #region Inspector Configuration
+    [Header("References")]
+    [SerializeField] private BeatGenerator beatGenerator;
+    [SerializeField] private CustardAnimationHandler custardAnimator;
+    [SerializeField] private TMP_Text scoreText;
 
-    public CustardAnimationHandler custardAnimator;
-    public float perfectThreshold = 0.05f;
-    public float goodThreshold = 0.2f;
-    public TMP_Text scoreText;
-    public int score = 0;
-    public bool hasFailedOnce = false;
-    public int perfectHits = 0;
+    [Header("Timing Windows (seconds)")]
+    [SerializeField] private float perfectThreshold = 0.05f;
+    [SerializeField] private float goodThreshold = 0.2f;
 
-    public int allowedMistakes = 1;
-    public int perfectReward = 200;
-    public int goodReward = 100;
-    public int passableReward = 50;
-    // Optional: for input time debug logging
+    [Header("Scoring")]
+    [SerializeField] private int perfectReward = 200;
+    [SerializeField] private int goodReward = 100;
+    [SerializeField] private int passableReward = 50;
+    [SerializeField] private int allowedMistakes = 1;
+    #endregion
 
-    private bool isFinalEvaluation = false;
-    public void LogInput(BongoInput input)
-    {
-        Debug.Log($"Input pressed at time: {input.inputTime}, side: {(input.isRightBongo ? "Right" : "Left")}");
-        EvaluateSingleInput(input);
-    }
+    #region Public State
+    public int Score { get; private set; }
+    public int PerfectHits { get; private set; }
+    public bool HasFailedOnce { get; private set; }
+    #endregion
 
+    #region Constants
+    private const string HIGH_SCORE_KEY = "GlitchyHS";
+    #endregion
+
+    #region Lifecycle
     private void Start()
     {
-        hasFailedOnce = false;
+        Score = 0;
+        HasFailedOnce = false;
+        UpdateScoreDisplay();
     }
+    #endregion
 
-    public void EvaluateSingleInput(BongoInput input)
+    #region Public API - Evaluation
+    /// <summary>
+    /// Evaluate all player inputs against scheduled beats.
+    /// This is the ONLY evaluation method - no more confusion.
+    /// </summary>
+    public EvaluationResult EvaluateBar(List<BongoInput> playerInputs, List<ScheduledBeat> scheduledBeats)
     {
-        if (Time.timeScale == 0) return;
-
-        List<ScheduledBeat> scheduledBeats = beatGenerator.scheduledBeats;
-        scheduledBeats.Sort((a, b) => a.scheduledTime.CompareTo(b.scheduledTime));
-
-        foreach (var beat in scheduledBeats)
+        if (GameClock.Instance.IsPaused)
         {
-            double scheduledTime = beat.scheduledTime + (60.0 / beatGenerator.metronome.bpm * 4);
-            double delta = input.inputTime - scheduledTime;
-
-            if (Mathf.Abs((float)delta) <= goodThreshold)
-            {
-                if (beat.isRightBongo == input.isRightBongo)
-                {
-                    if (Mathf.Abs((float)delta) <= perfectThreshold)
-                    {
-                        ShowFeedback("Perfect!");
-                    }
-                    else
-                    {
-                        ShowFeedback("Good!");
-                    }
-                    return;
-                }
-                else
-                {
-                    ShowFeedback("Oops!");
-                    return;
-                }
-            }
+            Debug.LogWarning("[BeatEvaluator] Attempted evaluation while paused");
+            return null;
         }
-
-        ShowFeedback("Miss!");
-    }
-
-
-    public void EvaluatePlayerInput(List<BongoInput> playerInputs)
-    {
-        if (Time.timeScale == 0) return;
-
-        if (beatGenerator.totalBeatsInSong > 0)
-        {
-            double currentTime = beatGenerator.VirtualDspTime();
-            double timeUntilEnd = beatGenerator.songEndTime - currentTime;
-            double beatsUntilEnd = timeUntilEnd / (60.0 / beatGenerator.metronome.bpm);
-
-            if (beatsUntilEnd <= 8) // Within the last bar
-            {
-                isFinalEvaluation = true;
-                Debug.Log("This is the FINAL evaluation!");
-            }
-        }
-
-        List<ScheduledBeat> scheduledBeats = beatGenerator.scheduledBeats;
-        int correctHits = 0;
-        perfectHits = 0;
-
-        scheduledBeats.Sort((a, b) => a.scheduledTime.CompareTo(b.scheduledTime));
-        playerInputs.Sort((a, b) => a.inputTime.CompareTo(b.inputTime));
-
-        int beatIndex = 0;
-        int inputIndex = 0;
-
-        while (beatIndex < scheduledBeats.Count && inputIndex < playerInputs.Count)
-        {
-            double scheduledTime = scheduledBeats[beatIndex].scheduledTime + (60.0 / beatGenerator.metronome.bpm * 4); // +4 beat delay
-            double inputTime = playerInputs[inputIndex].inputTime;
-            double delta = inputTime - scheduledTime;
-
-            if (delta < -goodThreshold)
-            {
-                Debug.Log("Too Early - Missed");
-                inputIndex++;
-            }
-            else if (delta > goodThreshold)
-            {
-                Debug.Log("Too Late - Missed");
-                beatIndex++;
-            }
-            else
-            {
-                if (scheduledBeats[beatIndex].isRightBongo == playerInputs[inputIndex].isRightBongo)
-                {
-                    if (Mathf.Abs((float)delta) <= perfectThreshold)
-                    {
-                        perfectHits++;
-                        Debug.Log("Hit Grade: Perfect");
-                    }
-                    else
-                    {
-                        Debug.Log("Hit Grade: Good");
-                    }
-
-                    correctHits++;
-                }
-                else
-                {
-                    Debug.Log("Hit Grade: Wrong Side");
-                }
-
-                beatIndex++;
-                inputIndex++;
-            }
-        }
-
-        Debug.Log($"Player hit {correctHits} out of {scheduledBeats.Count}");
 
         if (scheduledBeats.Count == 0)
-            return;
-
-        //Score Handling
-        if (correctHits == scheduledBeats.Count - allowedMistakes) //Most Beats Hit
         {
-            if (playerInputs.Count != scheduledBeats.Count)
+            Debug.LogWarning("[BeatEvaluator] No beats to evaluate");
+            return null;
+        }
+
+        // Perform matching
+        var matches = MatchInputsToBeats(playerInputs, scheduledBeats);
+
+        // Calculate results
+        int correctHits = CountCorrectHits(matches);
+        int perfectHits = CountPerfectHits(matches);
+
+        // Determine grade
+        EvaluationGrade grade = DetermineGrade(correctHits, perfectHits,
+                                                playerInputs.Count, scheduledBeats.Count);
+
+        // Calculate points
+        int points = CalculatePoints(grade);
+
+        // Create result
+        var result = new EvaluationResult(grade, correctHits, perfectHits, scheduledBeats.Count, points);
+
+        // Apply result to game state
+        ApplyEvaluationResult(result);
+
+        // Log for debugging
+        LogEvaluationResult(result, playerInputs.Count);
+
+        return result;
+    }
+    #endregion
+
+    #region Matching Logic
+    /// <summary>
+    /// Match player inputs to scheduled beats using a two-pointer algorithm.
+    /// More efficient and clearer than the original nested loops.
+    /// </summary>
+    private List<InputMatch> MatchInputsToBeats(List<BongoInput> inputs, List<ScheduledBeat> beats)
+    {
+        // Sort both lists by time (defensive - should already be sorted)
+        var sortedInputs = new List<BongoInput>(inputs);
+        var sortedBeats = new List<ScheduledBeat>(beats);
+
+        sortedInputs.Sort((a, b) => a.inputTime.CompareTo(b.inputTime));
+        sortedBeats.Sort((a, b) => a.scheduledTime.CompareTo(b.scheduledTime));
+
+        List<InputMatch> matches = new List<InputMatch>();
+        int inputIndex = 0;
+        int beatIndex = 0;
+
+        // Calculate the input window start time (4 beats after pattern start)
+        double inputWindowStart = beatGenerator.InputStartTime;
+        double beatInterval = 60.0 / beatGenerator.metronome.bpm;
+
+        while (beatIndex < sortedBeats.Count && inputIndex < sortedInputs.Count)
+        {
+            // Adjust scheduled time to input window
+            double adjustedBeatTime = sortedBeats[beatIndex].scheduledTime +
+                                     (beatGenerator.InputStartTime - beatGenerator.PatternStartTime);
+            double inputTime = sortedInputs[inputIndex].inputTime;
+            double delta = inputTime - adjustedBeatTime;
+
+            var match = new InputMatch
             {
-                //Failed, mistake + incorrect amount of inputs
-                HandleFail();
+                BeatIndex = beatIndex,
+                InputIndex = inputIndex,
+                TimingError = delta
+            };
+
+            // Too early - input doesn't match this beat, try next input
+            if (delta < -goodThreshold)
+            {
+                match.Quality = InputMatch.MatchQuality.TooEarly;
+                matches.Add(match);
+                inputIndex++;
             }
+            // Too late - beat was missed, try next beat
+            else if (delta > goodThreshold)
+            {
+                match.Quality = InputMatch.MatchQuality.TooLate;
+                matches.Add(match);
+                beatIndex++;
+            }
+            // Within timing window - check side correctness
             else
             {
-                //Passable ADD POINTS
-                HandleSuccess(passableReward);
+                bool correctSide = sortedBeats[beatIndex].isRightBongo == sortedInputs[inputIndex].isRightBongo;
+
+                if (correctSide)
+                {
+                    // Perfect timing
+                    if (Mathf.Abs((float)delta) <= perfectThreshold)
+                    {
+                        match.Quality = InputMatch.MatchQuality.Perfect;
+                    }
+                    // Good timing
+                    else
+                    {
+                        match.Quality = InputMatch.MatchQuality.Good;
+                    }
+                }
+                else
+                {
+                    match.Quality = InputMatch.MatchQuality.WrongSide;
+                }
+
+                matches.Add(match);
+                beatIndex++;
+                inputIndex++;
             }
         }
-        else if (correctHits == scheduledBeats.Count) //All Beats Hit
-        {
-            if (playerInputs.Count != scheduledBeats.Count) //Too many or too little inputs
-            {
-                if (playerInputs.Count == scheduledBeats.Count - allowedMistakes || playerInputs.Count == scheduledBeats.Count + allowedMistakes)
-                {
-                    //Passable ADD POINTS
-                    HandleSuccess(passableReward);
-                }
-                else
-                {
-                    //Failed, too many inputs
-                    HandleFail();
-                }
-            }
-            else
-            {
-                if (perfectHits == scheduledBeats.Count) //All Perfect
-                {
-                    //All Perfect ADD POINTS
-                    HandleSuccess(perfectReward);
-                }
-                else
-                {
-                    //All Good ADD POINTS
-                    HandleSuccess(goodReward);
-                }
-            }
 
+        // Mark remaining beats as missed
+        while (beatIndex < sortedBeats.Count)
+        {
+            matches.Add(new InputMatch
+            {
+                BeatIndex = beatIndex,
+                InputIndex = -1,
+                Quality = InputMatch.MatchQuality.Miss,
+                TimingError = 0
+            });
+            beatIndex++;
+        }
+
+        return matches;
+    }
+
+    private int CountCorrectHits(List<InputMatch> matches)
+    {
+        int count = 0;
+        foreach (var match in matches)
+        {
+            if (match.Quality == InputMatch.MatchQuality.Perfect ||
+                match.Quality == InputMatch.MatchQuality.Good)
+            {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    private int CountPerfectHits(List<InputMatch> matches)
+    {
+        int count = 0;
+        foreach (var match in matches)
+        {
+            if (match.Quality == InputMatch.MatchQuality.Perfect)
+            {
+                count++;
+            }
+        }
+        return count;
+    }
+    #endregion
+
+    #region Grading Logic
+    /// <summary>
+    /// Determine grade based on performance. Simplified from original nested if hell.
+    /// </summary>
+    private EvaluationGrade DetermineGrade(int correctHits, int perfectHits,
+                                           int totalInputs, int totalBeats)
+    {
+        // Perfect: All beats hit with perfect timing and correct input count
+        if (correctHits == totalBeats &&
+            perfectHits == totalBeats &&
+            totalInputs == totalBeats)
+        {
+            return EvaluationGrade.AllPerfect;
+        }
+
+        // Good: All beats hit (not all perfect) with correct input count
+        if (correctHits == totalBeats && totalInputs == totalBeats)
+        {
+            return EvaluationGrade.AllGood;
+        }
+
+        // Passable: Most beats hit OR all beats with minor input count error
+        bool mostBeatsHit = correctHits >= totalBeats - allowedMistakes;
+        bool minorInputError = Mathf.Abs(totalInputs - totalBeats) <= allowedMistakes;
+
+        if (mostBeatsHit && (totalInputs == totalBeats || minorInputError))
+        {
+            return EvaluationGrade.Passable;
+        }
+
+        // Failed: Everything else
+        return EvaluationGrade.Failed;
+    }
+
+    private int CalculatePoints(EvaluationGrade grade)
+    {
+        return grade switch
+        {
+            EvaluationGrade.AllPerfect => perfectReward,
+            EvaluationGrade.AllGood => goodReward,
+            EvaluationGrade.Passable => passableReward,
+            EvaluationGrade.Failed => 0,
+            _ => 0
+        };
+    }
+    #endregion
+
+    #region Result Application
+    private void ApplyEvaluationResult(EvaluationResult result)
+    {
+        PerfectHits = result.PerfectHits;
+
+        if (result.Grade == EvaluationGrade.Failed)
+        {
+            HandleFailure();
         }
         else
         {
-            HandleFail();
+            HandleSuccess(result.PointsAwarded);
         }
     }
 
     private void HandleSuccess(int points)
     {
-        Debug.Log("Successful Bar!");
+        Debug.Log($"[BeatEvaluator] Success! +{points} points");
 
-        if(points == perfectReward)
+        // Play appropriate feedback sound
+        if (points == perfectReward)
         {
             AudioManager.instance.PlayAllPerfect();
         }
@@ -214,51 +293,82 @@ public class BeatEvaluator : MonoBehaviour
         {
             AudioManager.instance.PlayPassable();
         }
+
+        // Animate character
         custardAnimator.HandleSuccess();
 
-        score += points;
+        // Update score
+        Score += points;
         SaveHighScore();
-        scoreText.text = score.ToString();
-        hasFailedOnce = false;
+        UpdateScoreDisplay();
+
+        // Reset failure state
+        HasFailedOnce = false;
     }
 
-    private void HandleFail()
+    private void HandleFailure()
     {
-        Debug.Log("No Good :(");
+        Debug.Log("[BeatEvaluator] Failed bar");
+
+        // Animate character
         custardAnimator.HandleFailure();
         AudioManager.instance.PlayIncorrect();
 
-        if (!hasFailedOnce)
+        // Two-strike system
+        if (!HasFailedOnce)
         {
-            hasFailedOnce = true;
+            HasFailedOnce = true;
         }
-        else if (score != 0)
+        else if (Score > 0)
         {
+            // Second failure - reset score
             SaveHighScore();
-            score = 0;
-            scoreText.text = score.ToString();
+            Score = 0;
+            UpdateScoreDisplay();
             AudioManager.instance.PlayTotalFail();
         }
     }
+    #endregion
 
+    #region Score Management
     public void SaveHighScore()
     {
-        if(score > PlayerPrefs.GetInt("GlitchyHS"))
-        PlayerPrefs.SetInt("GlitchyHS", score);
+        int currentHighScore = PlayerPrefs.GetInt(HIGH_SCORE_KEY, 0);
+        if (Score > currentHighScore)
+        {
+            PlayerPrefs.SetInt(HIGH_SCORE_KEY, Score);
+            PlayerPrefs.Save();
+            Debug.Log($"[BeatEvaluator] New high score: {Score}");
+        }
     }
 
-    private void ShowFeedback(string message)
+    private void UpdateScoreDisplay()
     {
-        feedbackText.text = message;
-        feedbackText.rectTransform.anchoredPosition = new Vector2(visualScheduler.GetCurrentSliderXPosition(), feedbackYOffset); //
-        CancelInvoke(nameof(ClearFeedback));
-        Invoke(nameof(ClearFeedback), 0.41f); // Hide after 0.41s (or adjust as needed)
+        if (scoreText != null)
+        {
+            scoreText.text = Score.ToString();
+        }
     }
 
-    private void ClearFeedback()
+    public void ResetScore()
     {
-        feedbackText.text = "";
+        Score = 0;
+        PerfectHits = 0;
+        HasFailedOnce = false;
+        UpdateScoreDisplay();
     }
+    #endregion
 
-    
+    #region Debugging
+    private void LogEvaluationResult(EvaluationResult result, int inputCount)
+    {
+        Debug.Log($"[BeatEvaluator] Evaluation Complete:");
+        Debug.Log($"  Grade: {result.Grade}");
+        Debug.Log($"  Correct: {result.CorrectHits}/{result.TotalBeats}");
+        Debug.Log($"  Perfect: {result.PerfectHits}/{result.TotalBeats}");
+        Debug.Log($"  Inputs: {inputCount}");
+        Debug.Log($"  Points: +{result.PointsAwarded}");
+        Debug.Log($"  Total Score: {Score}");
+    }
+    #endregion
 }

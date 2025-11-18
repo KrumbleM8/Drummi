@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
@@ -75,6 +75,7 @@ public class PlayerInputReader : MonoBehaviour
 
     public void TriggerInput(bool isRightBongo)
     {
+        // Always play animation and sound (for player feedback)
         BongoAnimator.instance.PlayBongoAnimation(isRightBongo);
 
         if (isRightBongo)
@@ -82,14 +83,19 @@ public class PlayerInputReader : MonoBehaviour
         else
             AudioManager.instance?.PlayBongoLeft();
 
-        if (!allowInput || Time.timeScale == 0) return;
+        // Early exit if input not allowed or game paused
+        if (!allowInput || GameClock.Instance.IsPaused) // ← Changed from Time.timeScale == 0
+            return;
 
-        var input = new BongoInput(AudioSettings.dspTime, isRightBongo);
+        // Record input using GameClock time (not raw DSP time)
+        var input = new BongoInput(GameClock.Instance.GameTime, isRightBongo); // ← Changed
         playerInputData.Add(input);
 
+        // Spawn visual indicator
         playerInputVisualScheduler?.SpawnInputIndicator(isRightBongo);
 
-        beatEvaluator.LogInput(input);
+        // Note: Evaluation happens later in BeatGenerator.EvaluateBar()
+        // No immediate feedback to keep it simple
     }
 
     public void ResetInputs()

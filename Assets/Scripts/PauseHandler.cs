@@ -1,27 +1,32 @@
+// PauseHandler.cs - UPDATED
 using UnityEngine;
 
 public class PauseHandler : MonoBehaviour
 {
-    [Header("Refs")]
     [SerializeField] private Metronome metronome;
     [SerializeField] private BeatGenerator beatGenerator;
     [SerializeField] private BeatEvaluator beatEvaluator;
     [SerializeField] private BeatVisualScheduler visualScheduler;
     [SerializeField] private PlayerInputVisualHandler playerInputVisualHandler;
 
-    public bool IsPaused => Time.timeScale == 0f;
+    public bool IsPaused => GameClock.Instance.IsPaused;
 
     public void TogglePause()
     {
-        // Preserve original behavior: save on every toggle.
-        if (beatEvaluator != null) beatEvaluator.SaveHighScore();
+        // Save high score on every pause toggle
+        if (beatEvaluator != null)
+            beatEvaluator.SaveHighScore();
 
-        if (Time.timeScale > 0f)
+        if (!GameClock.Instance.IsPaused)
         {
-            Time.timeScale = 0f;
-            GameClock.Instance.Pause();
-            if (AudioManager.instance != null) AudioManager.instance.PauseAllAudio();
+            // === PAUSE ===
+            GameClock.Instance.Pause(); // Pause clock FIRST
 
+            Time.timeScale = 0f;
+            if (AudioManager.instance != null)
+                AudioManager.instance.PauseAllAudio();
+
+            // Notify all systems
             if (metronome && metronome.enabled) metronome.OnPause();
             if (beatGenerator && beatGenerator.enabled) beatGenerator.OnPause();
             if (playerInputVisualHandler && playerInputVisualHandler.enabled) playerInputVisualHandler.OnPause();
@@ -29,14 +34,18 @@ public class PauseHandler : MonoBehaviour
         }
         else
         {
+            // === RESUME ===
             Time.timeScale = 1f;
-            GameClock.Instance.Resume();
-            if (AudioManager.instance != null) AudioManager.instance.ResumeAllAudio();
+            if (AudioManager.instance != null)
+                AudioManager.instance.ResumeAllAudio();
 
+            // Notify all systems BEFORE resuming clock (so they can adjust timings)
             if (metronome && metronome.enabled) metronome.OnResume();
             if (beatGenerator && beatGenerator.enabled) beatGenerator.OnResume();
             if (playerInputVisualHandler && playerInputVisualHandler.enabled) playerInputVisualHandler.OnResume();
             if (visualScheduler && visualScheduler.enabled) visualScheduler.OnResume();
+
+            GameClock.Instance.Resume(); // Resume clock LAST
         }
     }
 }

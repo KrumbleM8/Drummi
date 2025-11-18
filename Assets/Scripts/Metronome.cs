@@ -39,28 +39,12 @@ public class Metronome : MonoBehaviour
     private double lastProcessedTick = 0.0;
 
     public bool hasEverStarted = false;
-
     public double VirtualDspTime
     {
         get
         {
-            if (!GameClock.Instance.IsPaused)
-            {
-                virtualDspTime = AudioSettings.dspTime - GameClock.Instance.GetTotalPauseTime();
-            }
-
-            return virtualDspTime;
+            return GameClock.Instance.GameTime;
         }
-    }
-
-    public double ToVirtualDspTime(double dspTime)
-    {
-        return dspTime - GameClock.Instance.GetTotalPauseTime();
-    }
-
-    public double ToActualDspTime(double virtualTime)
-    {
-        return virtualTime + GameClock.Instance.GetTotalPauseTime();
     }
 
     private void OnEnable()
@@ -68,7 +52,7 @@ public class Metronome : MonoBehaviour
 
     }
 
-    void Start()
+    public void Initialize()
     {
         hasEverStarted = true;
         sampleRate = AudioSettings.outputSampleRate;
@@ -287,7 +271,7 @@ public class Metronome : MonoBehaviour
     {
         if (!GameClock.Instance.IsPaused)
         {
-            virtualDspTime = AudioSettings.dspTime - GameClock.Instance.GetTotalPauseTime();
+            virtualDspTime = AudioSettings.dspTime - GameClock.Instance.GetLastPauseDuration();
         }
     }
 
@@ -308,7 +292,7 @@ public class Metronome : MonoBehaviour
             // ADDED: Also adjust lastProcessedTick during resume
             lastProcessedTick += pauseDuration;
 
-            virtualDspTime = AudioSettings.dspTime - GameClock.Instance.GetTotalPauseTime();
+            virtualDspTime = AudioSettings.dspTime - GameClock.Instance.GetLastPauseDuration();
 
             // Reset DSP time tracking after resume
             lastDspTime = AudioSettings.dspTime;
