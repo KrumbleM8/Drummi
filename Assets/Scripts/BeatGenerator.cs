@@ -5,13 +5,13 @@ using UnityEngine;
 /// <summary>
 /// Orchestrates rhythm gameplay: generates beat patterns, schedules audio/visuals,
 /// and manages game progression through the song.
-/// FIXED: All timing now uses GameClock consistently
+/// REFACTORED: Uses TimingCoordinator for all timing (no more event handlers)
 /// </summary>
 public class BeatGenerator : MonoBehaviour
 {
     #region Inspector References
     [Header("Core Systems")]
-    [SerializeField] public Metronome metronome;
+    [SerializeField] public Metronome metronome; // Still used for visual feedback
     [SerializeField] private BeatEvaluator evaluator;
     [SerializeField] private PlayerInputReader playerInputReader;
     [SerializeField] private CustardAnimationHandler custardAnimator;
@@ -40,23 +40,18 @@ public class BeatGenerator : MonoBehaviour
 
     #region State
     private GameState currentState = GameState.Uninitialized;
-    private SongProgressionTracker progressionTracker = new SongProgressionTracker();
     private PatternGenerator patternGenerator;
 
     private List<Beat> currentPattern = new List<Beat>();
     private List<ScheduledBeat> scheduledBeats = new List<ScheduledBeat>();
 
-    private double loopStartTime; // In GameClock time
     private double beatInterval;
-    private float playbackOffset;
 
     private int leftBongoIndex = 0;
     private int rightBongoIndex = 0;
 
-    private bool evaluationPending = false;
-
-    // Track total beats in song
-    private int totalBeatsInSong = 0;
+    private bool hasScheduledFirstPattern = false;
+    private bool isFinalBar = false;
     #endregion
 
     #region Difficulty Presets
@@ -66,77 +61,97 @@ public class BeatGenerator : MonoBehaviour
     #endregion
 
     #region Public Properties
-    public double PatternStartTime { get; private set; } // In DSP time for audio scheduling
-    public double InputStartTime { get; private set; } // In DSP time for audio scheduling
+    public double PatternStartTime { get; private set; }
+    public double InputStartTime { get; private set; }
     public List<ScheduledBeat> ScheduledBeats => scheduledBeats;
     #endregion
 
     #region Lifecycle
-    private void OnEnable()
-    {
-        if (metronome != null)
-        {
-            metronome.OnTickEvent += OnMetronomeTick;
-            metronome.OnFreshBarEvent += OnMetronomeFreshBar;
-        }
-    }
-
-    private void OnDisable()
-    {
-        if (metronome != null)
-        {
-            metronome.OnTickEvent -= OnMetronomeTick;
-            metronome.OnFreshBarEvent -= OnMetronomeFreshBar;
-        }
-    }
-
     private void Update()
     {
-        if (GameClock.Instance.IsPaused)
+        if (GameClock.Instance.IsPaused || currentState == GameState.Uninitialized)
             return;
 
-        switch (currentState)
+        var coordinator = TimingCoordinator.Instance;
+
+        // Check for initial pattern scheduling (happens once)
+        if (!hasScheduledFirstPattern && currentState == GameState.WaitingForFirstBar)
         {
-            case GameState.Playing:
-                CheckForEvaluation();
-                CheckForFinalPattern();
-                break;
+            // GRACE PERIOD: Bar 0 is the grace period (8 beats with no pattern)
+            // Only schedule first pattern when we're approaching bar 1
+            if (coordinator.GetCurrentBarIndex() == 0)
+            {
+                // Still in grace period - check if we should transition to bar 1
+                double timeUntilNextBar = coordinator.NextBar.BarStartTime - AudioSettings.dspTime;
+                if (timeUntilNextBar <= 0.1) // 100ms before bar 1 starts
+                {
+                    // Advance to bar 1 (end of grace period)
+                    coordinator.AdvanceToNextBar();
 
-            case GameState.GeneratingFinalPattern:
-                CheckForEvaluation();
-                break;
+                    // Now schedule the first pattern for bar 1
+                    GenerateAndScheduleInitialPattern();
+                    hasScheduledFirstPattern = true;
+                    currentState = GameState.Playing;
 
-            case GameState.Uninitialized:
-            case GameState.WaitingForFirstBar:
-            case GameState.EvaluatingFinalBar:
-            case GameState.GameComplete:
-                // No updates needed
-                break;
+                    Debug.Log("[BeatGenerator] Grace period complete - starting gameplay at bar 1");
+                }
+            }
+            else
+            {
+                // Fallback: if somehow we're past bar 0, schedule immediately
+                GenerateAndScheduleInitialPattern();
+                hasScheduledFirstPattern = true;
+                currentState = GameState.Playing;
+            }
+        }
+
+        // Check for evaluation timing
+        if (currentState == GameState.Playing || currentState == GameState.GeneratingFinalPattern)
+        {
+            if (coordinator.ShouldEvaluateNow())
+            {
+                EvaluateCurrentBar();
+            }
+        }
+
+        // Check for final pattern trigger
+        if (currentState == GameState.Playing)
+        {
+            if (coordinator.ShouldGenerateFinalPattern())
+            {
+                currentState = GameState.GeneratingFinalPattern;
+                isFinalBar = true;
+                Debug.Log("[BeatGenerator] *** NEXT EVALUATION WILL BE FINAL ***");
+            }
+        }
+
+        // Check for song completion
+        if (coordinator.IsSongComplete() &&
+            currentState != GameState.EvaluatingFinalBar &&
+            currentState != GameState.GameComplete)
+        {
+            Debug.LogWarning("[BeatGenerator] Song time exceeded - forcing completion");
+            HandleGameComplete();
+        }
+
+        // Trigger listening animation at appropriate time (only after grace period)
+        if (currentState == GameState.Playing ||
+            currentState == GameState.GeneratingFinalPattern)
+        {
+            CheckAndTriggerListeningAnimation();
         }
     }
     #endregion
 
     #region Public API - Initialization
     /// <summary>
-    /// Initialize beat generator with song parameters. Call once per song selection.
+    /// Initialize beat generator with song parameters.
     /// </summary>
     public void Initialize(int bpm, int songIndex)
     {
         // Set core parameters
         metronome.bpm = bpm;
         beatInterval = 60.0 / bpm;
-        playbackOffset = (bpm == 79) ? 0.005f : 0.003f;
-
-        // Get song clip
-        AudioClip clip = AudioManager.instance.musicTracks[songIndex];
-        if (clip == null)
-        {
-            Debug.LogError($"[BeatGenerator] Song at index {songIndex} is null!");
-            return;
-        }
-
-        // Calculate song duration in beats
-        totalBeatsInSong = Mathf.FloorToInt((float)(clip.length / beatInterval));
 
         // Setup pattern generator based on difficulty
         float[] durations = difficultyIndex switch
@@ -149,228 +164,80 @@ public class BeatGenerator : MonoBehaviour
         patternGenerator = new PatternGenerator(durations, maxSameSideHits);
 
         currentState = GameState.WaitingForFirstBar;
+        hasScheduledFirstPattern = false;
+        isFinalBar = false;
 
-        Debug.Log($"[BeatGenerator] Initialized - BPM: {bpm}, Song: {clip.name}, Beats: {totalBeatsInSong}");
+        AudioClip clip = AudioManager.instance.musicTracks[songIndex];
+        int totalBeats = clip != null ? Mathf.FloorToInt((float)(clip.length / beatInterval)) : 0;
+
+        Debug.Log($"[BeatGenerator] Initialized - BPM: {bpm}, Song: {clip?.name}, Beats: {totalBeats}");
     }
 
     /// <summary>
-    /// Start gameplay at the specified time. Called when game actually begins.
-    /// FIXED: Now uses GameClock time consistently
-    /// </summary>
-    /// <summary>
-    /// Start gameplay at the specified time. Called when game actually begins.
-    /// FIXED: Uses DSP time directly, no conversion needed.
+    /// Start gameplay. Called when game begins.
     /// </summary>
     public void StartGameplay(double startTimeDsp)
     {
-        // Validate that Initialize() was called
-        if (totalBeatsInSong == 0)
-        {
-            Debug.LogError("[BeatGenerator] StartGameplay called before Initialize()!");
-            return;
-        }
-
-        // FIXED: Pass DSP time directly to progression tracker
-        progressionTracker.Initialize(
-            totalBeatsInSong,
-            startTimeDsp,  // ← DSP time, no conversion!
-            beatInterval,
-            barsBeforeEndForFinalBar
-        );
-
-        // Reset state
         ClearState();
-        loopStartTime = startTimeDsp; // Store DSP time for loop tracking
         currentState = GameState.WaitingForFirstBar;
 
         Debug.Log($"[BeatGenerator] === GAMEPLAY STARTED ===");
         Debug.Log($"  Start time (DSP): {startTimeDsp:F4}");
         Debug.Log($"  Current DSP: {AudioSettings.dspTime:F4}");
-        Debug.Log($"  Total beats: {totalBeatsInSong}");
         Debug.Log($"  Beat interval: {beatInterval:F4}s");
-        Debug.Log($"  Song duration: {(totalBeatsInSong * beatInterval):F2}s");
-        Debug.Log($"  BPM: {metronome.bpm}");
     }
     #endregion
 
-    #region Metronome Event Handlers
-    private void OnMetronomeTick()
+    #region Pattern Generation & Scheduling
+    /// <summary>
+    /// Generate and schedule the very first pattern.
+    /// </summary>
+    private void GenerateAndScheduleInitialPattern()
     {
-        if (currentState == GameState.GameComplete) return;
+        Debug.Log("[BeatGenerator] Generating and scheduling initial pattern");
 
-        // Beat 3: Play turn signal
-        if (metronome.loopBeatCount == 3)
-        {
-            double signalTime = metronome.nextBeatTime + (metronome.timePerTick * 0.5);
-            AudioManager.instance.PlayTurnSignal(signalTime);
-        }
-
-        // Beat 4: Allow player input
-        if (metronome.loopBeatCount == 4)
-        {
-            InputStartTime = metronome.nextBeatTime;
-            playerInputReader.allowInput = true;
-
-            // Schedule listening animation slightly before input window
-            float delay = (float)(metronome.timePerTick / 1.5f);
-            Invoke(nameof(TriggerListeningAnimation), delay);
-        }
+        GenerateNewPattern();
+        SchedulePattern(TimingCoordinator.Instance.CurrentBar);
     }
 
-    private void OnMetronomeFreshBar()
-    {
-        if (currentState == GameState.GameComplete) return;
-
-        loopStartTime = AudioSettings.dspTime;
-
-        // CRITICAL: Handle pattern generation and scheduling based on state
-        if (currentState == GameState.WaitingForFirstBar)
-        {
-            // First bar after grace period - generate and schedule first pattern
-            currentState = GameState.Playing;
-            GenerateNewPattern();
-            ScheduleCurrentPattern();
-            Debug.Log("[BeatGenerator] First fresh bar - pattern generation started");
-        }
-        else if (currentState == GameState.Playing || currentState == GameState.GeneratingFinalPattern)
-        {
-            // Subsequent bars - schedule the pattern that was generated during evaluation
-            // (Pattern was already generated at beat 7.5 during EvaluateBar)
-            ScheduleCurrentPattern();
-            Debug.Log($"[BeatGenerator] Fresh bar - scheduling pre-generated pattern (state: {currentState})");
-        }
-
-        // Reset evaluation flag for next loop
-        if (currentState != GameState.EvaluatingFinalBar)
-        {
-            evaluationPending = false;
-        }
-    }
-    #endregion
-
-    #region Evaluation & Pattern Generation
-    private void CheckForEvaluation()
-    {
-        if (evaluationPending) return;
-
-        double currentTime = AudioSettings.dspTime; // ← Use DSP time
-        double elapsedInLoop = currentTime - loopStartTime;
-
-        bool shouldEvaluate = elapsedInLoop >= (GameConstants.EVALUATION_TIMING_BEATS * beatInterval);
-
-        bool correctPhase = metronome.loopBeatCount >= 7;
-        if (metronome.loopBeatCount == 7)
-        {
-            double timeSinceLastBeat = AudioSettings.dspTime -
-                (metronome.GetNextBeatTime() - metronome.timePerTick);
-            correctPhase = timeSinceLastBeat > (metronome.timePerTick * GameConstants.BEAT_TIMING_THRESHOLD);
-        }
-
-        if (shouldEvaluate && correctPhase)
-        {
-            evaluationPending = true;
-            EvaluateBar();
-        }
-    }
-
-    private void CheckForFinalPattern()
-    {
-        if (currentState != GameState.Playing) return;
-
-        double currentTime = AudioSettings.dspTime; // ← Use DSP time
-
-        if (progressionTracker.ShouldGenerateFinalPattern(currentTime))
-        {
-            currentState = GameState.GeneratingFinalPattern;
-            Debug.Log("[BeatGenerator] *** NEXT PATTERN WILL BE FINAL ***");
-        }
-
-        // Check if song is complete
-        if (progressionTracker.IsSongComplete(currentTime) &&
-            currentState != GameState.EvaluatingFinalBar &&
-            currentState != GameState.GameComplete)
-        {
-            Debug.LogWarning("[BeatGenerator] Song time exceeded - forcing completion");
-            currentState = GameState.EvaluatingFinalBar;
-            Invoke(nameof(HandleGameComplete), 0.1f);
-        }
-    }
-
-    private void EvaluateBar()
-    {
-        // Perform evaluation using new API
-        var result = evaluator.EvaluateBar(
-            playerInputReader.playerInputData,
-            scheduledBeats
-        );
-
-        // Reset input
-        playerInputReader.allowInput = false;
-        playerInputReader.ResetInputs();
-
-        // Handle state transition
-        if (currentState == GameState.GeneratingFinalPattern)
-        {
-            // We just evaluated the final pattern
-            currentState = GameState.EvaluatingFinalBar;
-            Debug.Log("[BeatGenerator] *** FINAL PATTERN EVALUATED ***");
-
-            OnFinalBarComplete?.Invoke();
-            Invoke(nameof(HandleGameComplete), 0.5f);
-        }
-        else
-        {
-            // CRITICAL FIX: Generate the NEXT pattern but DON'T schedule it yet
-            // Scheduling will happen on the next OnFreshBarEvent (beat 1)
-            GenerateNewPattern();
-            Debug.Log("[BeatGenerator] Pattern generated at beat 7.5, will schedule on next bar");
-        }
-    }
     /// <summary>
     /// Generate a new pattern (doesn't schedule it).
     /// </summary>
     private void GenerateNewPattern()
     {
-        // Generate new pattern
         currentPattern = patternGenerator.GeneratePattern();
 
-        // Clear old visuals (ready for new pattern when it's scheduled)
+        // Clear old visuals
         beatVisualScheduler.ResetVisuals();
         playerInputVisual.ResetVisuals();
 
         Debug.Log($"[BeatGenerator] Generated pattern with {currentPattern.Count} beats");
     }
 
-    #endregion
-
-    #region Pattern Scheduling
-    private void ScheduleCurrentPattern()
+    /// <summary>
+    /// Schedule the current pattern using timing from coordinator.
+    /// </summary>
+    private void SchedulePattern(TimingCoordinator.BarTiming timing)
     {
-        // DEFENSIVE: Only schedule at beat 1 (fresh bar)
-        if (metronome.loopBeatCount != 1)
-        {
-            Debug.LogError($"[BeatGenerator] ScheduleCurrentPattern called at beat {metronome.loopBeatCount} instead of beat 1!");
-            Debug.LogError($"  This will cause mis-timed patterns. Only call from OnFreshBarEvent.");
-            return;
-        }
-
-        // Defensive check: Make sure we have a pattern to schedule
-        if (currentPattern == null || currentPattern.Count == 0)
-        {
-            Debug.LogError("[BeatGenerator] No pattern to schedule!");
-            return;
-        }
-
         scheduledBeats.Clear();
 
-        double currentBeatTimeDsp = metronome.nextBeatTime - metronome.timePerTick;
-        PatternStartTime = currentBeatTimeDsp + playbackOffset;
-        InputStartTime = PatternStartTime + (GameConstants.BEATS_PER_BAR * beatInterval);
+        PatternStartTime = timing.PatternStartTime;
+        InputStartTime = timing.InputWindowStart;
 
-        Debug.Log($"[BeatGenerator] Scheduling {currentPattern.Count} beats at fresh bar");
-        Debug.Log($"  Loop beat: {metronome.loopBeatCount}");
+        double currentDsp = AudioSettings.dspTime;
+        double scheduleAhead = PatternStartTime - currentDsp;
+
+        Debug.Log($"[BeatGenerator] Scheduling pattern for bar {timing.BarIndex}");
         Debug.Log($"  Pattern start: {PatternStartTime:F4}");
-        Debug.Log($"  DSP now: {AudioSettings.dspTime:F4}");
+        Debug.Log($"  DSP now: {currentDsp:F4}");
+        Debug.Log($"  Scheduling ahead by: {scheduleAhead * 1000:F1}ms");
+
+        // Schedule turn signal for this bar (in advance!)
+        if (timing.TurnSignalTime > currentDsp)
+        {
+            AudioManager.instance.PlayTurnSignal(timing.TurnSignalTime);
+            Debug.Log($"  Turn signal scheduled for: {timing.TurnSignalTime:F4}");
+        }
 
         foreach (Beat beat in currentPattern)
         {
@@ -455,6 +322,74 @@ public class BeatGenerator : MonoBehaviour
     }
     #endregion
 
+    #region Evaluation
+    /// <summary>
+    /// Evaluate the current bar and prepare the next one.
+    /// </summary>
+    private void EvaluateCurrentBar()
+    {
+        Debug.Log($"[BeatGenerator] Evaluating bar {TimingCoordinator.Instance.GetCurrentBarIndex()}");
+
+        // Perform evaluation
+        var result = evaluator.EvaluateBar(
+            playerInputReader.playerInputData,
+            scheduledBeats
+        );
+
+        // Reset input
+        playerInputReader.allowInput = false;
+        playerInputReader.ResetInputs();
+
+        // Handle state transitions
+        if (isFinalBar)
+        {
+            // Just evaluated the final bar
+            currentState = GameState.EvaluatingFinalBar;
+            Debug.Log("[BeatGenerator] *** FINAL BAR EVALUATED ***");
+
+            OnFinalBarComplete?.Invoke();
+            Invoke(nameof(HandleGameComplete), 0.5f);
+        }
+        else
+        {
+            // Normal bar - generate next pattern and schedule it
+            GenerateNewPattern();
+
+            // Advance coordinator to next bar
+            TimingCoordinator.Instance.AdvanceToNextBar();
+
+            // Schedule the newly generated pattern for the next bar
+            SchedulePattern(TimingCoordinator.Instance.CurrentBar);
+        }
+    }
+    #endregion
+
+    #region Timed Triggers
+    private double lastListeningCheck = -1;
+
+    private void CheckAndTriggerListeningAnimation()
+    {
+        var currentBar = TimingCoordinator.Instance.CurrentBar;
+        double currentTime = AudioSettings.dspTime;
+
+        // Trigger slightly before input window
+        double listeningTriggerTime = currentBar.InputWindowStart - (beatInterval / 1.5);
+
+        // Only trigger once per bar
+        if (listeningTriggerTime != lastListeningCheck &&
+            currentTime >= listeningTriggerTime &&
+            currentTime < listeningTriggerTime + 0.1) // Small window
+        {
+            if (currentState != GameState.GameComplete)
+            {
+                custardAnimator.HandleListening();
+                playerInputReader.allowInput = true;
+            }
+            lastListeningCheck = listeningTriggerTime;
+        }
+    }
+    #endregion
+
     #region Game Completion
     private void HandleGameComplete()
     {
@@ -482,26 +417,17 @@ public class BeatGenerator : MonoBehaviour
     #region Pause Handling
     public void OnPause()
     {
-        // Pause is now handled by GameClock - no local state needed
+        // Pause is handled by GameClock and TimingCoordinator
     }
 
     public void OnResume()
     {
-        // Adjust timing for pause duration
-        double pauseDuration = GameClock.Instance.GetLastPauseDuration();
-        progressionTracker.AdjustForPause(pauseDuration);
-
-        Debug.Log($"[BeatGenerator] Resumed - adjusted timing by {pauseDuration:F3}s");
+        // Timing adjustment handled by TimingCoordinator
+        Debug.Log($"[BeatGenerator] Resumed");
     }
     #endregion
 
     #region Helpers
-    private void TriggerListeningAnimation()
-    {
-        if (currentState != GameState.GameComplete)
-            custardAnimator.HandleListening();
-    }
-
     private void ClearState()
     {
         StopAllCoroutines();
@@ -512,7 +438,9 @@ public class BeatGenerator : MonoBehaviour
 
         leftBongoIndex = 0;
         rightBongoIndex = 0;
-        evaluationPending = false;
+        hasScheduledFirstPattern = false;
+        isFinalBar = false;
+        lastListeningCheck = -1;
     }
     #endregion
 
@@ -522,11 +450,7 @@ public class BeatGenerator : MonoBehaviour
         Debug.Log("[BeatGenerator] Resetting to initial state");
 
         ClearState();
-        progressionTracker.Reset();
-
         currentState = GameState.Uninitialized;
-        loopStartTime = 0;
-        totalBeatsInSong = 0;
 
         Debug.Log("[BeatGenerator] Reset complete");
     }

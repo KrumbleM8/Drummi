@@ -6334,7 +6334,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
   m_AnchorMax: {x: 1, y: 0}
-  m_AnchoredPosition: {x: 0.00012207031, y: 0}
+  m_AnchoredPosition: {x: 0, y: 0}
   m_SizeDelta: {x: 0.000061035, y: 447.0062}
   m_Pivot: {x: 0.5, y: 0}
 --- !u!114 &808629328
@@ -6563,6 +6563,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 891851643}
+  - component: {fileID: 891851653}
   - component: {fileID: 891851648}
   - component: {fileID: 891851644}
   - component: {fileID: 891851645}
@@ -6607,11 +6608,11 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   metronome: {fileID: 1433809952}
-  beatVisualScheduler: {fileID: 891851645}
-  playerInputVisual: {fileID: 891851649}
   evaluator: {fileID: 891851647}
   playerInputReader: {fileID: 891851646}
   custardAnimator: {fileID: 1762856858}
+  beatVisualScheduler: {fileID: 891851645}
+  playerInputVisual: {fileID: 891851649}
   leftBongoSources:
   - {fileID: 2016316985}
   - {fileID: 2078348658}
@@ -6646,21 +6647,10 @@ MonoBehaviour:
   - {fileID: 1438881233}
   - {fileID: 781531612}
   - {fileID: 610860821}
-  maxBeats: 8
   difficultyIndex: 2
   maxSameSideHits: 2
-  evaluationBeatThreshold: 7.5
-  patternStartTime: 0
-  playbackOffset: 0
-  normalGeneration: 1
-  barsBeforeEndToStopGeneration: 4
   barsBeforeEndForFinalBar: 1
-  delayBeforeTransition: 1.4
-  totalBeatsInSong: 0
-  songEndTime: 0
-  screenTransition: {fileID: 437680356}
-  scoreScreenMenu: {fileID: 373518196}
-  gameplayElements: {fileID: 1850612188}
+  delayBeforeResults: 2
 --- !u!114 &891851645
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -6711,21 +6701,14 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   beatGenerator: {fileID: 891851644}
-  visualScheduler: {fileID: 891851649}
-  hitGrader: {fileID: 891851650}
-  feedbackText: {fileID: 1355182411}
-  feedbackYOffset: -278
   custardAnimator: {fileID: 1762856858}
+  scoreText: {fileID: 463733841}
   perfectThreshold: 0.03
   goodThreshold: 0.07
-  scoreText: {fileID: 463733841}
-  score: 0
-  hasFailedOnce: 0
-  perfectHits: 0
-  allowedMistakes: 1
   perfectReward: 200
   goodReward: 100
   passableReward: 50
+  allowedMistakes: 1
 --- !u!114 &891851648
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -6742,17 +6725,17 @@ MonoBehaviour:
   beatGenerator: {fileID: 891851644}
   beatEvaluator: {fileID: 891851647}
   visualScheduler: {fileID: 891851645}
-  playerInputVisualHandler: {fileID: 891851649}
+  playerInputVisual: {fileID: 891851649}
+  timingCoordinator: {fileID: 891851653}
+  screenTransition: {fileID: 437680356}
+  menuManager: {fileID: 1601808757}
+  gameplayElements: {fileID: 1850612188}
+  pageToCloseOnStart: {fileID: 1373578962}
   gameplayElementsObject: {fileID: 1850612188}
   blinking: {fileID: 1762856860}
   pauseHandler: {fileID: 891851652}
   sceneLoader: {fileID: 0}
-  screenTransition: {fileID: 437680356}
-  pageToCloseOnStart: {fileID: 1373578962}
-  gameplayElements: {fileID: 1850612188}
-  beatVisualScheduler: {fileID: 891851645}
-  playerInputVisual: {fileID: 891851649}
-  menuManager: {fileID: 1601808757}
+  barsBeforeEndForFinalBar: 1
 --- !u!114 &891851649
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -6770,7 +6753,6 @@ MonoBehaviour:
   inputIndicatorPrefab: {fileID: 2066059053099723872, guid: a64f9378c39e11f479d50bfb842dc6ab, type: 3}
   metronome: {fileID: 1433809952}
   beatGenerator: {fileID: 891851644}
-  fullLoopBeats: 8
   leadInBeats: 1
   offScreenPadding: -490
 --- !u!114 &891851650
@@ -6820,6 +6802,18 @@ MonoBehaviour:
   beatEvaluator: {fileID: 891851647}
   visualScheduler: {fileID: 891851645}
   playerInputVisualHandler: {fileID: 891851649}
+--- !u!114 &891851653
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 891851642}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 54df0618a1d8099479d1a60c9be57818, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
 --- !u!224 &897368736 stripped
 RectTransform:
   m_CorrespondingSourceObject: {fileID: 2040462333756127397, guid: 09a82d829ba59174cac0e9f9b91043b3, type: 3}
@@ -9172,7 +9166,7 @@ MonoBehaviour:
   musicTracks:
   - {fileID: 8300000, guid: 18417d6443a7fb04bb4105ec5eff712b, type: 3}
   - {fileID: 8300000, guid: 83a7a8a481b489244ac4a683264864bd, type: 3}
-  - {fileID: 8300000, guid: 7bb09fd544796c946b1f2554041ad786, type: 3}
+  - {fileID: 8300000, guid: a5005da62f088cb43a5e3a918a7f5517, type: 3}
   bongoSounds:
   - {fileID: 8300000, guid: 3e52228fda3fad64aabad0a85443b431, type: 3}
   - {fileID: 8300000, guid: 25fccdb7f43f5304bb52b298b37d100e, type: 3}
@@ -11851,15 +11845,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 88058cc12dcf5924ab66917921cfdd23, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  playTick: 0
   bpm: 105
-  nextTick: 0
-  startTick: 0
+  playTick: 0
   speaker: {fileID: 1433809951}
   beatCount: 0
-  loopBeatCount: 0
-  timePerTick: 0
-  hasEverStarted: 0
 --- !u!4 &1433809953
 Transform:
   m_ObjectHideFlags: 0
@@ -14107,33 +14096,33 @@ MonoBehaviour:
   - pageName: Intro
     pageTransform: {fileID: 685055644}
     onScreenPosition: {x: 0, y: 0}
-    offScreenLeftPosition: {x: -682.44, y: 0}
-    offScreenRightPosition: {x: 682.44, y: 0}
+    offScreenLeftPosition: {x: -585.83997, y: 0}
+    offScreenRightPosition: {x: 585.83997, y: 0}
   - pageName: Main
     pageTransform: {fileID: 686828141}
     onScreenPosition: {x: 0, y: 0}
-    offScreenLeftPosition: {x: -682.44, y: 0}
-    offScreenRightPosition: {x: 682.44, y: 0}
+    offScreenLeftPosition: {x: -585.83997, y: 0}
+    offScreenRightPosition: {x: 585.83997, y: 0}
   - pageName: Song
     pageTransform: {fileID: 498961237}
     onScreenPosition: {x: 0, y: 0}
-    offScreenLeftPosition: {x: -682.44, y: 0}
-    offScreenRightPosition: {x: 682.44, y: 0}
+    offScreenLeftPosition: {x: -585.83997, y: 0}
+    offScreenRightPosition: {x: 585.83997, y: 0}
   - pageName: Difficulty
     pageTransform: {fileID: 1373578963}
     onScreenPosition: {x: 0, y: 0}
-    offScreenLeftPosition: {x: -682.44, y: 0}
-    offScreenRightPosition: {x: 682.44, y: 0}
+    offScreenLeftPosition: {x: -585.83997, y: 0}
+    offScreenRightPosition: {x: 585.83997, y: 0}
   - pageName: Customize
     pageTransform: {fileID: 1030085468}
     onScreenPosition: {x: 0, y: 0}
-    offScreenLeftPosition: {x: -682.44, y: 0}
-    offScreenRightPosition: {x: 682.44, y: 0}
+    offScreenLeftPosition: {x: -585.83997, y: 0}
+    offScreenRightPosition: {x: 585.83997, y: 0}
   - pageName: Score
     pageTransform: {fileID: 373518197}
     onScreenPosition: {x: 0, y: 0}
-    offScreenLeftPosition: {x: -682.44, y: 0}
-    offScreenRightPosition: {x: 682.44, y: 0}
+    offScreenLeftPosition: {x: -585.83997, y: 0}
+    offScreenRightPosition: {x: 585.83997, y: 0}
   startingPageName: Intro
   transitionDuration: 0.5
   transitionCurve:
@@ -14692,7 +14681,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 8955039649062183717, guid: 09a82d829ba59174cac0e9f9b91043b3, type: 3}
       propertyPath: bpm
-      value: 79
+      value: 94
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
@@ -15076,7 +15065,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 1, y: 1}
   m_AnchorMax: {x: 1, y: 1}
-  m_AnchoredPosition: {x: -15.700073, y: -17}
+  m_AnchoredPosition: {x: -15.700195, y: -17}
   m_SizeDelta: {x: 109.78, y: 109.78}
   m_Pivot: {x: 1, y: 1}
 --- !u!114 &1739831860
@@ -18799,10 +18788,10 @@ SceneRoots:
   m_Roots:
   - {fileID: 279448823}
   - {fileID: 891851643}
-  - {fileID: 326466927}
   - {fileID: 1155256446}
-  - {fileID: 1762596261}
+  - {fileID: 326466927}
   - {fileID: 1433809953}
+  - {fileID: 1762596261}
   - {fileID: 519420032}
   - {fileID: 619394802}
   - {fileID: 927816622}

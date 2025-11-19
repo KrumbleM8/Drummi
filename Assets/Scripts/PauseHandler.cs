@@ -1,6 +1,8 @@
-// PauseHandler.cs - UPDATED
 using UnityEngine;
 
+/// <summary>
+/// Handles pause/resume logic with TimingCoordinator integration.
+/// </summary>
 public class PauseHandler : MonoBehaviour
 {
     [SerializeField] private Metronome metronome;
@@ -31,6 +33,8 @@ public class PauseHandler : MonoBehaviour
             if (beatGenerator && beatGenerator.enabled) beatGenerator.OnPause();
             if (playerInputVisualHandler && playerInputVisualHandler.enabled) playerInputVisualHandler.OnPause();
             if (visualScheduler && visualScheduler.enabled) visualScheduler.OnPause();
+
+            Debug.Log("[PauseHandler] Game paused");
         }
         else
         {
@@ -39,13 +43,24 @@ public class PauseHandler : MonoBehaviour
             if (AudioManager.instance != null)
                 AudioManager.instance.ResumeAllAudio();
 
-            // Notify all systems BEFORE resuming clock (so they can adjust timings)
+            // Get pause duration from GameClock
+            double pauseDuration = GameClock.Instance.GetLastPauseDuration();
+
+            // Notify TimingCoordinator FIRST (it adjusts all future timing)
+            if (TimingCoordinator.Instance != null)
+            {
+                TimingCoordinator.Instance.AdjustForPause(pauseDuration);
+            }
+
+            // Notify all systems AFTER coordinator has adjusted timing
             if (metronome && metronome.enabled) metronome.OnResume();
             if (beatGenerator && beatGenerator.enabled) beatGenerator.OnResume();
             if (playerInputVisualHandler && playerInputVisualHandler.enabled) playerInputVisualHandler.OnResume();
             if (visualScheduler && visualScheduler.enabled) visualScheduler.OnResume();
 
             GameClock.Instance.Resume(); // Resume clock LAST
+
+            Debug.Log($"[PauseHandler] Game resumed (pause duration: {pauseDuration:F3}s)");
         }
     }
 }

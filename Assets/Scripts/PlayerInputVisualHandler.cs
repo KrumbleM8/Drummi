@@ -3,6 +3,9 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 
+/// <summary>
+/// Manages player input visual feedback synchronized with TimingCoordinator.
+/// </summary>
 public class PlayerInputVisualHandler : MonoBehaviour
 {
     [Header("UI References")]
@@ -18,9 +21,6 @@ public class PlayerInputVisualHandler : MonoBehaviour
 
     private double beatDuration;
     private double barDuration;
-    private double fullLoopDuration;
-    private double fullLoopStartDspTime;
-    public int fullLoopBeats = 8;
 
     [Header("Lead-in")]
     [Tooltip("How many beats early the handle begins sliding in")]
@@ -35,16 +35,8 @@ public class PlayerInputVisualHandler : MonoBehaviour
 
     private bool isFrozen = false;
 
-    // In PlayerInputVisualHandler.cs - MODIFY OnEnable to NOT call ResetLoopStartTime
     private void OnEnable()
     {
-        if (metronome == null)
-        {
-            Debug.LogError("PlayerInputVisualHandler: Metronome reference is missing!");
-            enabled = false;
-            return;
-        }
-
         isFrozen = false;
 
         if (inputSlider != null)
@@ -61,11 +53,10 @@ public class PlayerInputVisualHandler : MonoBehaviour
         {
             beatGenerator.OnFinalBarComplete -= FreezeVisuals;
             beatGenerator.OnFinalBarComplete += FreezeVisuals;
-
         }
         else
         {
-            Debug.LogError("PlayerInputVisualHandler: BeatGenerator reference is missing! Assign it in Inspector.");
+            Debug.LogError("PlayerInputVisualHandler: BeatGenerator reference is missing!");
         }
     }
 
@@ -96,14 +87,22 @@ public class PlayerInputVisualHandler : MonoBehaviour
 
     public void InitializeBeatValues()
     {
+        if (metronome == null)
+        {
+            Debug.LogError("PlayerInputVisualHandler: Metronome reference is missing!");
+            return;
+        }
+
         beatDuration = 60.0 / metronome.bpm;
         barDuration = 4 * beatDuration;
-        fullLoopDuration = fullLoopBeats * beatDuration;
-        fullLoopStartDspTime = AudioSettings.dspTime;
+
+        Debug.Log("PlayerInputVisualHandler: Beat values initialized");
     }
 
     private void CacheHandlePositions()
     {
+        if (inputSlider == null) return;
+
         inputSlider.value = 0f;
         handleRect = inputSlider.handleRect;
         readyPos = handleRect.anchoredPosition;
@@ -116,39 +115,42 @@ public class PlayerInputVisualHandler : MonoBehaviour
 
     private void Update()
     {
-        if (GameClock.Instance.IsPaused) return;
-        if (isFrozen) return;
+        if (GameClock.Instance.IsPaused || isFrozen) return;
 
+        // Use TimingCoordinator for timing
+        var coordinator = TimingCoordinator.Instance;
+        if (coordinator == null) return;
+
+        var currentBar = coordinator.CurrentBar;
         double currentTime = AudioSettings.dspTime;
-        double elapsedLoop = currentTime - fullLoopStartDspTime;
 
-        // Use while instead of if to handle large jumps (e.g. after hiccups)
-        while (elapsedLoop >= fullLoopDuration)
-        {
-            fullLoopStartDspTime += fullLoopDuration;
-            elapsedLoop = currentTime - fullLoopStartDspTime;
-        }
+        // Calculate lead-in start time
+        double leadInStart = currentBar.BarStartTime + (barDuration - (beatDuration * leadInBeats));
+        double elapsedSinceBarStart = currentTime - currentBar.BarStartTime;
 
-        double leadInStart = barDuration - (beatDuration * leadInBeats);
-
-        if (elapsedLoop < leadInStart)
+        // Before lead-in: handle is parked off-screen
+        if (elapsedSinceBarStart < (barDuration - (beatDuration * leadInBeats)))
         {
             handleRect.anchoredPosition = parkedPos;
             inputSlider.value = 0f;
             return;
         }
 
-        if (elapsedLoop < barDuration)
+        // During lead-in: slide handle from parked to ready position
+        if (elapsedSinceBarStart < barDuration)
         {
-            double leadElapsed = elapsedLoop - leadInStart;
+            double leadElapsed = currentTime - leadInStart;
             float t = (float)(leadElapsed / (beatDuration * leadInBeats));
+            t = Mathf.Clamp01(t);
             handleRect.anchoredPosition = Vector2.Lerp(parkedPos, readyPos, t);
             inputSlider.value = 0f;
             return;
         }
 
-        double elapsedBar = elapsedLoop - barDuration;
-        float progress = (float)(elapsedBar / barDuration);
+        // During input window: slider progresses
+        double elapsedInInputWindow = currentTime - currentBar.InputWindowStart;
+        float progress = (float)(elapsedInInputWindow / barDuration);
+        progress = Mathf.Clamp01(progress);
         inputSlider.value = progress;
     }
 
@@ -184,37 +186,31 @@ public class PlayerInputVisualHandler : MonoBehaviour
 
     public void OnPause()
     {
-
+        // Pause handling done by GameClock and TimingCoordinator
     }
 
     public void OnResume()
     {
-
+        // Timing adjustment handled by TimingCoordinator
     }
 
     public void CleanupAndDisable()
     {
         Debug.Log("[PlayerInputVisualHandler] Cleaning up before disable");
 
-        // Stop any ongoing transitions
         StopAllCoroutines();
-
-        // Remove all spawned indicators
         ResetVisuals();
 
-        // Reset slider to start
         if (inputSlider != null)
         {
             inputSlider.value = 0f;
         }
 
-        // Reset handle position to parked (off-screen)
         if (handleRect != null)
         {
             handleRect.anchoredPosition = parkedPos;
         }
 
-        // Disable the component
         enabled = false;
 
         Debug.Log("[PlayerInputVisualHandler] Cleanup complete");
@@ -239,31 +235,23 @@ public class PlayerInputVisualHandler : MonoBehaviour
 
         isFrozen = false;
 
-        // DON'T call ResetLoopStartTime() or InitializeBeatValues() here
-        // Timing will be synced when game starts
-
         Debug.Log("[PlayerInputVisualHandler] Reset complete");
     }
 
-    private void ResetLoopStartTime()
+    /// <summary>
+    /// Sync with TimingCoordinator (replaces old metronome sync).
+    /// </summary>
+    public void SyncWithTimingCoordinator()
     {
-        fullLoopStartDspTime = AudioSettings.dspTime;
-    }
-
-    // In PlayerInputVisualHandler.cs - ADD SyncWithMetronome method
-    // In PlayerInputVisualHandler.cs - MODIFY to accept cached time
-    public void SyncWithMetronome(double nextBeatTime)
-    {
-        if (metronome == null)
+        if (TimingCoordinator.Instance == null)
         {
-            Debug.LogError("[PlayerInputVisualHandler] Cannot sync - metronome is null");
+            Debug.LogError("[PlayerInputVisualHandler] Cannot sync - TimingCoordinator is null");
             return;
         }
 
         inputSlider.value = 0f;
-
         InitializeBeatValues();
 
-        Debug.Log($"[PlayerInputVisualHandler] Synced - nextBeat: {nextBeatTime:F4}");
+        Debug.Log($"[PlayerInputVisualHandler] Synced with TimingCoordinator");
     }
 }

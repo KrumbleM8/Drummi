@@ -1,9 +1,9 @@
-using System.Collections;
+﻿using System.Collections;
 using UnityEngine;
 
 /// <summary>
 /// Central game coordinator. Manages game lifecycle and orchestrates subsystems.
-/// Simplified initialization flow with clear state management.
+/// REFACTORED: Uses TimingCoordinator for synchronized timing
 /// </summary>
 public class GameManager : MonoBehaviour
 {
@@ -28,6 +28,7 @@ public class GameManager : MonoBehaviour
     [SerializeField] private BeatEvaluator beatEvaluator;
     [SerializeField] private BeatVisualScheduler visualScheduler;
     [SerializeField] private PlayerInputVisualHandler playerInputVisual;
+    [SerializeField] private TimingCoordinator timingCoordinator;
 
     [Header("UI & Transitions")]
     [SerializeField] private ScreenTransition screenTransition;
@@ -36,12 +37,15 @@ public class GameManager : MonoBehaviour
     [SerializeField] private GameObject pageToCloseOnStart;
 
     [Header("Misc")]
-    [SerializeField] private GameObject gameplayElementsObject; // TODO: Consolidate with gameplayElements
+    [SerializeField] private GameObject gameplayElementsObject;
     [SerializeField] private EyeBlinker blinking;
 
     [Header("Delegates")]
     [SerializeField] private PauseHandler pauseHandler;
     [SerializeField] private SceneLoadManager sceneLoader;
+
+    [Header("Song Progression")]
+    [SerializeField] private int barsBeforeEndForFinalBar = 1;
     #endregion
 
     #region Game State
@@ -54,7 +58,6 @@ public class GameManager : MonoBehaviour
     }
 
     private GamePhase currentPhase = GamePhase.Menu;
-    private bool hasEverPlayed = false; // Track if this is first play or replay
     #endregion
 
     #region Lifecycle
@@ -77,7 +80,6 @@ public class GameManager : MonoBehaviour
 
     private void OnDestroy()
     {
-        // Unsubscribe to prevent memory leaks
         if (beatGenerator != null)
         {
             beatGenerator.OnSongComplete -= HandleSongComplete;
@@ -86,9 +88,6 @@ public class GameManager : MonoBehaviour
     #endregion
 
     #region Public API - Game Control
-    /// <summary>
-    /// Start a new game session.
-    /// </summary>
     public void StartGame()
     {
         if (currentPhase == GamePhase.Playing)
@@ -100,9 +99,6 @@ public class GameManager : MonoBehaviour
         StartCoroutine(StartGameSequence());
     }
 
-    /// <summary>
-    /// Set difficulty level (0=starter, 1=standard, 2=spicy).
-    /// </summary>
     public void SetDifficulty(int difficultyIndex)
     {
         if (beatGenerator != null)
@@ -112,9 +108,6 @@ public class GameManager : MonoBehaviour
         }
     }
 
-    /// <summary>
-    /// Set music track and BPM.
-    /// </summary>
     public void SetMusic(int songIndex)
     {
         if (metronome == null || AudioManager.instance == null)
@@ -128,22 +121,15 @@ public class GameManager : MonoBehaviour
         {
             0 => 111,
             1 => 111,
-            2 => 79,
+            2 => 94,
             _ => 105
         };
 
-        // Set audio manager's selected song
         AudioManager.instance.selectedSongIndex = songIndex;
-
-        // Notify subsystems to recalculate beat intervals
-        InitializeSubsystemTiming();
 
         Debug.Log($"[GameManager] Music set to index {songIndex}, BPM: {metronome.bpm}");
     }
 
-    /// <summary>
-    /// Toggle pause state.
-    /// </summary>
     public void TogglePause()
     {
         if (pauseHandler != null)
@@ -152,9 +138,6 @@ public class GameManager : MonoBehaviour
         }
     }
 
-    /// <summary>
-    /// Reset game and return to main menu.
-    /// </summary>
     public void ResetDrummi()
     {
         if (sceneLoader != null)
@@ -180,36 +163,74 @@ public class GameManager : MonoBehaviour
         // 3. Screen transition (reveal)
         screenTransition.StartReveal();
 
-        // 4. Initialize game systems
-        InitializeGameSystems();
+        // 4. Calculate synchronized start time with minimal lookahead
+        const double LOOKAHEAD_TIME = 0.05; // 50ms - minimal but safe
+        double synchronizedStartTime = AudioSettings.dspTime + LOOKAHEAD_TIME;
 
-        // 5. Prepare metronome
-        PrepareMetronome();
-        metronome.Initialize();
+        Debug.Log($"[GameManager] === SYNCHRONIZED TIMING ===");
+        Debug.Log($"  Current DSP: {AudioSettings.dspTime:F4}");
+        Debug.Log($"  Start time: {synchronizedStartTime:F4}");
+        Debug.Log($"  Lookahead: {LOOKAHEAD_TIME * 1000:F1}ms");
 
-        // 6. Get synchronized start time
-        double startTime = metronome.VirtualDspTime;
-        Debug.Log($"[GameManager] Synchronized start time: {startTime:F4}");
-
-        // 7. Schedule music
-        ScheduleMusic(startTime);
-
-        // 8. Enable metronome if needed (first play)
-        if (!hasEverPlayed && metronome != null)
+        // 5. Get song info
+        AudioClip clip = AudioManager.instance.musicTracks[AudioManager.instance.selectedSongIndex];
+        if (clip == null)
         {
-            metronome.enabled = true;
-            Debug.Log("[GameManager] Metronome enabled (first play)");
+            Debug.LogError("[GameManager] Song clip is null!");
+            yield break;
         }
 
-        // 9. Synchronize visual systems
-        SynchronizeVisuals(startTime);
+        double beatInterval = 60.0 / metronome.bpm;
+        int totalBeats = Mathf.FloorToInt((float)(clip.length / beatInterval));
 
-        // 10. Start beat generator gameplay
-        beatGenerator.StartGameplay(startTime);
+        Debug.Log($"  Song: {clip.name}");
+        Debug.Log($"  BPM: {metronome.bpm}");
+        Debug.Log($"  Total beats: {totalBeats}");
+        Debug.Log($"  Duration: {clip.length:F2}s");
 
-        // 11. Mark state
+        // 6. Initialize TimingCoordinator FIRST (single source of truth)
+        if (timingCoordinator != null)
+        {
+            timingCoordinator.Initialize(
+                synchronizedStartTime,
+                metronome.bpm,
+                totalBeats,
+                barsBeforeEndForFinalBar
+            );
+        }
+        else
+        {
+            Debug.LogError("[GameManager] TimingCoordinator is missing!");
+            yield break;
+        }
+
+        // 7. Initialize game systems with synchronized timing
+        InitializeGameSystems();
+
+        // 8. Initialize metronome (for visual feedback only)
+        if (metronome != null)
+        {
+            metronome.InitializeWithStartTime(synchronizedStartTime);
+            metronome.enabled = true;
+        }
+
+        // 9. Schedule music
+        ScheduleMusic(synchronizedStartTime);
+
+        // 10. Synchronize visual systems
+        SynchronizeVisuals();
+
+        // 11. Start beat generator gameplay
+        beatGenerator.StartGameplay(synchronizedStartTime);
+
+        // 12. Reset GameClock
+        if (GameClock.Instance != null)
+        {
+            GameClock.Instance.Reset();
+        }
+
+        // 13. Mark state
         currentPhase = GamePhase.Playing;
-        hasEverPlayed = true;
 
         Debug.Log("=== GAME SEQUENCE COMPLETE ===");
 
@@ -234,13 +255,11 @@ public class GameManager : MonoBehaviour
 
     private void SetupGameplayUI()
     {
-        // Hide menu page
         if (pageToCloseOnStart != null)
         {
             pageToCloseOnStart.SetActive(false);
         }
 
-        // Show gameplay elements
         if (gameplayElements != null)
         {
             gameplayElements.SetActive(true);
@@ -251,7 +270,6 @@ public class GameManager : MonoBehaviour
             gameplayElementsObject.SetActive(true);
         }
 
-        // Disable eye blink animation during gameplay
         if (blinking != null)
         {
             blinking.enabled = false;
@@ -264,13 +282,6 @@ public class GameManager : MonoBehaviour
 
     private void InitializeGameSystems()
     {
-        // Reset game clock if this is a replay
-        if (hasEverPlayed && GameClock.Instance != null)
-        {
-            GameClock.Instance.Reset();
-            Debug.Log("[GameManager] GameClock reset for replay");
-        }
-
         // Initialize beat generator with song parameters
         if (beatGenerator != null)
         {
@@ -298,20 +309,6 @@ public class GameManager : MonoBehaviour
         }
     }
 
-    private void PrepareMetronome()
-    {
-        if (metronome == null) return;
-
-        // On replay, metronome is already enabled but needs timing refresh
-        if (hasEverPlayed)
-        {
-            metronome.RefreshTimingForGameStart();
-            metronome.enabled = true;
-            Debug.Log("[GameManager] Metronome timing refreshed for replay");
-        }
-        // On first play, metronome.Start() will be called when enabled later
-    }
-
     private void ScheduleMusic(double startTime)
     {
         if (AudioManager.instance == null)
@@ -326,29 +323,20 @@ public class GameManager : MonoBehaviour
         Debug.Log($"[GameManager] Music scheduled at: {startTime:F4}");
     }
 
-    private void SynchronizeVisuals(double startTime)
+    private void SynchronizeVisuals()
     {
+        // Visual systems now use TimingCoordinator directly
         if (visualScheduler != null)
         {
-            visualScheduler.SyncWithMetronome(startTime);
+            visualScheduler.SyncWithTimingCoordinator();
         }
 
         if (playerInputVisual != null)
         {
-            playerInputVisual.SyncWithMetronome(startTime);
+            playerInputVisual.SyncWithTimingCoordinator();
         }
 
-        Debug.Log("[GameManager] Visuals synchronized");
-    }
-
-    private void InitializeSubsystemTiming()
-    {
-        // Notify all systems that BPM has changed
-        if (visualScheduler != null) visualScheduler.InitalizeBeatValues();
-        if (playerInputVisual != null) playerInputVisual.InitializeBeatValues();
-        if (beatGenerator != null) beatGenerator.Initialize((int)metronome.bpm, AudioManager.instance.selectedSongIndex);
-
-        Debug.Log("[GameManager] Subsystem timing initialized");
+        Debug.Log("[GameManager] Visuals synchronized with TimingCoordinator");
     }
     #endregion
 
@@ -400,14 +388,12 @@ public class GameManager : MonoBehaviour
 
     private void CleanupGameplaySystems()
     {
-        // Hide gameplay elements
         if (gameplayElements != null)
         {
             gameplayElements.SetActive(false);
             Debug.Log("[GameManager] Gameplay elements hidden");
         }
 
-        // Cleanup visual schedulers
         if (visualScheduler != null)
         {
             visualScheduler.CleanupAndDisable();
@@ -420,7 +406,6 @@ public class GameManager : MonoBehaviour
             Debug.Log("[GameManager] PlayerInputVisualHandler cleaned up");
         }
 
-        // Disable metronome
         if (metronome != null && metronome.enabled)
         {
             metronome.ResetToInitialState();
@@ -428,14 +413,12 @@ public class GameManager : MonoBehaviour
             Debug.Log("[GameManager] Metronome disabled");
         }
 
-        // Cleanup beat generator
         if (beatGenerator != null)
         {
             beatGenerator.ResetToInitialState();
             Debug.Log("[GameManager] BeatGenerator cleaned up");
         }
 
-        // Stop music
         if (AudioManager.instance != null)
         {
             AudioManager.instance.StopMusic();
@@ -451,10 +434,8 @@ public class GameManager : MonoBehaviour
             return;
         }
 
-        // Show score page
         menuManager.ShowPageImmediate("Score");
 
-        // Find and initialize score screen
         var scoreScreen = menuManager.currentPage.pageTransform.GetComponent<ScoreScreen>();
         if (scoreScreen != null && beatEvaluator != null)
         {
@@ -469,9 +450,6 @@ public class GameManager : MonoBehaviour
         currentPhase = GamePhase.Menu;
     }
 
-    /// <summary>
-    /// Reset all game values to initial state. Called when returning to menu.
-    /// </summary>
     public void ResetGameValues()
     {
         Debug.Log("[GameManager] Resetting game values");
@@ -482,8 +460,8 @@ public class GameManager : MonoBehaviour
         if (metronome != null) metronome.ResetToInitialState();
         if (beatEvaluator != null) beatEvaluator.ResetScore();
         if (GameClock.Instance != null) GameClock.Instance.Reset();
+        if (timingCoordinator != null) timingCoordinator.Reset();
 
-        hasEverPlayed = false;
         currentPhase = GamePhase.Menu;
 
         Debug.Log("[GameManager] Reset complete");

@@ -2,6 +2,9 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 
+/// <summary>
+/// Manages visual beat indicators synchronized with TimingCoordinator.
+/// </summary>
 public class BeatVisualScheduler : MonoBehaviour
 {
     public CustardAnimationHandler custardAnimator;
@@ -19,15 +22,12 @@ public class BeatVisualScheduler : MonoBehaviour
 
     private double barDuration;
     private double fullLoopDuration;
-    private double fullLoopStartDspTime;
     public int fullLoopBeats = 8;
-
-    private double VirtualDspTime() => metronome.VirtualDspTime;
 
     private bool isFrozen = false;
     private float frozenSliderValue = 1f;
 
-    public double scheduledTimeOffset = 0.003f;
+    public double scheduledTimeOffset = 0.0; // No longer needed with coordinator
 
     private class ScheduledVisualEvent
     {
@@ -39,16 +39,6 @@ public class BeatVisualScheduler : MonoBehaviour
 
     private void OnEnable()
     {
-        if (metronome == null)
-        {
-            Debug.LogError("BeatVisualScheduler: Metronome reference is missing!");
-            enabled = false;
-            return;
-        }
-
-        // DON'T call ResetLoopStartTime() here!
-        // Timing will be set explicitly when synchronized with metronome
-
         isFrozen = false;
 
         if (barSlider != null)
@@ -64,13 +54,8 @@ public class BeatVisualScheduler : MonoBehaviour
         }
         else
         {
-            Debug.LogError("BeatVisualScheduler: BeatGenerator reference is missing! Assign it in Inspector.");
+            Debug.LogError("BeatVisualScheduler: BeatGenerator reference is missing!");
         }
-    }
-
-    private void Start()
-    {
-
     }
 
     private void OnDisable()
@@ -83,12 +68,17 @@ public class BeatVisualScheduler : MonoBehaviour
 
     public void InitalizeBeatValues()
     {
+        if (metronome == null)
+        {
+            Debug.LogError("BeatVisualScheduler: Metronome reference is missing!");
+            return;
+        }
+
         double beatDuration = 60.0 / metronome.bpm;
         barDuration = 4 * beatDuration;
         fullLoopDuration = fullLoopBeats * beatDuration;
-        fullLoopStartDspTime = VirtualDspTime();
+
         Debug.Log("BeatVisualScheduler: Beat values initialized");
-        Debug.Log("BeatVisualScheduler: fullLoopStartDspTime = " + fullLoopStartDspTime);
     }
 
     private void Update()
@@ -102,25 +92,30 @@ public class BeatVisualScheduler : MonoBehaviour
             return;
         }
 
-        double currentTime = VirtualDspTime();
-        double elapsedLoop = currentTime - fullLoopStartDspTime;
+        // Use TimingCoordinator for timing
+        var coordinator = TimingCoordinator.Instance;
+        if (coordinator == null) return;
 
-        // Use while instead of if to handle large jumps (e.g. after hiccups)
-        while (elapsedLoop >= fullLoopDuration)
-        {
-            fullLoopStartDspTime += fullLoopDuration;
-            elapsedLoop = currentTime - fullLoopStartDspTime;
-        }
+        var currentBar = coordinator.CurrentBar;
+        double currentTime = AudioSettings.dspTime;
 
-        if (elapsedLoop < barDuration)
+        // Calculate progress within the current bar (first 4 beats)
+        double elapsedInBar = currentTime - currentBar.BarStartTime;
+
+        if (elapsedInBar < barDuration && elapsedInBar >= 0)
         {
-            barSlider.value = (float)(elapsedLoop / barDuration);
+            barSlider.value = (float)(elapsedInBar / barDuration);
         }
-        else
+        else if (elapsedInBar >= barDuration)
         {
             barSlider.value = 1f;
         }
+        else
+        {
+            barSlider.value = 0f;
+        }
 
+        // Process scheduled visual events
         List<ScheduledVisualEvent> triggeredEvents = new List<ScheduledVisualEvent>();
         foreach (var evt in scheduledEvents)
         {
@@ -161,11 +156,10 @@ public class BeatVisualScheduler : MonoBehaviour
     {
         if (isFrozen) return;
 
-        double virtualScheduledTime = scheduledTimeDsp + scheduledTimeOffset;
-
+        // No offset needed - TimingCoordinator handles all timing
         ScheduledVisualEvent newEvent = new ScheduledVisualEvent
         {
-            scheduledTime = virtualScheduledTime,
+            scheduledTime = scheduledTimeDsp,
             isRightBongo = isRightBongo
         };
         scheduledEvents.Add(newEvent);
@@ -224,31 +218,21 @@ public class BeatVisualScheduler : MonoBehaviour
 
     public void OnPause()
     {
-
+        // Pause handling done by GameClock and TimingCoordinator
     }
 
     public void OnResume()
     {
-        if (GameClock.Instance.IsPaused)
-        {
-            double pauseDuration = AudioSettings.dspTime - GameClock.Instance.GetPauseStartTime();
-
-            // Preserve current loop phase when resuming
-            fullLoopStartDspTime = VirtualDspTime() - (VirtualDspTime() - fullLoopStartDspTime);
-        }
+        // Timing adjustment handled by TimingCoordinator
     }
 
     public void CleanupAndDisable()
     {
         Debug.Log("[BeatVisualScheduler] Cleaning up before disable");
 
-        // Stop any ongoing transitions
         StopAllCoroutines();
-
-        // Clear all scheduled events
         scheduledEvents.Clear();
 
-        // Remove all spawned indicators
         if (indicatorParent != null)
         {
             for (int i = indicatorParent.childCount - 1; i >= 0; i--)
@@ -257,15 +241,12 @@ public class BeatVisualScheduler : MonoBehaviour
             }
         }
 
-        // Reset slider to start
         if (barSlider != null)
         {
             barSlider.value = 0f;
             frozenSliderValue = 0f;
         }
-        
 
-        // Disable the component
         enabled = false;
 
         Debug.Log("[BeatVisualScheduler] Cleanup complete");
@@ -294,27 +275,23 @@ public class BeatVisualScheduler : MonoBehaviour
         isFrozen = false;
         frozenSliderValue = 0f;
 
-        // DON'T call ResetLoopStartTime() here!
-        // Timing will be synchronized when game starts
-
         Debug.Log("[BeatVisualScheduler] Reset complete");
     }
-    // In BeatVisualScheduler.cs - MODIFY to accept cached time
-    public void SyncWithMetronome(double nextBeatTime)
+
+    /// <summary>
+    /// Sync with TimingCoordinator (replaces old metronome sync).
+    /// </summary>
+    public void SyncWithTimingCoordinator()
     {
-        if (metronome == null)
+        if (TimingCoordinator.Instance == null)
         {
-            Debug.LogError("[BeatVisualScheduler] Cannot sync - metronome is null");
+            Debug.LogError("[BeatVisualScheduler] Cannot sync - TimingCoordinator is null");
             return;
         }
 
         barSlider.value = 0f;
         InitalizeBeatValues();
 
-        Debug.Log($"[BeatVisualScheduler] Synced - nextBeat: {nextBeatTime:F4}, fullLoopStartDspTime: {fullLoopStartDspTime:F4}");
-    }
-    private void ResetLoopStartTime()
-    {
-        fullLoopStartDspTime = VirtualDspTime();
+        Debug.Log($"[BeatVisualScheduler] Synced with TimingCoordinator");
     }
 }
