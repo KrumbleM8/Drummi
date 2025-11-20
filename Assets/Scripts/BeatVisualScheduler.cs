@@ -97,7 +97,7 @@ public class BeatVisualScheduler : MonoBehaviour
         if (coordinator == null) return;
 
         var currentBar = coordinator.CurrentBar;
-        double currentTime = AudioSettings.dspTime;
+        double currentTime = GameClock.Instance.GameTime;
 
         // Calculate progress within the current bar (first 4 beats)
         double elapsedInBar = currentTime - currentBar.BarStartTime;

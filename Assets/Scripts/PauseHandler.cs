@@ -1,7 +1,8 @@
-using UnityEngine;
+﻿using UnityEngine;
 
 /// <summary>
-/// Handles pause/resume logic with TimingCoordinator integration.
+/// Handles pause/resume logic with virtual time system.
+/// Virtual time automatically handles pause duration - no manual adjustment needed!
 /// </summary>
 public class PauseHandler : MonoBehaviour
 {
@@ -22,45 +23,50 @@ public class PauseHandler : MonoBehaviour
         if (!GameClock.Instance.IsPaused)
         {
             // === PAUSE ===
-            GameClock.Instance.Pause(); // Pause clock FIRST
+            Debug.Log("[PauseHandler] === PAUSING ===");
 
+            // 1. Notify systems FIRST (cancel scheduled audio, stop coroutines)
+            if (beatGenerator && beatGenerator.enabled) beatGenerator.OnPause();
+            if (metronome && metronome.enabled) metronome.OnPause();
+            if (playerInputVisualHandler && playerInputVisualHandler.enabled) playerInputVisualHandler.OnPause();
+            if (visualScheduler && visualScheduler.enabled) visualScheduler.OnPause();
+
+            // 2. Pause GameClock (records pause start, freezes virtual time)
+            GameClock.Instance.Pause();
+
+            // 3. Pause time and audio
             Time.timeScale = 0f;
             if (AudioManager.instance != null)
                 AudioManager.instance.PauseAllAudio();
 
-            // Notify all systems
-            if (metronome && metronome.enabled) metronome.OnPause();
-            if (beatGenerator && beatGenerator.enabled) beatGenerator.OnPause();
-            if (playerInputVisualHandler && playerInputVisualHandler.enabled) playerInputVisualHandler.OnPause();
-            if (visualScheduler && visualScheduler.enabled) visualScheduler.OnPause();
-
-            Debug.Log("[PauseHandler] Game paused");
+            Debug.Log("[PauseHandler] Game paused - virtual time frozen");
         }
         else
         {
             // === RESUME ===
+            Debug.Log("[PauseHandler] === RESUMING ===");
+
+            // 1. Resume GameClock FIRST (updates totalPausedTime)
+            GameClock.Instance.Resume();
+            double pauseDuration = GameClock.Instance.GetLastPauseDuration();
+
+            Debug.Log($"[PauseHandler] Pause duration: {pauseDuration:F3}s, Total paused: {GameClock.Instance.GetTotalPausedTime():F3}s");
+
+            // 2. Resume time and audio
             Time.timeScale = 1f;
             if (AudioManager.instance != null)
                 AudioManager.instance.ResumeAllAudio();
 
-            // Get pause duration from GameClock
-            double pauseDuration = GameClock.Instance.GetLastPauseDuration();
+            // 3. NO NEED to adjust TimingCoordinator!
+            //    Virtual time system handles it automatically via VirtualToRealDsp()
 
-            // Notify TimingCoordinator FIRST (it adjusts all future timing)
-            if (TimingCoordinator.Instance != null)
-            {
-                TimingCoordinator.Instance.AdjustForPause(pauseDuration);
-            }
-
-            // Notify all systems AFTER coordinator has adjusted timing
+            // 4. Notify systems to reschedule (they reconvert virtual→real with new totalPausedTime)
             if (metronome && metronome.enabled) metronome.OnResume();
             if (beatGenerator && beatGenerator.enabled) beatGenerator.OnResume();
             if (playerInputVisualHandler && playerInputVisualHandler.enabled) playerInputVisualHandler.OnResume();
             if (visualScheduler && visualScheduler.enabled) visualScheduler.OnResume();
 
-            GameClock.Instance.Resume(); // Resume clock LAST
-
-            Debug.Log($"[PauseHandler] Game resumed (pause duration: {pauseDuration:F3}s)");
+            Debug.Log($"[PauseHandler] Game resumed - virtual time continues from {GameClock.Instance.GameTime:F4}");
         }
     }
 }

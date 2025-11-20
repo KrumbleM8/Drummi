@@ -2,8 +2,9 @@ using UnityEngine;
 
 /// <summary>
 /// Single source of truth for all game timing.
-/// Pre-calculates all timing values to eliminate drift and event latency.
-/// All times are in DSP coordinates.
+/// IMPORTANT: All times are stored in VIRTUAL coordinates (GameClock.GameTime).
+/// Virtual time = DSP time with pauses removed.
+/// When converting to schedule audio, use GameClock.VirtualToRealDsp().
 /// </summary>
 public class TimingCoordinator : MonoBehaviour
 {
@@ -22,18 +23,18 @@ public class TimingCoordinator : MonoBehaviour
     #endregion
 
     #region Timing State
-    private double gameStartTimeDsp;
+    private double gameStartTimeVirtual;  // Virtual time when game started
     private double beatInterval;
     private int currentBarIndex = -1;
     private bool isInitialized = false;
 
-    // Pre-calculated timing for current and next bar
+    // Pre-calculated timing for current and next bar (in virtual coordinates)
     public BarTiming CurrentBar { get; private set; }
     public BarTiming NextBar { get; private set; }
 
-    // Song progression
+    // Song progression (in virtual coordinates)
     private int totalBeatsInSong;
-    private double songEndTimeDsp;
+    private double songEndTimeVirtual;
     private int barsBeforeEndForFinalBar;
     private bool finalBarGenerated = false;
     #endregion
@@ -41,18 +42,18 @@ public class TimingCoordinator : MonoBehaviour
     #region Timing Structure
     /// <summary>
     /// All timing information for a single 8-beat bar cycle.
+    /// IMPORTANT: All times are in VIRTUAL coordinates.
     /// </summary>
     public struct BarTiming
     {
-        public int BarIndex;                // Which bar this is (0, 1, 2, ...)
-        public double BarStartTime;         // Beat 1 of the 8-beat cycle (DSP)
-        public double PatternStartTime;     // When to play the pattern (Beat 1 + offset)
-        public double InputWindowStart;     // When player can start inputting (Beat 5)
-        public double EvaluationTime;       // When to evaluate inputs (Beat 7.5)
-        public double NextBarStartTime;     // Beat 9 (= Beat 1 of next bar)
-        public double TurnSignalTime;       // Beat 3.5 (halfway through beat 3)
+        public int BarIndex;
+        public double BarStartTime;      // Virtual time
+        public double PatternStartTime;  // Virtual time
+        public double InputWindowStart;  // Virtual time
+        public double EvaluationTime;    // Virtual time
+        public double NextBarStartTime;  // Virtual time
+        public double TurnSignalTime;    // Virtual time
 
-        // Helper methods
         public double GetBeatTime(int beatNumber)
         {
             if (beatNumber < 1 || beatNumber > 8)
@@ -64,9 +65,9 @@ public class TimingCoordinator : MonoBehaviour
             return BarStartTime + ((beatNumber - 1) * beatInterval);
         }
 
-        public bool IsInInputWindow(double currentTime)
+        public bool IsInInputWindow(double currentVirtualTime)
         {
-            return currentTime >= InputWindowStart && currentTime < EvaluationTime;
+            return currentVirtualTime >= InputWindowStart && currentVirtualTime < EvaluationTime;
         }
 
         public override string ToString()
@@ -79,20 +80,21 @@ public class TimingCoordinator : MonoBehaviour
     #region Public API - Initialization
     /// <summary>
     /// Initialize the timing coordinator for a game session.
-    /// Call this once at game start with synchronized timing.
+    /// startTimeVirtual should be GameClock.GameTime at game start.
+    /// All timing is calculated in virtual coordinates.
     /// </summary>
-    public void Initialize(double startTimeDsp, double bpm, int totalBeats, int finalBarBuffer = 1)
+    public void Initialize(double startTimeVirtual, double bpm, int totalBeats, int finalBarBuffer = 1)
     {
-        gameStartTimeDsp = startTimeDsp;
+        gameStartTimeVirtual = startTimeVirtual;
         beatInterval = 60.0 / bpm;
         totalBeatsInSong = totalBeats;
         barsBeforeEndForFinalBar = finalBarBuffer;
-        currentBarIndex = -1; // Will become 0 on first advance
+        currentBarIndex = -1;
         finalBarGenerated = false;
 
-        // Calculate song end time
+        // Calculate song end time (virtual)
         double songDuration = totalBeats * beatInterval;
-        songEndTimeDsp = gameStartTimeDsp + songDuration;
+        songEndTimeVirtual = gameStartTimeVirtual + songDuration;
 
         // Pre-calculate first two bars
         CurrentBar = CalculateBarTiming(0);
@@ -101,13 +103,13 @@ public class TimingCoordinator : MonoBehaviour
 
         isInitialized = true;
 
-        Debug.Log($"[TimingCoordinator] === INITIALIZED ===");
-        Debug.Log($"  Start time (DSP): {startTimeDsp:F4}");
+        Debug.Log($"[TimingCoordinator] === INITIALIZED (Virtual Time) ===");
+        Debug.Log($"  Start time (Virtual): {startTimeVirtual:F4}");
         Debug.Log($"  BPM: {bpm}");
         Debug.Log($"  Beat interval: {beatInterval:F4}s");
         Debug.Log($"  Total beats: {totalBeats}");
         Debug.Log($"  Song duration: {songDuration:F2}s");
-        Debug.Log($"  Song end (DSP): {songEndTimeDsp:F4}");
+        Debug.Log($"  Song end (Virtual): {songEndTimeVirtual:F4}");
         Debug.Log($"  Bar 0: {CurrentBar}");
         Debug.Log($"  Bar 1: {NextBar}");
     }
@@ -116,26 +118,27 @@ public class TimingCoordinator : MonoBehaviour
     #region Public API - Timing Queries
     /// <summary>
     /// Check if it's time to evaluate the current bar.
+    /// Uses virtual time for comparison.
     /// </summary>
     public bool ShouldEvaluateNow()
     {
         if (!isInitialized) return false;
-        return AudioSettings.dspTime >= CurrentBar.EvaluationTime;
+        return GameClock.Instance.GameTime >= CurrentBar.EvaluationTime;
     }
 
     /// <summary>
     /// Check if we should generate the final pattern.
+    /// Uses virtual time for calculations.
     /// </summary>
     public bool ShouldGenerateFinalPattern()
     {
         if (!isInitialized || finalBarGenerated) return false;
 
-        double currentTime = AudioSettings.dspTime;
-        double elapsedTime = currentTime - gameStartTimeDsp;
+        double currentTime = GameClock.Instance.GameTime;
+        double elapsedTime = currentTime - gameStartTimeVirtual;
         int currentBeat = Mathf.FloorToInt((float)(elapsedTime / beatInterval));
         int beatsUntilEnd = totalBeatsInSong - currentBeat;
 
-        // Need enough time for one full cycle (8 beats) plus buffer
         int beatsNeededForCycle = GameConstants.BEATS_PER_LOOP + (barsBeforeEndForFinalBar * GameConstants.BEATS_PER_LOOP);
 
         bool shouldGenerate = beatsUntilEnd <= beatsNeededForCycle &&
@@ -154,20 +157,22 @@ public class TimingCoordinator : MonoBehaviour
 
     /// <summary>
     /// Check if the song has completed.
+    /// Uses virtual time for comparison.
     /// </summary>
     public bool IsSongComplete()
     {
         if (!isInitialized) return false;
-        return AudioSettings.dspTime >= songEndTimeDsp;
+        return GameClock.Instance.GameTime >= songEndTimeVirtual;
     }
 
     /// <summary>
     /// Check if we're currently in the input window.
+    /// Uses virtual time for comparison.
     /// </summary>
     public bool IsInInputWindow()
     {
         if (!isInitialized) return false;
-        double currentTime = AudioSettings.dspTime;
+        double currentTime = GameClock.Instance.GameTime;
         return CurrentBar.IsInInputWindow(currentTime);
     }
 
@@ -180,12 +185,12 @@ public class TimingCoordinator : MonoBehaviour
     }
 
     /// <summary>
-    /// Get elapsed time since game start (in game time, not DSP time).
+    /// Get elapsed time since game start (in virtual time).
     /// </summary>
     public double GetElapsedGameTime()
     {
         if (!isInitialized) return 0;
-        return GameClock.Instance.GameTime - gameStartTimeDsp;
+        return GameClock.Instance.GameTime - gameStartTimeVirtual;
     }
     #endregion
 
@@ -214,14 +219,14 @@ public class TimingCoordinator : MonoBehaviour
 
     #region Timing Calculations
     /// <summary>
-    /// Calculate all timing for a specific bar.
+    /// Calculate all timing for a specific bar in virtual coordinates.
     /// </summary>
     private BarTiming CalculateBarTiming(int barIndex)
     {
         const double PATTERN_OFFSET = 0.003; // Small offset for audio scheduling
 
-        // Each bar is 8 beats
-        double barStart = gameStartTimeDsp + (barIndex * 8 * beatInterval);
+        // Each bar is 8 beats (virtual time)
+        double barStart = gameStartTimeVirtual + (barIndex * 8 * beatInterval);
 
         return new BarTiming
         {
@@ -231,45 +236,7 @@ public class TimingCoordinator : MonoBehaviour
             InputWindowStart = barStart + (4 * beatInterval), // Beat 5
             EvaluationTime = barStart + (7.5 * beatInterval), // Beat 7.5
             NextBarStartTime = barStart + (8 * beatInterval), // Beat 9
-            TurnSignalTime = barStart + (3.5 * beatInterval)  // Beat 3.5
-        };
-    }
-    #endregion
-
-    #region Pause Handling
-    /// <summary>
-    /// Adjust all timing when resuming from pause.
-    /// </summary>
-    public void AdjustForPause(double pauseDuration)
-    {
-        if (!isInitialized) return;
-
-        // Shift all times forward by pause duration
-        gameStartTimeDsp += pauseDuration;
-        songEndTimeDsp += pauseDuration;
-
-        // Recalculate current and next bar with adjusted start time
-        CurrentBar = CalculateBarTimingWithAdjustedStart(CurrentBar.BarIndex, pauseDuration);
-        NextBar = CalculateBarTimingWithAdjustedStart(NextBar.BarIndex, pauseDuration);
-
-        Debug.Log($"[TimingCoordinator] Adjusted for pause: +{pauseDuration:F3}s");
-        Debug.Log($"  New current bar: {CurrentBar}");
-    }
-
-    private BarTiming CalculateBarTimingWithAdjustedStart(int barIndex, double adjustment)
-    {
-        const double PATTERN_OFFSET = 0.003;
-        double barStart = gameStartTimeDsp + (barIndex * 8 * beatInterval);
-
-        return new BarTiming
-        {
-            BarIndex = barIndex,
-            BarStartTime = barStart,
-            PatternStartTime = barStart + PATTERN_OFFSET,
-            InputWindowStart = barStart + (4 * beatInterval),
-            EvaluationTime = barStart + (7.5 * beatInterval),
-            NextBarStartTime = barStart + (8 * beatInterval),
-            TurnSignalTime = barStart + (3.75 * beatInterval)
+            TurnSignalTime = barStart + (3.5 * beatInterval)  // Beat 4.5
         };
     }
     #endregion
@@ -283,8 +250,8 @@ public class TimingCoordinator : MonoBehaviour
         isInitialized = false;
         currentBarIndex = -1;
         finalBarGenerated = false;
-        gameStartTimeDsp = 0;
-        songEndTimeDsp = 0;
+        gameStartTimeVirtual = 0;
+        songEndTimeVirtual = 0;
         totalBeatsInSong = 0;
 
         Debug.Log("[TimingCoordinator] Reset");
@@ -299,17 +266,17 @@ public class TimingCoordinator : MonoBehaviour
     {
         if (!isInitialized) return "[TimingCoordinator] Not initialized";
 
-        double currentTime = AudioSettings.dspTime;
-        double timeSinceStart = currentTime - gameStartTimeDsp;
+        double currentTime = GameClock.Instance.GameTime;
+        double timeSinceStart = currentTime - gameStartTimeVirtual;
         double timeUntilEval = CurrentBar.EvaluationTime - currentTime;
-        double timeUntilSongEnd = songEndTimeDsp - currentTime;
+        double timeUntilSongEnd = songEndTimeVirtual - currentTime;
 
-        return $"[TimingCoordinator]\n" +
+        return $"[TimingCoordinator] (Virtual Time)\n" +
                $"  Bar: {currentBarIndex}\n" +
                $"  Time since start: {timeSinceStart:F2}s\n" +
                $"  Time until eval: {timeUntilEval:F2}s\n" +
                $"  Time until song end: {timeUntilSongEnd:F2}s\n" +
-               $"  Current DSP: {currentTime:F4}\n" +
+               $"  Current Virtual: {currentTime:F4}\n" +
                $"  {CurrentBar}";
     }
     #endregion

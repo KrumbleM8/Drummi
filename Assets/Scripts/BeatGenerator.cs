@@ -52,6 +52,15 @@ public class BeatGenerator : MonoBehaviour
 
     private bool hasScheduledFirstPattern = false;
     private bool isFinalBar = false;
+
+    // Track scheduled audio with VIRTUAL times for pause/resume
+    private class ScheduledAudio
+    {
+        public AudioSource source;
+        public double virtualTime;  // Virtual time when this should play
+        public bool isRightBongo;
+    }
+    private List<ScheduledAudio> scheduledAudio = new List<ScheduledAudio>();
     #endregion
 
     #region Difficulty Presets
@@ -82,7 +91,7 @@ public class BeatGenerator : MonoBehaviour
             if (coordinator.GetCurrentBarIndex() == 0)
             {
                 // Still in grace period - check if we should transition to bar 1
-                double timeUntilNextBar = coordinator.NextBar.BarStartTime - AudioSettings.dspTime;
+                double timeUntilNextBar = coordinator.NextBar.BarStartTime - GameClock.Instance.GameTime;
                 if (timeUntilNextBar <= 0.1) // 100ms before bar 1 starts
                 {
                     // Advance to bar 1 (end of grace period)
@@ -176,14 +185,23 @@ public class BeatGenerator : MonoBehaviour
     /// <summary>
     /// Start gameplay. Called when game begins.
     /// </summary>
-    public void StartGameplay(double startTimeDsp)
+    public void StartGameplay(double startTimeVirtual)
     {
         ClearState();
         currentState = GameState.WaitingForFirstBar;
 
+        // Schedule turn signal for grace period (bar 0) using virtual time
+        double gracePeriodTurnSignalVirtual = TimingCoordinator.Instance.CurrentBar.TurnSignalTime;
+        if (gracePeriodTurnSignalVirtual > GameClock.Instance.GameTime)
+        {
+            double realDspTime = GameClock.Instance.VirtualToRealDsp(gracePeriodTurnSignalVirtual);
+            AudioManager.instance.PlayTurnSignal(realDspTime);
+            Debug.Log($"[BeatGenerator] Grace period turn signal scheduled (Virtual: {gracePeriodTurnSignalVirtual:F4}, Real: {realDspTime:F4})");
+        }
+
         Debug.Log($"[BeatGenerator] === GAMEPLAY STARTED ===");
-        Debug.Log($"  Start time (DSP): {startTimeDsp:F4}");
-        Debug.Log($"  Current DSP: {AudioSettings.dspTime:F4}");
+        Debug.Log($"  Start time (Virtual): {startTimeVirtual:F4}");
+        Debug.Log($"  Current (Virtual): {GameClock.Instance.GameTime:F4}");
         Debug.Log($"  Beat interval: {beatInterval:F4}s");
     }
     #endregion
@@ -215,53 +233,71 @@ public class BeatGenerator : MonoBehaviour
     }
 
     /// <summary>
-    /// Schedule the current pattern using timing from coordinator.
+    /// Schedule the current pattern using timing from coordinator (virtual time).
+    /// Converts to real DSP time when actually scheduling audio.
     /// </summary>
     private void SchedulePattern(TimingCoordinator.BarTiming timing)
     {
         scheduledBeats.Clear();
+        scheduledAudio.Clear(); // Clear old scheduled audio tracking
 
-        PatternStartTime = timing.PatternStartTime;
-        InputStartTime = timing.InputWindowStart;
+        PatternStartTime = timing.PatternStartTime;  // Virtual time
+        InputStartTime = timing.InputWindowStart;    // Virtual time
 
-        double currentDsp = AudioSettings.dspTime;
-        double scheduleAhead = PatternStartTime - currentDsp;
+        double currentVirtual = GameClock.Instance.GameTime;
+        double scheduleAhead = PatternStartTime - currentVirtual;
 
         Debug.Log($"[BeatGenerator] Scheduling pattern for bar {timing.BarIndex}");
-        Debug.Log($"  Pattern start: {PatternStartTime:F4}");
-        Debug.Log($"  DSP now: {currentDsp:F4}");
+        Debug.Log($"  Pattern start (Virtual): {PatternStartTime:F4}");
+        Debug.Log($"  Current (Virtual): {currentVirtual:F4}");
         Debug.Log($"  Scheduling ahead by: {scheduleAhead * 1000:F1}ms");
 
-        // Schedule turn signal for this bar (in advance!)
-        if (timing.TurnSignalTime > currentDsp)
+        // Schedule turn signal for this bar (in virtual time)
+        if (timing.TurnSignalTime > currentVirtual)
         {
-            AudioManager.instance.PlayTurnSignal(timing.TurnSignalTime);
-            Debug.Log($"  Turn signal scheduled for: {timing.TurnSignalTime:F4}");
+            // Convert virtual→real for audio scheduling
+            double realDspTime = GameClock.Instance.VirtualToRealDsp(timing.TurnSignalTime);
+            AudioManager.instance.PlayTurnSignal(realDspTime);
+            Debug.Log($"  Turn signal scheduled (Virtual: {timing.TurnSignalTime:F4}, Real: {realDspTime:F4})");
         }
 
         foreach (Beat beat in currentPattern)
         {
-            double scheduledTime = PatternStartTime + (beat.timeSlot * beatInterval);
-            scheduledBeats.Add(new ScheduledBeat(scheduledTime, beat.isBongoSide));
+            double virtualScheduledTime = PatternStartTime + (beat.timeSlot * beatInterval);
+            scheduledBeats.Add(new ScheduledBeat(virtualScheduledTime, beat.isBongoSide));
 
-            ScheduleAudio(scheduledTime, beat.isBongoSide);
-            ScheduleVisuals(scheduledTime, beat.isBongoSide);
-            ScheduleAnimations(scheduledTime, beat.isBongoSide);
+            ScheduleAudio(virtualScheduledTime, beat.isBongoSide);  // Pass virtual time
+            ScheduleVisuals(virtualScheduledTime, beat.isBongoSide);
+            ScheduleAnimations(virtualScheduledTime, beat.isBongoSide);
         }
     }
 
-    private void ScheduleAudio(double time, bool isRightSide)
+    private void ScheduleAudio(double virtualTime, bool isRightSide)
     {
+        AudioSource source;
+
         if (isRightSide)
         {
-            rightBongoSources[rightBongoIndex].PlayScheduled(time);
+            source = rightBongoSources[rightBongoIndex];
             rightBongoIndex = (rightBongoIndex + 1) % rightBongoSources.Count;
         }
         else
         {
-            leftBongoSources[leftBongoIndex].PlayScheduled(time);
+            source = leftBongoSources[leftBongoIndex];
             leftBongoIndex = (leftBongoIndex + 1) % leftBongoSources.Count;
         }
+
+        // Convert virtual time → real DSP time for Unity's audio system
+        double realDspTime = GameClock.Instance.VirtualToRealDsp(virtualTime);
+        source.PlayScheduled(realDspTime);
+
+        // Track this scheduled audio with VIRTUAL time (for pause/resume)
+        scheduledAudio.Add(new ScheduledAudio
+        {
+            source = source,
+            virtualTime = virtualTime,  // Store virtual time!
+            isRightBongo = isRightSide
+        });
     }
 
     private void ScheduleVisuals(double time, bool isRightSide)
@@ -269,23 +305,23 @@ public class BeatGenerator : MonoBehaviour
         beatVisualScheduler.ScheduleVisualBeat(time, isRightSide);
     }
 
-    private void ScheduleAnimations(double time, bool isRightSide)
+    private void ScheduleAnimations(double virtualTime, bool isRightSide)
     {
         // Neutral animation slightly before beat
-        double neutralTime = time - GameConstants.NEUTRAL_ANIMATION_LEAD_TIME;
-        if (neutralTime > AudioSettings.dspTime)
+        double neutralTimeVirtual = virtualTime - GameConstants.NEUTRAL_ANIMATION_LEAD_TIME;
+        if (neutralTimeVirtual > GameClock.Instance.GameTime)
         {
-            StartCoroutine(WaitForDspTime(neutralTime, () => custardAnimator.HandleNeutral()));
+            StartCoroutine(WaitForVirtualTime(neutralTimeVirtual, () => custardAnimator.HandleNeutral()));
         }
 
         // Bongo animation on beat
-        StartCoroutine(ScheduleBongoAnimation(time, isRightSide));
+        StartCoroutine(ScheduleBongoAnimation(virtualTime, isRightSide));
     }
 
-    private IEnumerator ScheduleBongoAnimation(double dspTime, bool isRightSide)
+    private IEnumerator ScheduleBongoAnimation(double virtualTime, bool isRightSide)
     {
-        // Wait for scheduled time
-        while (AudioSettings.dspTime < dspTime)
+        // Wait for scheduled time (using virtual time)
+        while (GameClock.Instance.GameTime < virtualTime)
             yield return null;
 
         if (currentState == GameState.GameComplete) yield break;
@@ -312,9 +348,9 @@ public class BeatGenerator : MonoBehaviour
         }
     }
 
-    private IEnumerator WaitForDspTime(double targetTime, System.Action action)
+    private IEnumerator WaitForVirtualTime(double targetVirtualTime, System.Action action)
     {
-        while (AudioSettings.dspTime < targetTime)
+        while (GameClock.Instance.GameTime < targetVirtualTime)
             yield return null;
 
         if (currentState != GameState.GameComplete)
@@ -370,7 +406,7 @@ public class BeatGenerator : MonoBehaviour
     private void CheckAndTriggerListeningAnimation()
     {
         var currentBar = TimingCoordinator.Instance.CurrentBar;
-        double currentTime = AudioSettings.dspTime;
+        double currentTime = GameClock.Instance.GameTime;  // Virtual time
 
         // Trigger slightly before input window
         double listeningTriggerTime = currentBar.InputWindowStart - (beatInterval / 1.5);
@@ -417,13 +453,87 @@ public class BeatGenerator : MonoBehaviour
     #region Pause Handling
     public void OnPause()
     {
-        // Pause is handled by GameClock and TimingCoordinator
+        Debug.Log("[BeatGenerator] === PAUSING ===");
+        Debug.Log($"  Cancelling {scheduledAudio.Count} scheduled audio events");
+
+        // Stop all audio sources to cancel their scheduled audio
+        foreach (var audio in scheduledAudio)
+        {
+            if (audio.source != null)
+            {
+                audio.source.Stop();
+            }
+        }
+
+        // Don't clear the list! We need it to reschedule on resume
+
+        // Stop all animation coroutines
+        StopAllCoroutines();
+
+        Debug.Log("[BeatGenerator] Pause complete - audio cancelled, coroutines stopped");
     }
 
     public void OnResume()
     {
-        // Timing adjustment handled by TimingCoordinator
-        Debug.Log($"[BeatGenerator] Resumed");
+        Debug.Log("[BeatGenerator] === RESUMING ===");
+
+        double currentVirtual = GameClock.Instance.GameTime;
+        int rescheduledCount = 0;
+
+        // Reschedule audio that hasn't played yet
+        foreach (var audio in scheduledAudio)
+        {
+            if (audio.virtualTime > currentVirtual)  // Only reschedule future events
+            {
+                // Reconvert virtual→real with new totalPausedTime
+                double newRealDspTime = GameClock.Instance.VirtualToRealDsp(audio.virtualTime);
+
+                if (audio.source != null)
+                {
+                    audio.source.PlayScheduled(newRealDspTime);
+                    rescheduledCount++;
+
+                    Debug.Log($"  Rescheduled beat: Virtual={audio.virtualTime:F4}, Real={newRealDspTime:F4}, In {(newRealDspTime - AudioSettings.dspTime) * 1000:F0}ms");
+                }
+            }
+        }
+
+        // Reschedule turn signal if it hasn't played yet
+        var currentBar = TimingCoordinator.Instance.CurrentBar;
+        if (currentBar.TurnSignalTime > currentVirtual)
+        {
+            double realDspTime = GameClock.Instance.VirtualToRealDsp(currentBar.TurnSignalTime);
+            AudioManager.instance.PlayTurnSignal(realDspTime);
+            Debug.Log($"  Rescheduled turn signal: Virtual={currentBar.TurnSignalTime:F4}, Real={realDspTime:F4}");
+        }
+
+        // Restart animation coroutines for beats that haven't played yet
+        RestartAnimationCoroutines();
+
+        Debug.Log($"[BeatGenerator] Resume complete - {rescheduledCount} audio events rescheduled");
+    }
+
+    /// <summary>
+    /// Restart animation coroutines for beats that haven't played yet.
+    /// </summary>
+    private void RestartAnimationCoroutines()
+    {
+        double currentVirtual = GameClock.Instance.GameTime;
+
+        foreach (var scheduledBeat in scheduledBeats)
+        {
+            if (scheduledBeat.scheduledTime > currentVirtual)  // Virtual time
+            {
+                // Reschedule animations for this beat
+                double neutralTimeVirtual = scheduledBeat.scheduledTime - GameConstants.NEUTRAL_ANIMATION_LEAD_TIME;
+                if (neutralTimeVirtual > currentVirtual)
+                {
+                    StartCoroutine(WaitForVirtualTime(neutralTimeVirtual, () => custardAnimator.HandleNeutral()));
+                }
+
+                StartCoroutine(ScheduleBongoAnimation(scheduledBeat.scheduledTime, scheduledBeat.isRightBongo));
+            }
+        }
     }
     #endregion
 
@@ -435,6 +545,7 @@ public class BeatGenerator : MonoBehaviour
 
         scheduledBeats.Clear();
         currentPattern.Clear();
+        scheduledAudio.Clear();  // Clear scheduled audio tracking
 
         leftBongoIndex = 0;
         rightBongoIndex = 0;

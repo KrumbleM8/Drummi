@@ -121,7 +121,7 @@ public class GameManager : MonoBehaviour
         {
             0 => 111,
             1 => 111,
-            2 => 94,
+            2 => 79,
             _ => 105
         };
 
@@ -165,11 +165,16 @@ public class GameManager : MonoBehaviour
 
         // 4. Calculate synchronized start time with minimal lookahead
         const double LOOKAHEAD_TIME = 0.05; // 50ms - minimal but safe
-        double synchronizedStartTime = AudioSettings.dspTime + LOOKAHEAD_TIME;
+        double baseStartTime = AudioSettings.dspTime + LOOKAHEAD_TIME;
+
+        // Convert to virtual time for game logic
+        // At game start, virtual time = real DSP time (no pauses yet)
+        double virtualStartTime = GameClock.Instance.RealDspToVirtual(baseStartTime);
 
         Debug.Log($"[GameManager] === SYNCHRONIZED TIMING ===");
-        Debug.Log($"  Current DSP: {AudioSettings.dspTime:F4}");
-        Debug.Log($"  Start time: {synchronizedStartTime:F4}");
+        Debug.Log($"  Current Real DSP: {AudioSettings.dspTime:F4}");
+        Debug.Log($"  Start Real DSP: {baseStartTime:F4}");
+        Debug.Log($"  Start Virtual: {virtualStartTime:F4}");
         Debug.Log($"  Lookahead: {LOOKAHEAD_TIME * 1000:F1}ms");
 
         // 5. Get song info
@@ -189,10 +194,11 @@ public class GameManager : MonoBehaviour
         Debug.Log($"  Duration: {clip.length:F2}s");
 
         // 6. Initialize TimingCoordinator FIRST (single source of truth)
+        // Pass VIRTUAL time - coordinator works in virtual coordinates
         if (timingCoordinator != null)
         {
             timingCoordinator.Initialize(
-                synchronizedStartTime,
+                virtualStartTime,  // Virtual time!
                 metronome.bpm,
                 totalBeats,
                 barsBeforeEndForFinalBar
@@ -210,18 +216,20 @@ public class GameManager : MonoBehaviour
         // 8. Initialize metronome (for visual feedback only)
         if (metronome != null)
         {
-            metronome.InitializeWithStartTime(synchronizedStartTime);
+            // Metronome uses virtual time for visual feedback
+            metronome.InitializeWithStartTime(virtualStartTime);
             metronome.enabled = true;
         }
 
-        // 9. Schedule music
-        ScheduleMusic(synchronizedStartTime);
+        // 9. Schedule music (at real DSP time, WITHOUT offset)
+        // Music audio needs real DSP time from Unity
+        ScheduleMusic(baseStartTime);
 
         // 10. Synchronize visual systems
         SynchronizeVisuals();
 
-        // 11. Start beat generator gameplay
-        beatGenerator.StartGameplay(synchronizedStartTime);
+        // 11. Start beat generator gameplay with virtual time
+        beatGenerator.StartGameplay(virtualStartTime);
 
         // 12. Reset GameClock
         if (GameClock.Instance != null)

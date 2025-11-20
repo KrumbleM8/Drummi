@@ -122,7 +122,7 @@ public class PlayerInputVisualHandler : MonoBehaviour
         if (coordinator == null) return;
 
         var currentBar = coordinator.CurrentBar;
-        double currentTime = AudioSettings.dspTime;
+        double currentTime = GameClock.Instance.GameTime;
 
         // Calculate lead-in start time
         double leadInStart = currentBar.BarStartTime + (barDuration - (beatDuration * leadInBeats));
