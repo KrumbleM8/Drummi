@@ -121,7 +121,7 @@ public class GameManager : MonoBehaviour
         {
             0 => 111,
             1 => 111,
-            2 => 79,
+            2 => 94,
             _ => 105
         };
 

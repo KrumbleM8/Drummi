@@ -6,6 +6,7 @@ using UnityEngine;
 /// Orchestrates rhythm gameplay: generates beat patterns, schedules audio/visuals,
 /// and manages game progression through the song.
 /// REFACTORED: Uses TimingCoordinator for all timing (no more event handlers)
+/// UPDATED: Now handles TurnSignal pause/resume correctly
 /// </summary>
 public class BeatGenerator : MonoBehaviour
 {
@@ -61,6 +62,14 @@ public class BeatGenerator : MonoBehaviour
         public bool isRightBongo;
     }
     private List<ScheduledAudio> scheduledAudio = new List<ScheduledAudio>();
+
+    // Track scheduled turn signals with VIRTUAL times for pause/resume
+    private class ScheduledTurnSignal
+    {
+        public double virtualTime;  // Virtual time when this should play
+        public int barIndex;        // Which bar this turn signal is for
+    }
+    private List<ScheduledTurnSignal> scheduledTurnSignals = new List<ScheduledTurnSignal>();
     #endregion
 
     #region Difficulty Presets
@@ -194,9 +203,8 @@ public class BeatGenerator : MonoBehaviour
         double gracePeriodTurnSignalVirtual = TimingCoordinator.Instance.CurrentBar.TurnSignalTime;
         if (gracePeriodTurnSignalVirtual > GameClock.Instance.GameTime)
         {
-            double realDspTime = GameClock.Instance.VirtualToRealDsp(gracePeriodTurnSignalVirtual);
-            AudioManager.instance.PlayTurnSignal(realDspTime);
-            Debug.Log($"[BeatGenerator] Grace period turn signal scheduled (Virtual: {gracePeriodTurnSignalVirtual:F4}, Real: {realDspTime:F4})");
+            ScheduleTurnSignal(gracePeriodTurnSignalVirtual, 0);
+            Debug.Log($"[BeatGenerator] Grace period turn signal scheduled (Virtual: {gracePeriodTurnSignalVirtual:F4})");
         }
 
         Debug.Log($"[BeatGenerator] === GAMEPLAY STARTED ===");
@@ -255,10 +263,8 @@ public class BeatGenerator : MonoBehaviour
         // Schedule turn signal for this bar (in virtual time)
         if (timing.TurnSignalTime > currentVirtual)
         {
-            // Convert virtual→real for audio scheduling
-            double realDspTime = GameClock.Instance.VirtualToRealDsp(timing.TurnSignalTime);
-            AudioManager.instance.PlayTurnSignal(realDspTime);
-            Debug.Log($"  Turn signal scheduled (Virtual: {timing.TurnSignalTime:F4}, Real: {realDspTime:F4})");
+            ScheduleTurnSignal(timing.TurnSignalTime, timing.BarIndex);
+            Debug.Log($"  Turn signal scheduled (Virtual: {timing.TurnSignalTime:F4})");
         }
 
         foreach (Beat beat in currentPattern)
@@ -270,6 +276,24 @@ public class BeatGenerator : MonoBehaviour
             ScheduleVisuals(virtualScheduledTime, beat.isBongoSide);
             ScheduleAnimations(virtualScheduledTime, beat.isBongoSide);
         }
+    }
+
+    /// <summary>
+    /// Schedule a turn signal at the specified virtual time.
+    /// Tracks it for pause/resume handling.
+    /// </summary>
+    private void ScheduleTurnSignal(double virtualTime, int barIndex)
+    {
+        // Convert virtual→real for audio scheduling
+        double realDspTime = GameClock.Instance.VirtualToRealDsp(virtualTime);
+        AudioManager.instance.PlayTurnSignal(realDspTime);
+
+        // Track this turn signal for pause/resume
+        scheduledTurnSignals.Add(new ScheduledTurnSignal
+        {
+            virtualTime = virtualTime,
+            barIndex = barIndex
+        });
     }
 
     private void ScheduleAudio(double virtualTime, bool isRightSide)
@@ -454,9 +478,10 @@ public class BeatGenerator : MonoBehaviour
     public void OnPause()
     {
         Debug.Log("[BeatGenerator] === PAUSING ===");
-        Debug.Log($"  Cancelling {scheduledAudio.Count} scheduled audio events");
+        Debug.Log($"  Cancelling {scheduledAudio.Count} beat audio events");
+        Debug.Log($"  Cancelling {scheduledTurnSignals.Count} turn signal events");
 
-        // Stop all audio sources to cancel their scheduled audio
+        // Stop all beat audio sources to cancel their scheduled audio
         foreach (var audio in scheduledAudio)
         {
             if (audio.source != null)
@@ -465,12 +490,15 @@ public class BeatGenerator : MonoBehaviour
             }
         }
 
-        // Don't clear the list! We need it to reschedule on resume
+        // Stop and destroy all turn signal GameObjects
+        CancelAllTurnSignals();
+
+        // Don't clear the lists! We need them to reschedule on resume
 
         // Stop all animation coroutines
         StopAllCoroutines();
 
-        Debug.Log("[BeatGenerator] Pause complete - audio cancelled, coroutines stopped");
+        Debug.Log("[BeatGenerator] Pause complete - all audio cancelled, coroutines stopped");
     }
 
     public void OnResume()
@@ -478,9 +506,10 @@ public class BeatGenerator : MonoBehaviour
         Debug.Log("[BeatGenerator] === RESUMING ===");
 
         double currentVirtual = GameClock.Instance.GameTime;
-        int rescheduledCount = 0;
+        int rescheduledBeatsCount = 0;
+        int rescheduledSignalsCount = 0;
 
-        // Reschedule audio that hasn't played yet
+        // Reschedule beat audio that hasn't played yet
         foreach (var audio in scheduledAudio)
         {
             if (audio.virtualTime > currentVirtual)  // Only reschedule future events
@@ -491,26 +520,71 @@ public class BeatGenerator : MonoBehaviour
                 if (audio.source != null)
                 {
                     audio.source.PlayScheduled(newRealDspTime);
-                    rescheduledCount++;
+                    rescheduledBeatsCount++;
 
                     Debug.Log($"  Rescheduled beat: Virtual={audio.virtualTime:F4}, Real={newRealDspTime:F4}, In {(newRealDspTime - AudioSettings.dspTime) * 1000:F0}ms");
                 }
             }
         }
 
-        // Reschedule turn signal if it hasn't played yet
-        var currentBar = TimingCoordinator.Instance.CurrentBar;
-        if (currentBar.TurnSignalTime > currentVirtual)
+        // Reschedule turn signals that haven't played yet
+        List<ScheduledTurnSignal> signalsToReschedule = new List<ScheduledTurnSignal>();
+        foreach (var signal in scheduledTurnSignals)
         {
-            double realDspTime = GameClock.Instance.VirtualToRealDsp(currentBar.TurnSignalTime);
+            if (signal.virtualTime > currentVirtual)
+            {
+                signalsToReschedule.Add(signal);
+            }
+        }
+
+        // Clear old turn signal tracking and reschedule
+        scheduledTurnSignals.Clear();
+        foreach (var signal in signalsToReschedule)
+        {
+            double realDspTime = GameClock.Instance.VirtualToRealDsp(signal.virtualTime);
             AudioManager.instance.PlayTurnSignal(realDspTime);
-            Debug.Log($"  Rescheduled turn signal: Virtual={currentBar.TurnSignalTime:F4}, Real={realDspTime:F4}");
+
+            // Re-add to tracking list
+            scheduledTurnSignals.Add(signal);
+            rescheduledSignalsCount++;
+
+            Debug.Log($"  Rescheduled turn signal: Virtual={signal.virtualTime:F4}, Real={realDspTime:F4}, Bar={signal.barIndex}");
         }
 
         // Restart animation coroutines for beats that haven't played yet
         RestartAnimationCoroutines();
 
-        Debug.Log($"[BeatGenerator] Resume complete - {rescheduledCount} audio events rescheduled");
+        Debug.Log($"[BeatGenerator] Resume complete - {rescheduledBeatsCount} beats, {rescheduledSignalsCount} turn signals rescheduled");
+    }
+
+    /// <summary>
+    /// Cancel all scheduled turn signals by destroying their GameObjects.
+    /// Turn signals are created as dynamic GameObjects named "TurnSignalVoice".
+    /// </summary>
+    private void CancelAllTurnSignals()
+    {
+        if (AudioManager.instance == null) return;
+
+        // Find all TurnSignalVoice GameObjects and destroy them
+        Transform audioManagerTransform = AudioManager.instance.transform;
+        List<GameObject> turnSignalObjects = new List<GameObject>();
+
+        // Collect all turn signal GameObjects
+        foreach (Transform child in audioManagerTransform)
+        {
+            if (child.gameObject.name == "TurnSignalVoice")
+            {
+                turnSignalObjects.Add(child.gameObject);
+            }
+        }
+
+        // Destroy them
+        foreach (var obj in turnSignalObjects)
+        {
+            Destroy(obj);
+        }
+
+        Debug.Log($"  Cancelled {turnSignalObjects.Count} turn signal GameObject(s)");
     }
 
     /// <summary>
@@ -546,6 +620,7 @@ public class BeatGenerator : MonoBehaviour
         scheduledBeats.Clear();
         currentPattern.Clear();
         scheduledAudio.Clear();  // Clear scheduled audio tracking
+        scheduledTurnSignals.Clear();  // Clear turn signal tracking
 
         leftBongoIndex = 0;
         rightBongoIndex = 0;
