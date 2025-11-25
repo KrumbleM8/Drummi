@@ -178,7 +178,7 @@ MonoBehaviour:
   deceleration: 5
   dragThreshold: 10
   maxVisibleItems: 3
-  startCenteredIndex: 0
+  startCenteredIndex: 1
 --- !u!1 &4410184
 GameObject:
   m_ObjectHideFlags: 0
@@ -7262,6 +7262,7 @@ GameObject:
   - component: {fileID: 891851650}
   - component: {fileID: 891851651}
   - component: {fileID: 891851652}
+  - component: {fileID: 891851654}
   m_Layer: 0
   m_Name: GameManager
   m_TagString: Untagged
@@ -7340,6 +7341,7 @@ MonoBehaviour:
   maxSameSideHits: 2
   barsBeforeEndForFinalBar: 1
   delayBeforeResults: 2
+  adaptiveDifficulty: {fileID: 891851654}
 --- !u!114 &891851645
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -7503,6 +7505,28 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 54df0618a1d8099479d1a60c9be57818, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+--- !u!114 &891851654
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 891851642}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 81d999027b3e5684dac22e14377457c6, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  roundsToEnterHard: 3
+  roundsToExitHard: 2
+  correctRoundsPerQuaverIncrease: 4
+  maxQuaverLimit: 3
+  initialQuaverLimit: 1
+  easyDurations:
+  - 1
+  hardDurations:
+  - 1
+  - 0.5
 --- !u!224 &897368736 stripped
 RectTransform:
   m_CorrespondingSourceObject: {fileID: 2040462333756127397, guid: 09a82d829ba59174cac0e9f9b91043b3, type: 3}

@@ -32,6 +32,9 @@ public class BeatGenerator : MonoBehaviour
     [Header("Song Progression")]
     [SerializeField] private int barsBeforeEndForFinalBar = 1;
     [SerializeField] private float delayBeforeResults = 2f;
+
+    [Header("Adaptive Difficulty")]
+    [SerializeField] private AdaptiveDifficultyManager adaptiveDifficulty;
     #endregion
 
     #region Events
@@ -172,13 +175,26 @@ public class BeatGenerator : MonoBehaviour
         beatInterval = 60.0 / bpm;
 
         // Setup pattern generator based on difficulty
-        float[] durations = difficultyIndex switch
+        float[] durations;
+
+        if (difficultyIndex == 0)
         {
-            0 => starterDurations,
-            1 => standardDurations,
-            2 => spicyDurations,
-            _ => spicyDurations
-        };
+            // ADAPTIVE DIFFICULTY for starter mode
+            adaptiveDifficulty.Reset();
+            durations = adaptiveDifficulty.GetCurrentDurations();
+            Debug.Log("[BeatGenerator] Using ADAPTIVE difficulty for starter mode");
+        }
+        else
+        {
+            // Fixed difficulties for standard/spicy
+            durations = difficultyIndex switch
+            {
+                1 => standardDurations,
+                2 => spicyDurations,
+                _ => spicyDurations
+            };
+        }
+
         patternGenerator = new PatternGenerator(durations, maxSameSideHits);
 
         currentState = GameState.WaitingForFirstBar;
@@ -228,10 +244,23 @@ public class BeatGenerator : MonoBehaviour
 
     /// <summary>
     /// Generate a new pattern (doesn't schedule it).
+    /// Uses quaver-limited generation ONLY for starter difficulty in hard mode.
     /// </summary>
     private void GenerateNewPattern()
     {
-        currentPattern = patternGenerator.GeneratePattern();
+        // Only use quaver-limited generation for starter difficulty (difficultyIndex == 0)
+        if (difficultyIndex == 0 && adaptiveDifficulty.IsInHardMode())
+        {
+            // Starter difficulty in hard mode: respect quaver limit
+            int limit = adaptiveDifficulty.GetCurrentQuaverLimit();
+            Debug.Log($"[BeatGenerator] ★ ADAPTIVE MODE: Generating with MAX {limit} quaver(s)");
+            GeneratePatternWithQuaverLimit();
+        }
+        else
+        {
+            // All other cases: normal generation (standard, spicy, or starter in easy mode)
+            currentPattern = patternGenerator.GeneratePattern();
+        }
 
         // Clear old visuals
         beatVisualScheduler.ResetVisuals();
@@ -396,6 +425,24 @@ public class BeatGenerator : MonoBehaviour
             scheduledBeats
         );
 
+        // === NEW: Process adaptive difficulty ===
+        if (difficultyIndex == 0 && !isFinalBar)
+        {
+            // Determine if round was successful
+            bool wasSuccessful = DetermineRoundSuccess();
+
+            bool stateChanged = adaptiveDifficulty.ProcessRoundResult(wasSuccessful);
+
+            // If difficulty changed, update the pattern generator
+            if (stateChanged)
+            {
+                float[] newDurations = adaptiveDifficulty.GetCurrentDurations();
+                patternGenerator = new PatternGenerator(newDurations, maxSameSideHits);
+                Debug.Log($"[BeatGenerator] Pattern generator updated with new durations: [{string.Join(", ", newDurations)}]");
+            }
+        }
+        // === END NEW CODE ===
+
         // Reset input
         playerInputReader.allowInput = false;
         playerInputReader.ResetInputs();
@@ -421,6 +468,35 @@ public class BeatGenerator : MonoBehaviour
             // Schedule the newly generated pattern for the next bar
             SchedulePattern(TimingCoordinator.Instance.CurrentBar);
         }
+    }
+
+    /// <summary>
+    /// Determine if a round was successful based on player performance.
+    /// Adjust this logic based on your success criteria.
+    /// </summary>
+    private bool DetermineRoundSuccess()
+    {
+        // Count valid inputs (hits that were registered)
+        int validInputs = 0;
+
+        foreach (var input in playerInputReader.playerInputData)
+        {
+            // Assuming input.inputTime > 0 means the player hit something
+            // Adjust this condition based on your PlayerInputData structure
+            if (input.inputTime > 0)
+            {
+                validInputs++;
+            }
+        }
+
+        // Success = player hit at least 2 out of 3 beats (66% success rate)
+        // You can adjust this threshold as needed
+        int requiredHits = Mathf.CeilToInt(scheduledBeats.Count * 0.66f);
+        bool success = validInputs >= requiredHits;
+
+        Debug.Log($"[BeatGenerator] Round result: {validInputs}/{scheduledBeats.Count} hits = {(success ? "SUCCESS" : "FAIL")}");
+
+        return success;
     }
     #endregion
 
@@ -619,14 +695,20 @@ public class BeatGenerator : MonoBehaviour
 
         scheduledBeats.Clear();
         currentPattern.Clear();
-        scheduledAudio.Clear();  // Clear scheduled audio tracking
-        scheduledTurnSignals.Clear();  // Clear turn signal tracking
+        scheduledAudio.Clear();
+        scheduledTurnSignals.Clear();
 
         leftBongoIndex = 0;
         rightBongoIndex = 0;
         hasScheduledFirstPattern = false;
         isFinalBar = false;
         lastListeningCheck = -1;
+
+        // Reset adaptive difficulty when clearing state (for starter mode)
+        if (difficultyIndex == 0)
+        {
+            adaptiveDifficulty.Reset();
+        }
     }
     #endregion
 
@@ -639,6 +721,224 @@ public class BeatGenerator : MonoBehaviour
         currentState = GameState.Uninitialized;
 
         Debug.Log("[BeatGenerator] Reset complete");
+    }
+    #endregion
+
+    #region Adaptive Pattern Generation
+    /// <summary>
+    /// Count the number of quaver beats (0.5f duration) in a pattern.
+    /// </summary>
+    private int CountQuaversInPattern(List<Beat> pattern)
+    {
+        int count = 0;
+        foreach (var beat in pattern)
+        {
+            // Quavers appear at 0.5 intervals: 0.5, 1.5, 2.5, etc.
+            float fractionalPart = beat.timeSlot % 1f;
+            if (Mathf.Approximately(fractionalPart, 0.5f))
+            {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    /// Enforce quaver limit by replacing excess quavers with crotchets.
+    /// This is a fallback if pattern generation keeps producing too many quavers.
+    /// </summary>
+    /// <summary>
+    /// Enforce quaver limit by replacing excess quavers with crotchets.
+    /// Converts excess quavers back to crotchets to respect the limit.
+    /// </summary>
+    /// <summary>
+    /// Enforce quaver limit by replacing excess quavers with crotchets.
+    /// Converts excess quavers back to crotchets to respect the limit.
+    /// </summary>
+    private List<Beat> EnforceQuaverLimit(List<Beat> pattern, int maxQuavers)
+    {
+        // First, separate quavers from crotchets
+        List<Beat> quavers = new List<Beat>();
+        List<Beat> crotchets = new List<Beat>();
+
+        foreach (var beat in pattern)
+        {
+            float fractionalPart = beat.timeSlot % 1f;
+            if (Mathf.Approximately(fractionalPart, 0.5f))
+            {
+                quavers.Add(beat);
+            }
+            else
+            {
+                crotchets.Add(beat);
+            }
+        }
+
+        // If we have too many quavers, convert the excess to crotchets
+        if (quavers.Count > maxQuavers)
+        {
+            int quaversToConvert = quavers.Count - maxQuavers;
+            Debug.Log($"[BeatGenerator] Converting {quaversToConvert} quaver(s) to crotchet(s)");
+
+            // Keep only the first maxQuavers quavers, convert the rest
+            List<Beat> quaversToKeep = new List<Beat>();
+            List<Beat> quaversToReplace = new List<Beat>();
+
+            for (int i = 0; i < quavers.Count; i++)
+            {
+                if (i < maxQuavers)
+                {
+                    quaversToKeep.Add(quavers[i]);
+                }
+                else
+                {
+                    quaversToReplace.Add(quavers[i]);
+                }
+            }
+
+            // Convert excess quavers to crotchets
+            foreach (var quaver in quaversToReplace)
+            {
+                // Find nearest whole beat position
+                float nearestWholeBeat = Mathf.Round(quaver.timeSlot);
+
+                // Check if this position would collide with an existing crotchet
+                bool collision = crotchets.Exists(c => Mathf.Approximately(c.timeSlot, nearestWholeBeat));
+
+                if (!collision)
+                {
+                    // Safe to add crotchet at this position
+                    crotchets.Add(new Beat(1f, nearestWholeBeat, quaver.isBongoSide));
+                    Debug.Log($"[BeatGenerator] Converted quaver at {quaver.timeSlot:F1} to crotchet at {nearestWholeBeat:F1}");
+                }
+                else
+                {
+                    // Collision - just remove this quaver (don't replace it)
+                    Debug.Log($"[BeatGenerator] Removed quaver at {quaver.timeSlot:F1} (would collide with existing crotchet)");
+                }
+            }
+
+            // Use the kept quavers instead of all quavers
+            quavers = quaversToKeep;
+        }
+
+        // Combine remaining quavers with all crotchets
+        List<Beat> result = new List<Beat>();
+        result.AddRange(crotchets);
+        result.AddRange(quavers);
+
+        // Sort by timeSlot to maintain correct order
+        result.Sort((a, b) => a.timeSlot.CompareTo(b.timeSlot));
+
+        return result;
+    }
+
+    /// <summary>
+    /// Generate a pattern respecting the quaver limit for adaptive difficulty.
+    /// Generates crotchets-only pattern, then manually inserts limited quavers.
+    /// </summary>
+    private void GeneratePatternWithQuaverLimit()
+    {
+        int quaverLimit = adaptiveDifficulty.GetCurrentQuaverLimit();
+
+        // IMPORTANT: Generate pattern using ONLY crotchets (1f duration)
+        // We'll manually add quavers after
+        PatternGenerator crotchetOnlyGenerator = new PatternGenerator(
+            new float[] { 1f },  // Only crotchets
+            maxSameSideHits
+        );
+
+        // Generate a crotchet-only pattern
+        List<Beat> crotchetPattern = crotchetOnlyGenerator.GeneratePattern();
+
+        // Now manually replace some crotchets with quavers (up to the limit)
+        currentPattern = InsertQuaversIntoPattern(crotchetPattern, quaverLimit);
+
+        int actualQuaverCount = CountQuaversInPattern(currentPattern);
+        Debug.Log($"[BeatGenerator] ★ Generated pattern with EXACTLY {actualQuaverCount} quaver(s) (limit: {quaverLimit})");
+    }
+
+    /// <summary>
+    /// Insert a specific number of quavers into a crotchet-only pattern.
+    /// Converts random crotchets to quavers without exceeding the limit.
+    /// </summary>
+    private List<Beat> InsertQuaversIntoPattern(List<Beat> crotchetPattern, int quaverLimit)
+    {
+        if (quaverLimit <= 0 || crotchetPattern.Count == 0)
+        {
+            return crotchetPattern; // No quavers allowed or no beats to convert
+        }
+
+        // We'll convert up to 'quaverLimit' crotchets into quavers
+        // A quaver split: one crotchet at position X becomes two quavers at X and X+0.5
+
+        List<Beat> result = new List<Beat>(crotchetPattern);
+        int quaversInserted = 0;
+
+        // Try to insert quavers by splitting crotchets
+        // We'll randomly select which crotchets to split
+        List<int> availableIndices = new List<int>();
+        for (int i = 0; i < result.Count; i++)
+        {
+            // Only consider beats that are currently crotchets
+            float fractionalPart = result[i].timeSlot % 1f;
+            if (Mathf.Approximately(fractionalPart, 0f))
+            {
+                availableIndices.Add(i);
+            }
+        }
+
+        // Shuffle for randomness
+        for (int i = availableIndices.Count - 1; i > 0; i--)
+        {
+            int j = Random.Range(0, i + 1);
+            int temp = availableIndices[i];
+            availableIndices[i] = availableIndices[j];
+            availableIndices[j] = temp;
+        }
+
+        // Insert quavers by splitting crotchets
+        int processedIndices = 0;
+        while (quaversInserted < quaverLimit && processedIndices < availableIndices.Count)
+        {
+            int index = availableIndices[processedIndices];
+            processedIndices++;
+
+            if (index >= result.Count) continue; // Safety check
+
+            Beat crotchet = result[index];
+
+            // Split this crotchet into two quavers
+            // Original position stays as first quaver
+            Beat firstQuaver = new Beat(0.5f, crotchet.timeSlot, crotchet.isBongoSide);
+
+            // Second quaver goes 0.5 beats later
+            // Alternate the side for variety
+            Beat secondQuaver = new Beat(0.5f, crotchet.timeSlot + 0.5f, !crotchet.isBongoSide);
+
+            // Replace the crotchet with the first quaver
+            result[index] = firstQuaver;
+
+            // Insert the second quaver after it
+            result.Insert(index + 1, secondQuaver);
+
+            quaversInserted += 2; // We added 2 quavers
+
+            Debug.Log($"[BeatGenerator] Split crotchet at {crotchet.timeSlot:F1} into quavers at {firstQuaver.timeSlot:F1} and {secondQuaver.timeSlot:F1}");
+
+            // Update available indices to account for the insertion
+            for (int i = processedIndices; i < availableIndices.Count; i++)
+            {
+                if (availableIndices[i] > index)
+                {
+                    availableIndices[i]++;
+                }
+            }
+        }
+
+        // Sort by timeSlot to maintain correct order
+        result.Sort((a, b) => a.timeSlot.CompareTo(b.timeSlot));
+
+        return result;
     }
     #endregion
 }
