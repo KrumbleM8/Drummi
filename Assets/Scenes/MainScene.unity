@@ -6697,7 +6697,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 8023550185728179583, guid: 09a82d829ba59174cac0e9f9b91043b3, type: 3}
       propertyPath: m_Enabled
-      value: 0
+      value: 1
       objectReference: {fileID: 0}
     - target: {fileID: 8023550185728179583, guid: 09a82d829ba59174cac0e9f9b91043b3, type: 3}
       propertyPath: dragThreshold
@@ -6777,7 +6777,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 8023550185728179583, guid: 09a82d829ba59174cac0e9f9b91043b3, type: 3}
       propertyPath: onTap.m_PersistentCalls.m_Calls.Array.data[0].m_Arguments.m_IntArgument
-      value: 2
+      value: 3
       objectReference: {fileID: 0}
     - target: {fileID: 8023550185728179583, guid: 09a82d829ba59174cac0e9f9b91043b3, type: 3}
       propertyPath: onTap.m_PersistentCalls.m_Calls.Array.data[2].m_Arguments.m_IntArgument
@@ -9880,6 +9880,7 @@ MonoBehaviour:
   - {fileID: 8300000, guid: 18417d6443a7fb04bb4105ec5eff712b, type: 3}
   - {fileID: 8300000, guid: 83a7a8a481b489244ac4a683264864bd, type: 3}
   - {fileID: 8300000, guid: ad6c2bd22d173a24b82fad7fe2d09c35, type: 3}
+  - {fileID: 8300000, guid: 5b5082cf1c179d648ac3149ceeca2a5a, type: 3}
   bongoSounds:
   - {fileID: 8300000, guid: 3e52228fda3fad64aabad0a85443b431, type: 3}
   - {fileID: 8300000, guid: 25fccdb7f43f5304bb52b298b37d100e, type: 3}
@@ -14809,33 +14810,33 @@ MonoBehaviour:
   - pageName: Intro
     pageTransform: {fileID: 685055644}
     onScreenPosition: {x: 0, y: 0}
-    offScreenLeftPosition: {x: -684.28, y: 0}
-    offScreenRightPosition: {x: 684.28, y: 0}
+    offScreenLeftPosition: {x: -1136, y: 0}
+    offScreenRightPosition: {x: 1136, y: 0}
   - pageName: Main
     pageTransform: {fileID: 686828141}
     onScreenPosition: {x: 0, y: 0}
-    offScreenLeftPosition: {x: -684.28, y: 0}
-    offScreenRightPosition: {x: 684.28, y: 0}
+    offScreenLeftPosition: {x: -1136, y: 0}
+    offScreenRightPosition: {x: 1136, y: 0}
   - pageName: Song
     pageTransform: {fileID: 498961237}
     onScreenPosition: {x: 0, y: 0}
-    offScreenLeftPosition: {x: -684.28, y: 0}
-    offScreenRightPosition: {x: 684.28, y: 0}
+    offScreenLeftPosition: {x: -1136, y: 0}
+    offScreenRightPosition: {x: 1136, y: 0}
   - pageName: Difficulty
     pageTransform: {fileID: 1373578963}
     onScreenPosition: {x: 0, y: 0}
-    offScreenLeftPosition: {x: -684.28, y: 0}
-    offScreenRightPosition: {x: 684.28, y: 0}
+    offScreenLeftPosition: {x: -1136, y: 0}
+    offScreenRightPosition: {x: 1136, y: 0}
   - pageName: Customize
     pageTransform: {fileID: 1030085468}
     onScreenPosition: {x: 0, y: 0}
-    offScreenLeftPosition: {x: -684.28, y: 0}
-    offScreenRightPosition: {x: 684.28, y: 0}
+    offScreenLeftPosition: {x: -1136, y: 0}
+    offScreenRightPosition: {x: 1136, y: 0}
   - pageName: Score
     pageTransform: {fileID: 373518197}
     onScreenPosition: {x: 0, y: 0}
-    offScreenLeftPosition: {x: -684.28, y: 0}
-    offScreenRightPosition: {x: 684.28, y: 0}
+    offScreenLeftPosition: {x: -1136, y: 0}
+    offScreenRightPosition: {x: 1136, y: 0}
   startingPageName: Intro
   transitionDuration: 0.5
   transitionCurve:
