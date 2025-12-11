@@ -7342,6 +7342,7 @@ MonoBehaviour:
   barsBeforeEndForFinalBar: 1
   delayBeforeResults: 2
   adaptiveDifficulty: {fileID: 891851654}
+  enableAdaptiveDifficulty: 1
 --- !u!114 &891851645
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -7394,8 +7395,8 @@ MonoBehaviour:
   beatGenerator: {fileID: 891851644}
   custardAnimator: {fileID: 1762856858}
   scoreText: {fileID: 463733841}
-  perfectThreshold: 0.03
-  goodThreshold: 0.07
+  perfectThreshold: 0.035
+  goodThreshold: 0.083
   perfectReward: 200
   goodReward: 100
   passableReward: 50
@@ -14810,33 +14811,33 @@ MonoBehaviour:
   - pageName: Intro
     pageTransform: {fileID: 685055644}
     onScreenPosition: {x: 0, y: 0}
-    offScreenLeftPosition: {x: -1136, y: 0}
-    offScreenRightPosition: {x: 1136, y: 0}
+    offScreenLeftPosition: {x: -720.16, y: 0}
+    offScreenRightPosition: {x: 720.16, y: 0}
   - pageName: Main
     pageTransform: {fileID: 686828141}
     onScreenPosition: {x: 0, y: 0}
-    offScreenLeftPosition: {x: -1136, y: 0}
-    offScreenRightPosition: {x: 1136, y: 0}
+    offScreenLeftPosition: {x: -720.16, y: 0}
+    offScreenRightPosition: {x: 720.16, y: 0}
   - pageName: Song
     pageTransform: {fileID: 498961237}
     onScreenPosition: {x: 0, y: 0}
-    offScreenLeftPosition: {x: -1136, y: 0}
-    offScreenRightPosition: {x: 1136, y: 0}
+    offScreenLeftPosition: {x: -720.16, y: 0}
+    offScreenRightPosition: {x: 720.16, y: 0}
   - pageName: Difficulty
     pageTransform: {fileID: 1373578963}
     onScreenPosition: {x: 0, y: 0}
-    offScreenLeftPosition: {x: -1136, y: 0}
-    offScreenRightPosition: {x: 1136, y: 0}
+    offScreenLeftPosition: {x: -720.16, y: 0}
+    offScreenRightPosition: {x: 720.16, y: 0}
   - pageName: Customize
     pageTransform: {fileID: 1030085468}
     onScreenPosition: {x: 0, y: 0}
-    offScreenLeftPosition: {x: -1136, y: 0}
-    offScreenRightPosition: {x: 1136, y: 0}
+    offScreenLeftPosition: {x: -720.16, y: 0}
+    offScreenRightPosition: {x: 720.16, y: 0}
   - pageName: Score
     pageTransform: {fileID: 373518197}
     onScreenPosition: {x: 0, y: 0}
-    offScreenLeftPosition: {x: -1136, y: 0}
-    offScreenRightPosition: {x: 1136, y: 0}
+    offScreenLeftPosition: {x: -720.16, y: 0}
+    offScreenRightPosition: {x: 720.16, y: 0}
   startingPageName: Intro
   transitionDuration: 0.5
   transitionCurve:

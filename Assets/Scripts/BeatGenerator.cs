@@ -35,6 +35,7 @@ public class BeatGenerator : MonoBehaviour
 
     [Header("Adaptive Difficulty")]
     [SerializeField] private AdaptiveDifficultyManager adaptiveDifficulty;
+    [SerializeField] private bool enableAdaptiveDifficulty = true;
     #endregion
 
     #region Events
@@ -177,7 +178,7 @@ public class BeatGenerator : MonoBehaviour
         // Setup pattern generator based on difficulty
         float[] durations;
 
-        if (difficultyIndex == 0)
+        if (difficultyIndex == 0 && enableAdaptiveDifficulty == true)
         {
             // ADAPTIVE DIFFICULTY for starter mode
             adaptiveDifficulty.Reset();
@@ -249,7 +250,7 @@ public class BeatGenerator : MonoBehaviour
     private void GenerateNewPattern()
     {
         // Only use quaver-limited generation for starter difficulty (difficultyIndex == 0)
-        if (difficultyIndex == 0 && adaptiveDifficulty.IsInHardMode())
+        if (difficultyIndex == 0 && adaptiveDifficulty.IsInHardMode() && enableAdaptiveDifficulty == true)
         {
             // Starter difficulty in hard mode: respect quaver limit
             int limit = adaptiveDifficulty.GetCurrentQuaverLimit();
@@ -426,7 +427,7 @@ public class BeatGenerator : MonoBehaviour
         );
 
         // === NEW: Process adaptive difficulty ===
-        if (difficultyIndex == 0 && !isFinalBar)
+        if (difficultyIndex == 0 && !isFinalBar && enableAdaptiveDifficulty == true)
         {
             // Determine if round was successful
             bool wasSuccessful = DetermineRoundSuccess();

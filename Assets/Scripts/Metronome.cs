@@ -1,17 +1,13 @@
 ﻿using System;
 using UnityEngine;
 
-/// <summary>
-/// Simplified metronome for visual beat feedback only.
-/// Timing coordination is now handled by TimingCoordinator.
-/// This class can be kept for bounce animations or removed entirely.
-/// </summary>
+
 public class Metronome : MonoBehaviour
 {
     // Events kept for compatibility with bounce animations
     public event Action OnTickEvent;
 
-    public double bpm = 140.0F;
+    public double bpm;
     public bool playTick = false;
     public AudioSource speaker;
 
@@ -24,10 +20,6 @@ public class Metronome : MonoBehaviour
     // Simple beat counter for visual feedback
     public int beatCount = 0;
 
-    /// <summary>
-    /// Initialize metronome with a specific start time.
-    /// Called by GameManager with synchronized timing.
-    /// </summary>
     public void InitializeWithStartTime(double futureStartTime)
     {
         timePerTick = 60.0 / bpm;
@@ -42,7 +34,7 @@ public class Metronome : MonoBehaviour
         Debug.Log($"  First tick at: {nextTick:F4}");
     }
 
-    private void FixedUpdate()
+    private void Update()
     {
         if (GameClock.Instance.IsPaused)
             return;
