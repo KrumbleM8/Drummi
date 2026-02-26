@@ -12,6 +12,7 @@ public class PlayerInputVisualHandler : MonoBehaviour
     public Slider inputSlider;
     public RectTransform indicatorParent;
     public GameObject inputIndicatorPrefab;
+    public GameObject perfectInputStarPrefab;
 
     [Header("Metronome Reference")]
     public Metronome metronome;

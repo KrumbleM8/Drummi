@@ -1,4 +1,5 @@
 ﻿using System.Collections.Generic;
+using System.IO;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
@@ -91,12 +92,28 @@ public class PlayerInputReader : MonoBehaviour
         var input = new BongoInput(GameClock.Instance.GameTime, isRightBongo); // ← Changed
         playerInputData.Add(input);
 
-        // Spawn visual indicator
-        playerInputVisualScheduler?.SpawnInputIndicator(isRightBongo);
+        // Check for Immediate Feedback
+        //playerInputVisualScheduler?.SpawnInputIndicator(isRightBongo,beatEvaluator.EvaluateSingleInput(input));
+        // ^ This might be more efficient
 
-        // Note: Evaluation happens later in BeatGenerator.EvaluateBar()
-        // No immediate feedback to keep it simple
-    }
+        switch (beatEvaluator.EvaluateSingleInput(input)) //TODO: FINISH THIS
+        {
+            case InputMatch.MatchQuality.Perfect:
+                //Spawn a star behind the indicator, grow shrink and spin it, keep it 
+                playerInputVisualScheduler?.SpawnInputIndicator(isRightBongo);
+                break;
+            case InputMatch.MatchQuality.Good:
+                playerInputVisualScheduler?.SpawnInputIndicator(isRightBongo);
+                break;
+            default:
+                //default = Miss, too late/early or wrong side.
+                //Tilt indicator and disable it's bounce on beat.
+                playerInputVisualScheduler?.SpawnInputIndicator(isRightBongo);
+                break;          
+        }
+
+            // Note: Evaluation happens later in BeatGenerator.EvaluateBar()
+        }
 
     public void ResetInputs()
     {

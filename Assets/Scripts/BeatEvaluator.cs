@@ -1,6 +1,7 @@
 ﻿using System.Collections.Generic;
 using UnityEngine;
 using TMPro;
+using System;
 
 /// <summary>
 /// Evaluates player input against scheduled beats and manages scoring.
@@ -55,7 +56,7 @@ public class BeatEvaluator : MonoBehaviour
         {
             Debug.LogWarning("[BeatEvaluator] Attempted evaluation while paused");
             return null;
-        }
+        }   
 
         if (scheduledBeats.Count == 0)
         {
@@ -327,6 +328,57 @@ public class BeatEvaluator : MonoBehaviour
             UpdateScoreDisplay();
             AudioManager.instance.PlayTotalFail();
         }
+    }
+
+    /// <summary>
+    /// Evaluates a single input immediately against the closest scheduled beat.
+    /// Returns the MatchQuality of the input.
+    /// </summary>
+    public InputMatch.MatchQuality EvaluateSingleInput(BongoInput input)
+    {
+        var scheduledBeats = beatGenerator.ScheduledBeats;
+        if (scheduledBeats == null || scheduledBeats.Count == 0)
+        {
+            Debug.LogWarning("[BeatEvaluator] No scheduled beats to evaluate input against.");
+            return InputMatch.MatchQuality.Miss;
+        }
+
+        double timeOffset = beatGenerator.InputStartTime - beatGenerator.PatternStartTime;
+
+        // Find the closest scheduled beat to the input time
+        ScheduledBeat closestBeat = null;
+        double smallestDelta = double.MaxValue;
+
+        foreach (var beat in scheduledBeats)
+        {
+            double adjustedBeatTime = beat.scheduledTime + timeOffset;
+            double delta = Math.Abs(input.inputTime - adjustedBeatTime);
+
+            if (delta < smallestDelta)
+            {
+                smallestDelta = delta;
+                closestBeat = beat;
+            }
+        }
+
+        // Evaluate against the closest beat
+        double adjustedClosestBeatTime = closestBeat.scheduledTime + timeOffset;
+        double timingError = input.inputTime - adjustedClosestBeatTime;
+
+        if (timingError < -goodThreshold)
+            return InputMatch.MatchQuality.TooEarly;
+
+        if (timingError > goodThreshold)
+            return InputMatch.MatchQuality.TooLate;
+
+        // Within timing window — check side
+        if (closestBeat.isRightBongo != input.isRightBongo)
+            return InputMatch.MatchQuality.WrongSide;
+
+        if (Mathf.Abs((float)timingError) <= perfectThreshold)
+            return InputMatch.MatchQuality.Perfect;
+
+        return InputMatch.MatchQuality.Good;
     }
     #endregion
 
