@@ -19,6 +19,8 @@ public class UIQuickSpawnEffect : MonoBehaviour
 
     public BounceOnBeat bouncerRef;
 
+    public bool wrongHit = false;
+
     private void Awake()
     {
         rect = GetComponent<RectTransform>();
@@ -51,11 +53,14 @@ public class UIQuickSpawnEffect : MonoBehaviour
         yield return Animate(rect.localScale, originalScale * recoilScale,
                              rect.localRotation, originalRotation, recoilDuration);
 
-        // Return to normal
-        yield return Animate(rect.localScale, originalScale,
-                             rect.localRotation, originalRotation, settleDuration);
+        if(wrongHit == false)
+        {
+            // Return to normal
+            yield return Animate(rect.localScale, originalScale,
+                                 rect.localRotation, originalRotation, settleDuration);
 
-        bouncerRef.enabled = true;
+            bouncerRef.enabled = true;
+        }
     }
 
     private IEnumerator Animate(Vector3 fromScale, Vector3 toScale,

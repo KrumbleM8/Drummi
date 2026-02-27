@@ -11,6 +11,8 @@ public class PlayerInputVisualHandler : MonoBehaviour
     [Header("UI References")]
     public Slider inputSlider;
     public RectTransform indicatorParent;
+    public RectTransform starParent;
+    private List<Coroutine> activeStarCoroutines = new List<Coroutine>();
     public GameObject inputIndicatorPrefab;
     public GameObject perfectInputStarPrefab;
 
@@ -171,6 +173,120 @@ public class PlayerInputVisualHandler : MonoBehaviour
             rt.anchoredPosition = new Vector2(GetCurrentSliderXPosition(), 0f);
     }
 
+    public void SpawnMissedInputIndicator(bool isRightBongo, InputMatch.MatchQuality timing)
+    {
+        if (!inputIndicatorPrefab || !indicatorParent || !inputSlider)
+        {
+            Debug.LogWarning("PlayerInputVisualHandler: Missing required references.");
+            return;
+        }
+
+        GameObject indicator = Instantiate(inputIndicatorPrefab, indicatorParent);
+
+        // --- Position ---
+        if (indicator.TryGetComponent(out RectTransform rt))
+            rt.anchoredPosition = new Vector2(GetCurrentSliderXPosition(), 0f);
+
+        // --- Darken the image ---
+        if (indicator.TryGetComponent(out Image img))
+        {
+            Color baseColor = isRightBongo ? Color.red : Color.green;
+            img.color = Color.gray; // darken by reducing RGB, keeps alpha
+        }
+
+        // --- Stop the bounce/spawn effect and tilt ---
+        if (indicator.TryGetComponent(out UIQuickSpawnEffect spawnEffect))
+        {
+            float tiltAngle = timing == InputMatch.MatchQuality.TooEarly ? 45f : -45f;
+            if (timing == InputMatch.MatchQuality.Miss || timing == InputMatch.MatchQuality.WrongSide)
+                tiltAngle = 90f; // Missed entirely, so more extreme tilt
+
+            spawnEffect.rotateAngle = tiltAngle;
+            spawnEffect.wrongHit = true;
+            spawnEffect.recoilScale = .8f;
+        }
+
+        // --- Stop the bounce/spawn effect and tilt ---
+        if (indicator.TryGetComponent(out UIRotateWobble wobbleEffect))
+        {
+            wobbleEffect.enabled = false;
+        }
+    }
+
+    public void SpawnPerfectInputStar()
+    {
+        if (!perfectInputStarPrefab || !indicatorParent)
+        {
+            Debug.LogWarning("PlayerInputVisualHandler: Missing perfectInputStarPrefab or indicatorParent.");
+            return;
+        }
+
+        GameObject star = Instantiate(perfectInputStarPrefab, starParent);
+
+        if (star.TryGetComponent(out RectTransform rt))
+            rt.anchoredPosition = new Vector2(GetCurrentSliderXPosition(), 0f);
+
+        Coroutine c = StartCoroutine(AnimatePerfectStar(star));
+        activeStarCoroutines.Add(c);
+    }
+
+    private IEnumerator AnimatePerfectStar(GameObject star)
+    {
+        if (!star.TryGetComponent(out RectTransform rt)) yield break;
+
+        // --- Tuneable values ---
+        float growDuration = 0.17f;
+        float shrinkDuration = 0.12f;
+        float peakScale = 1.2f;
+        float restingScale = 0.8f;
+        float totalSpin = 360f;       // degrees over the full animation
+                                      // -----------------------
+
+        float totalDuration = growDuration + shrinkDuration;
+        float elapsed = 0f;
+
+        rt.localScale = Vector3.zero;
+
+        while (elapsed < totalDuration)
+        {
+            elapsed += Time.deltaTime;
+
+            // Spin continuously across the entire animation
+            float spinAngle = Mathf.Lerp(0f, totalSpin, elapsed / totalDuration);
+            rt.localRotation = Quaternion.Euler(0f, 0f, spinAngle);
+
+            // Scale: grow phase then shrink phase
+            float scale;
+            if (elapsed < growDuration)
+            {
+                float t = elapsed / growDuration;
+                scale = Mathf.Lerp(0f, peakScale, EaseOutBack(t));
+            }
+            else
+            {
+                float t = (elapsed - growDuration) / shrinkDuration;
+                scale = Mathf.Lerp(peakScale, restingScale, EaseInQuad(t));
+            }
+
+            rt.localScale = Vector3.one * scale;
+
+            yield return null;
+        }
+
+        // Settle cleanly
+        rt.localScale = Vector3.one * restingScale;
+    }
+
+    // Overshoots slightly for a punchy pop feel
+    private float EaseOutBack(float t)
+    {
+        const float c1 = 1.70158f;
+        const float c3 = c1 + 1f;
+        return 1f + c3 * Mathf.Pow(t - 1f, 3f) + c1 * Mathf.Pow(t - 1f, 2f);
+    }
+
+    private float EaseInQuad(float t) => t * t;
+
     public float GetCurrentSliderXPosition()
     {
         float parentWidth = indicatorParent.rect.width;
@@ -179,6 +295,15 @@ public class PlayerInputVisualHandler : MonoBehaviour
 
     public void ResetVisuals()
     {
+        foreach (var c in activeStarCoroutines)
+            if (c != null) StopCoroutine(c);
+
+        activeStarCoroutines.Clear();
+
+
+        for (int i = starParent.childCount - 1; i >= 0; i--)
+            Destroy(starParent.GetChild(i).gameObject);
+
         if (!indicatorParent) return;
 
         for (int i = indicatorParent.childCount - 1; i >= 0; i--)

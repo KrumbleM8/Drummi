@@ -116,7 +116,7 @@ public class GameManager : MonoBehaviour
             return;
         }
 
-        // Set BPM based on song
+        // Set BPM based on songgi
         metronome.bpm = songIndex switch
         {
             0 => 111,
