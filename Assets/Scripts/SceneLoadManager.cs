@@ -18,7 +18,17 @@ public class SceneLoadManager : MonoBehaviour
     // Exact behavior preserved: immediate load of scene 0.
     public void ResetDrummi()
     {
-        // TODO: handle saves, transitions if you add them later.
+        // Reset AudioManager state before destroying the scene so the
+        // persistent DontDestroyOnLoad instance is clean for the next session.
+        if (AudioManager.instance != null)
+        {
+            AudioManager.instance.ResetState();
+        }
+
+        // Restore timeScale in case we're coming from a paused state.
+        Time.timeScale = 1f;
+
+        //Handle Saving/Loading of any other persistent state here if needed.
         SceneManager.LoadScene(0);
     }
 

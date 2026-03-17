@@ -341,15 +341,21 @@ public class BeatGenerator : MonoBehaviour
             leftBongoIndex = (leftBongoIndex + 1) % leftBongoSources.Count;
         }
 
-        // Convert virtual time → real DSP time for Unity's audio system
+        // Guard against the source being destroyed (e.g. if it was a child of a
+        // singleton that got Destroy(gameObject)'d on duplicate detection).
+        if (source == null)
+        {
+            Debug.LogWarning("[BeatGenerator] Bongo AudioSource is null or destroyed — skipping schedule.");
+            return;
+        }
+
         double realDspTime = GameClock.Instance.VirtualToRealDsp(virtualTime);
         source.PlayScheduled(realDspTime);
 
-        // Track this scheduled audio with VIRTUAL time (for pause/resume)
         scheduledAudio.Add(new ScheduledAudio
         {
             source = source,
-            virtualTime = virtualTime,  // Store virtual time!
+            virtualTime = virtualTime,
             isRightBongo = isRightSide
         });
     }

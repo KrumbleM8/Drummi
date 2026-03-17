@@ -25,7 +25,7 @@ public class AudioManager : MonoBehaviour
     {
         if (instance != null && instance != this)
         {
-            Destroy(gameObject);
+            Destroy(this); // was Destroy(gameObject) — only destroy the duplicate component
             return;
         }
 
@@ -143,5 +143,22 @@ public class AudioManager : MonoBehaviour
     public void StopMusic()
     {
         speakers[0].Stop();
+    }
+
+    public void ResetState()
+    {
+        // Stop every speaker cleanly before the new session starts
+        foreach (AudioSource src in speakers)
+        {
+            if (src != null) src.Stop();
+        }
+
+        // Clear all pause tracking so the new session starts from zero
+        isPaused = false;
+        pauseStartDspTime = 0.0;
+        accumulatedPauseDuration = 0.0;
+        scheduledStartTime = 0.0;
+
+        Debug.Log("[AudioManager] State reset for new session");
     }
 }
