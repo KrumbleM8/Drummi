@@ -278,7 +278,7 @@ public class UIMenuManager : MonoBehaviour
     // Button Interface Methods
     public void ShowPageLeft(string pageName) => ShowPage(pageName, true);
     public void ShowPageRight(string pageName) => ShowPage(pageName, false);
-    public void GoToAcademyScene() => TransitionToScene("Academy", swipeLeft: true);
+    public void GoToArcadeScene() => TransitionToScene("Arcade", swipeLeft: true);
     public void GoToGardenScene() => TransitionToScene("Garden", swipeLeft: true);
 
 #if UNITY_EDITOR

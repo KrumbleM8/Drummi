@@ -448,7 +448,7 @@ public class GameManager : MonoBehaviour
         var scoreScreen = menuManager.currentPage.pageTransform.GetComponent<ScoreScreen>();
         if (scoreScreen != null && beatEvaluator != null)
         {
-            scoreScreen.DisplayScore(beatEvaluator.Score, beatEvaluator.PerfectHits);
+            scoreScreen.DisplayScore(beatEvaluator.Score, beatEvaluator.TotalPerfectHits);
             Debug.Log($"[GameManager] Score displayed: {beatEvaluator.Score}");
         }
         else

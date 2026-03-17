@@ -15,9 +15,12 @@ public class BeatEvaluator : MonoBehaviour
     [SerializeField] private CustardAnimationHandler custardAnimator;
     [SerializeField] private TMP_Text scoreText;
 
-    [Header("Timing Windows (seconds)")]
-    [SerializeField] private float perfectThreshold = 0.05f;
-    [SerializeField] private float goodThreshold = 0.2f;
+    [Header("Timing Windows (fraction of one beat)")]
+    [SerializeField][Range(0f, 0.5f)] private float perfectFraction = 0.08f;
+    [SerializeField][Range(0f, 0.5f)] private float goodFraction = 0.25f;
+
+    private float PerfectThreshold => (float)(60.0 / beatGenerator.metronome.bpm) * perfectFraction;
+    private float GoodThreshold => (float)(60.0 / beatGenerator.metronome.bpm) * goodFraction;
 
     [Header("Scoring")]
     [SerializeField] private int perfectReward = 200;
@@ -29,6 +32,7 @@ public class BeatEvaluator : MonoBehaviour
     #region Public State
     public int Score { get; private set; }
     public int PerfectHits { get; private set; }
+    public int TotalPerfectHits { get; private set; }
     public bool HasFailedOnce { get; private set; }
     #endregion
 
@@ -56,7 +60,7 @@ public class BeatEvaluator : MonoBehaviour
         {
             Debug.LogWarning("[BeatEvaluator] Attempted evaluation while paused");
             return null;
-        }   
+        }
 
         if (scheduledBeats.Count == 0)
         {
@@ -129,14 +133,14 @@ public class BeatEvaluator : MonoBehaviour
             };
 
             // Too early - input doesn't match this beat, try next input
-            if (delta < -goodThreshold)
+            if (delta < -GoodThreshold)
             {
                 match.Quality = InputMatch.MatchQuality.TooEarly;
                 matches.Add(match);
                 inputIndex++;
             }
             // Too late - beat was missed, try next beat
-            else if (delta > goodThreshold)
+            else if (delta > GoodThreshold)
             {
                 match.Quality = InputMatch.MatchQuality.TooLate;
                 matches.Add(match);
@@ -150,7 +154,7 @@ public class BeatEvaluator : MonoBehaviour
                 if (correctSide)
                 {
                     // Perfect timing
-                    if (Mathf.Abs((float)delta) <= perfectThreshold)
+                    if (Mathf.Abs((float)delta) <= PerfectThreshold)
                     {
                         match.Quality = InputMatch.MatchQuality.Perfect;
                     }
@@ -266,6 +270,7 @@ public class BeatEvaluator : MonoBehaviour
     private void ApplyEvaluationResult(EvaluationResult result)
     {
         PerfectHits = result.PerfectHits;
+        TotalPerfectHits += result.PerfectHits;
 
         if (result.Grade == EvaluationGrade.Failed)
         {
@@ -365,17 +370,17 @@ public class BeatEvaluator : MonoBehaviour
         double adjustedClosestBeatTime = closestBeat.scheduledTime + timeOffset;
         double timingError = input.inputTime - adjustedClosestBeatTime;
 
-        if (timingError < -goodThreshold)
+        if (timingError < -GoodThreshold)
             return InputMatch.MatchQuality.TooEarly;
 
-        if (timingError > goodThreshold)
+        if (timingError > GoodThreshold)
             return InputMatch.MatchQuality.TooLate;
 
         // Within timing window — check side
         if (closestBeat.isRightBongo != input.isRightBongo)
             return InputMatch.MatchQuality.WrongSide;
 
-        if (Mathf.Abs((float)timingError) <= perfectThreshold)
+        if (Mathf.Abs((float)timingError) <= PerfectThreshold)
             return InputMatch.MatchQuality.Perfect;
 
         return InputMatch.MatchQuality.Good;

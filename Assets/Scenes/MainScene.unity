@@ -4035,7 +4035,7 @@ GameObject:
   - component: {fileID: 544135882}
   - component: {fileID: 544135884}
   m_Layer: 5
-  m_Name: Academy
+  m_Name: Arcade
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -4118,7 +4118,7 @@ MonoBehaviour:
         m_Calls:
         - m_Target: {fileID: 1601808757}
           m_TargetAssemblyTypeName: UIMenuManager, Assembly-CSharp
-          m_MethodName: GoToAcademyScene
+          m_MethodName: GoToArcadeScene
           m_Mode: 1
           m_Arguments:
             m_ObjectArgument: {fileID: 0}
@@ -14849,33 +14849,33 @@ MonoBehaviour:
   - pageName: Intro
     pageTransform: {fileID: 685055644}
     onScreenPosition: {x: 0, y: 0}
-    offScreenLeftPosition: {x: -1136, y: 0}
-    offScreenRightPosition: {x: 1136, y: 0}
+    offScreenLeftPosition: {x: -720.16, y: 0}
+    offScreenRightPosition: {x: 720.16, y: 0}
   - pageName: Main
     pageTransform: {fileID: 686828141}
     onScreenPosition: {x: 0, y: 0}
-    offScreenLeftPosition: {x: -1136, y: 0}
-    offScreenRightPosition: {x: 1136, y: 0}
+    offScreenLeftPosition: {x: -720.16, y: 0}
+    offScreenRightPosition: {x: 720.16, y: 0}
   - pageName: Song
     pageTransform: {fileID: 498961237}
     onScreenPosition: {x: 0, y: 0}
-    offScreenLeftPosition: {x: -1136, y: 0}
-    offScreenRightPosition: {x: 1136, y: 0}
+    offScreenLeftPosition: {x: -720.16, y: 0}
+    offScreenRightPosition: {x: 720.16, y: 0}
   - pageName: Difficulty
     pageTransform: {fileID: 1373578963}
     onScreenPosition: {x: 0, y: 0}
-    offScreenLeftPosition: {x: -1136, y: 0}
-    offScreenRightPosition: {x: 1136, y: 0}
+    offScreenLeftPosition: {x: -720.16, y: 0}
+    offScreenRightPosition: {x: 720.16, y: 0}
   - pageName: Customize
     pageTransform: {fileID: 1030085468}
     onScreenPosition: {x: 0, y: 0}
-    offScreenLeftPosition: {x: -1136, y: 0}
-    offScreenRightPosition: {x: 1136, y: 0}
+    offScreenLeftPosition: {x: -720.16, y: 0}
+    offScreenRightPosition: {x: 720.16, y: 0}
   - pageName: Score
     pageTransform: {fileID: 373518197}
     onScreenPosition: {x: 0, y: 0}
-    offScreenLeftPosition: {x: -1136, y: 0}
-    offScreenRightPosition: {x: 1136, y: 0}
+    offScreenLeftPosition: {x: -720.16, y: 0}
+    offScreenRightPosition: {x: 720.16, y: 0}
   startingPageName: Intro
   transitionDuration: 0.5
   transitionCurve:
