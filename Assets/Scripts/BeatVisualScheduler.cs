@@ -13,6 +13,8 @@ public class BeatVisualScheduler : MonoBehaviour
     public Slider barSlider;
     public RectTransform indicatorParent;
     public GameObject beatIndicatorPrefab;
+    public Color leftBongoColor = Color.green;
+    public Color rightBongoColor = Color.red;
 
     [Header("Metronome Reference")]
     public Metronome metronome;
@@ -184,7 +186,7 @@ public class BeatVisualScheduler : MonoBehaviour
         Image img = indicator.GetComponent<Image>();
         if (img != null)
         {
-            img.color = isRightBongo ? Color.red : Color.green;
+            img.color = isRightBongo ? rightBongoColor : leftBongoColor;
         }
 
         float posX = GetCurrentSliderValueXPosition();

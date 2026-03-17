@@ -14,6 +14,8 @@ public class PlayerInputVisualHandler : MonoBehaviour
     public RectTransform starParent;
     private List<Coroutine> activeStarCoroutines = new List<Coroutine>();
     public GameObject inputIndicatorPrefab;
+    private Color leftBongoColor = Color.green;
+    private Color rightBongoColor = Color.red;
     public GameObject perfectInputStarPrefab;
 
     [Header("Metronome Reference")]
@@ -66,6 +68,10 @@ public class PlayerInputVisualHandler : MonoBehaviour
     private void Start()
     {
         CacheHandlePositions();
+
+        BeatVisualScheduler beatVisualScheduler = GetComponent<BeatVisualScheduler>();
+        leftBongoColor = beatVisualScheduler.leftBongoColor;
+        rightBongoColor = beatVisualScheduler.rightBongoColor;
     }
 
     private void OnDisable()
@@ -167,7 +173,7 @@ public class PlayerInputVisualHandler : MonoBehaviour
 
         GameObject indicator = Instantiate(inputIndicatorPrefab, indicatorParent);
         if (indicator.TryGetComponent(out Image img))
-            img.color = isRightBongo ? Color.red : Color.green;
+            img.color = isRightBongo ? rightBongoColor : leftBongoColor;
 
         if (indicator.TryGetComponent(out RectTransform rt))
             rt.anchoredPosition = new Vector2(GetCurrentSliderXPosition(), 0f);
@@ -190,7 +196,7 @@ public class PlayerInputVisualHandler : MonoBehaviour
         // --- Darken the image ---
         if (indicator.TryGetComponent(out Image img))
         {
-            Color baseColor = isRightBongo ? Color.red : Color.green;
+            Color baseColor = isRightBongo ? rightBongoColor : leftBongoColor;
             img.color = Color.gray; // darken by reducing RGB, keeps alpha
         }
 
