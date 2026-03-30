@@ -2,13 +2,13 @@
 using UnityEngine;
 
 /// <summary>
-/// Central game coordinator. Manages game lifecycle and orchestrates subsystems.
-/// REFACTORED: Uses TimingCoordinator for synchronized timing
+/// Central game coordinator. Manages game lifecycle and orchestrates shared subsystems.
+/// Mode-specific logic (beat generation, evaluation, visuals) lives in mode controllers.
 /// </summary>
 public class GameManager : MonoBehaviour
 {
     #region Singleton
-    public static GameManager instance; 
+    public static GameManager instance;
 
     private void Awake()
     {
@@ -22,12 +22,8 @@ public class GameManager : MonoBehaviour
     #endregion
 
     #region Inspector References
-    [Header("Core Gameplay Systems")]
+    [Header("Shared Timing Systems")]
     [SerializeField] public Metronome metronome;
-    [SerializeField] private BeatGenerator beatGenerator;
-    [SerializeField] private BeatEvaluator beatEvaluator;
-    [SerializeField] private BeatVisualScheduler visualScheduler;
-    [SerializeField] private PlayerInputVisualHandler playerInputVisual;
     [SerializeField] private TimingCoordinator timingCoordinator;
 
     [Header("UI & Transitions")]
@@ -44,8 +40,8 @@ public class GameManager : MonoBehaviour
     [SerializeField] private PauseHandler pauseHandler;
     [SerializeField] private SceneLoadManager sceneLoader;
 
-    [Header("Song Progression")]
-    [SerializeField] private int barsBeforeEndForFinalBar = 1;
+    [Header("Mode Controllers")]
+    [SerializeField] private BongoModeController bongoMode;
     #endregion
 
     #region Game State
@@ -65,14 +61,12 @@ public class GameManager : MonoBehaviour
     {
         Time.timeScale = 1f;
 
-        // Initialize delegates
         pauseHandler = GetComponent<PauseHandler>();
         sceneLoader = SceneLoadManager.instance;
 
-        // Subscribe to events
-        if (beatGenerator != null)
+        if (bongoMode != null)
         {
-            beatGenerator.OnSongComplete += HandleSongComplete;
+            bongoMode.OnModeComplete += HandleModeComplete;
         }
 
         Debug.Log("[GameManager] Initialized");
@@ -80,14 +74,14 @@ public class GameManager : MonoBehaviour
 
     private void OnDestroy()
     {
-        if (beatGenerator != null)
+        if (bongoMode != null)
         {
-            beatGenerator.OnSongComplete -= HandleSongComplete;
+            bongoMode.OnModeComplete -= HandleModeComplete;
         }
     }
     #endregion
 
-    #region Public API - Game Control
+    #region Public API
     public void StartGame()
     {
         if (currentPhase == GamePhase.Playing)
@@ -101,10 +95,9 @@ public class GameManager : MonoBehaviour
 
     public void SetDifficulty(int difficultyIndex)
     {
-        if (beatGenerator != null)
+        if (bongoMode != null)
         {
-            beatGenerator.difficultyIndex = difficultyIndex;
-            Debug.Log($"[GameManager] Difficulty set to {difficultyIndex}");
+            bongoMode.SetDifficulty(difficultyIndex);
         }
     }
 
@@ -116,7 +109,6 @@ public class GameManager : MonoBehaviour
             return;
         }
 
-        // Set BPM based on songgi
         metronome.bpm = songIndex switch
         {
             0 => 111,
@@ -164,86 +156,63 @@ public class GameManager : MonoBehaviour
         // 3. Screen transition (reveal)
         screenTransition.StartReveal();
 
-        // 4. Calculate synchronized start time with minimal lookahead
-        const double LOOKAHEAD_TIME = 0.05; // 50ms - minimal but safe
+        // 4. Calculate synchronized start time
+        const double LOOKAHEAD_TIME = 0.05;
         double baseStartTime = AudioSettings.dspTime + LOOKAHEAD_TIME;
-
-        // Convert to virtual time for game logic
-        // At game start, virtual time = real DSP time (no pauses yet)
         double virtualStartTime = GameClock.Instance.RealDspToVirtual(baseStartTime);
 
         Debug.Log($"[GameManager] === SYNCHRONIZED TIMING ===");
         Debug.Log($"  Current Real DSP: {AudioSettings.dspTime:F4}");
-        Debug.Log($"  Start Real DSP: {baseStartTime:F4}");
-        Debug.Log($"  Start Virtual: {virtualStartTime:F4}");
-        Debug.Log($"  Lookahead: {LOOKAHEAD_TIME * 1000:F1}ms");
+        Debug.Log($"  Start Real DSP:   {baseStartTime:F4}");
+        Debug.Log($"  Start Virtual:    {virtualStartTime:F4}");
+        Debug.Log($"  Lookahead:        {LOOKAHEAD_TIME * 1000:F1}ms");
 
-        // 5. Get song info
-        AudioClip clip = AudioManager.instance.musicTracks[AudioManager.instance.selectedSongIndex];
-        if (clip == null)
+        // 5. Initialize metronome (shared, used for visual feedback across modes)
+        if (metronome != null)
         {
-            Debug.LogError("[GameManager] Song clip is null!");
-            yield break;
+            metronome.InitializeWithStartTime(virtualStartTime);
+            metronome.enabled = true;
         }
 
-        double beatInterval = 60.0 / metronome.bpm;
-        int totalBeats = Mathf.FloorToInt((float)(clip.length / beatInterval));
-
-        Debug.Log($"  Song: {clip.name}");
-        Debug.Log($"  BPM: {metronome.bpm}");
-        Debug.Log($"  Total beats: {totalBeats}");
-        Debug.Log($"  Duration: {clip.length:F2}s");
-
-        // 6. Initialize TimingCoordinator FIRST (single source of truth)
-        // Pass VIRTUAL time - coordinator works in virtual coordinates
-        if (timingCoordinator != null)
-        {
-            timingCoordinator.Initialize(
-                virtualStartTime,  // Virtual time!
-                metronome.bpm,
-                totalBeats,
-                barsBeforeEndForFinalBar
-            );
-        }
-        else
+        // 6. Initialize TimingCoordinator (shared source of truth)
+        if (timingCoordinator == null)
         {
             Debug.LogError("[GameManager] TimingCoordinator is missing!");
             yield break;
         }
 
-        // 7. Initialize game systems with synchronized timing
-        InitializeGameSystems();
-
-        // 8. Initialize metronome (for visual feedback only)
-        if (metronome != null)
+        // TimingCoordinator needs song length - ask the active mode controller
+        if (bongoMode == null)
         {
-            // Metronome uses virtual time for visual feedback
-            metronome.InitializeWithStartTime(virtualStartTime);
-            metronome.enabled = true;
+            Debug.LogError("[GameManager] No mode controller assigned!");
+            yield break;
         }
 
-        // 9. Schedule music (at real DSP time, WITHOUT offset)
-        // Music audio needs real DSP time from Unity
-        ScheduleMusic(baseStartTime);
+        int totalBeats = bongoMode.CalculateTotalBeats((int)metronome.bpm);
 
-        // 10. Synchronize visual systems
-        SynchronizeVisuals();
+        timingCoordinator.Initialize(
+            virtualStartTime,
+            metronome.bpm,
+            totalBeats,
+            bongoMode.BarsBeforeEndForFinalBar
+        );
 
-        // 11. Start beat generator gameplay with virtual time
-        beatGenerator.StartGameplay(virtualStartTime);
-
-        // 12. Reset GameClock
+        // 7. Reset GameClock
         if (GameClock.Instance != null)
         {
             GameClock.Instance.Reset();
         }
 
-        // 13. Mark state
+        // 8. Hand off to Bongo mode controller
+        bongoMode.StartMode(
+            (int)metronome.bpm,
+            virtualStartTime,
+            baseStartTime   // Real DSP for audio scheduling
+        );
+
         currentPhase = GamePhase.Playing;
 
         Debug.Log("=== GAME SEQUENCE COMPLETE ===");
-
-        yield return null;
     }
 
     private IEnumerator TransitionScreenCover()
@@ -265,92 +234,25 @@ public class GameManager : MonoBehaviour
     private void SetupGameplayUI()
     {
         if (pageToCloseOnStart != null)
-        {
             pageToCloseOnStart.SetActive(false);
-        }
 
         if (gameplayElements != null)
-        {
             gameplayElements.SetActive(true);
-        }
 
         if (gameplayElementsObject != null)
-        {
             gameplayElementsObject.SetActive(true);
-        }
 
         if (blinking != null)
         {
             blinking.enabled = false;
             if (blinking.transform.childCount > 0)
-            {
                 blinking.transform.GetChild(0).gameObject.SetActive(false);
-            }
         }
-    }
-
-    private void InitializeGameSystems()
-    {
-        // Initialize beat generator with song parameters
-        if (beatGenerator != null)
-        {
-            beatGenerator.enabled = true;
-            beatGenerator.Initialize(
-                (int)metronome.bpm,
-                AudioManager.instance.selectedSongIndex
-            );
-            Debug.Log("[GameManager] BeatGenerator initialized");
-        }
-
-        // Initialize visual schedulers
-        if (visualScheduler != null)
-        {
-            visualScheduler.enabled = true;
-            visualScheduler.InitalizeBeatValues();
-            Debug.Log("[GameManager] BeatVisualScheduler initialized");
-        }
-
-        if (playerInputVisual != null)
-        {
-            playerInputVisual.enabled = true;
-            playerInputVisual.InitializeBeatValues();
-            Debug.Log("[GameManager] PlayerInputVisualHandler initialized");
-        }
-    }
-
-    private void ScheduleMusic(double startTime)
-    {
-        if (AudioManager.instance == null)
-        {
-            Debug.LogError("[GameManager] AudioManager missing!");
-            return;
-        }
-
-        AudioManager.instance.scheduledStartTime = startTime;
-        AudioManager.instance.PlayMusic();
-
-        Debug.Log($"[GameManager] Music scheduled at: {startTime:F4}");
-    }
-
-    private void SynchronizeVisuals()
-    {
-        // Visual systems now use TimingCoordinator directly
-        if (visualScheduler != null)
-        {
-            visualScheduler.SyncWithTimingCoordinator();
-        }
-
-        if (playerInputVisual != null)
-        {
-            playerInputVisual.SyncWithTimingCoordinator();
-        }
-
-        Debug.Log("[GameManager] Visuals synchronized with TimingCoordinator");
     }
     #endregion
 
     #region Game Sequence - End
-    private void HandleSongComplete()
+    private void HandleModeComplete()
     {
         if (currentPhase == GamePhase.ShowingResults)
         {
@@ -360,7 +262,7 @@ public class GameManager : MonoBehaviour
 
         currentPhase = GamePhase.ShowingResults;
 
-        Debug.Log("[GameManager] Song complete - transitioning to results");
+        Debug.Log("[GameManager] Mode complete - transitioning to results");
 
         StartCoroutine(ShowResultsSequence());
     }
@@ -380,13 +282,16 @@ public class GameManager : MonoBehaviour
             }
         }
 
-        // 2. Cleanup gameplay systems
-        CleanupGameplaySystems();
+        // 2. Cleanup shared systems
+        CleanupSharedSystems();
 
-        // 3. Show results UI
+        // 3. Cleanup mode-specific systems
+        bongoMode.Cleanup();
+
+        // 4. Show results UI (score data sourced from mode controller)
         ShowResultsUI();
 
-        // 4. Screen transition (reveal)
+        // 5. Screen transition (reveal)
         if (screenTransition != null)
         {
             screenTransition.StartReveal();
@@ -395,7 +300,7 @@ public class GameManager : MonoBehaviour
         Debug.Log("=== RESULTS SEQUENCE COMPLETE ===");
     }
 
-    private void CleanupGameplaySystems()
+    private void CleanupSharedSystems()
     {
         if (gameplayElements != null)
         {
@@ -403,29 +308,11 @@ public class GameManager : MonoBehaviour
             Debug.Log("[GameManager] Gameplay elements hidden");
         }
 
-        if (visualScheduler != null)
-        {
-            visualScheduler.CleanupAndDisable();
-            Debug.Log("[GameManager] BeatVisualScheduler cleaned up");
-        }
-
-        if (playerInputVisual != null)
-        {
-            playerInputVisual.CleanupAndDisable();
-            Debug.Log("[GameManager] PlayerInputVisualHandler cleaned up");
-        }
-
         if (metronome != null && metronome.enabled)
         {
             metronome.ResetToInitialState();
             metronome.enabled = false;
             Debug.Log("[GameManager] Metronome disabled");
-        }
-
-        if (beatGenerator != null)
-        {
-            beatGenerator.ResetToInitialState();
-            Debug.Log("[GameManager] BeatGenerator cleaned up");
         }
 
         if (AudioManager.instance != null)
@@ -446,10 +333,10 @@ public class GameManager : MonoBehaviour
         menuManager.ShowPageImmediate("Score");
 
         var scoreScreen = menuManager.currentPage.pageTransform.GetComponent<ScoreScreen>();
-        if (scoreScreen != null && beatEvaluator != null)
+        if (scoreScreen != null)
         {
-            scoreScreen.DisplayScore(beatEvaluator.Score, beatEvaluator.TotalPerfectHits);
-            Debug.Log($"[GameManager] Score displayed: {beatEvaluator.Score}");
+            scoreScreen.DisplayScore(bongoMode.Score, bongoMode.TotalPerfectHits);
+            Debug.Log($"[GameManager] Score displayed: {bongoMode.Score}");
         }
         else
         {
@@ -463,13 +350,10 @@ public class GameManager : MonoBehaviour
     {
         Debug.Log("[GameManager] Resetting game values");
 
-        if (beatGenerator != null) beatGenerator.ResetToInitialState();
-        if (visualScheduler != null) visualScheduler.ResetToInitialState();
-        if (playerInputVisual != null) playerInputVisual.ResetToInitialState();
         if (metronome != null) metronome.ResetToInitialState();
-        if (beatEvaluator != null) beatEvaluator.ResetScore();
         if (GameClock.Instance != null) GameClock.Instance.Reset();
         if (timingCoordinator != null) timingCoordinator.Reset();
+        if (bongoMode != null) bongoMode.ResetToInitialState();
 
         currentPhase = GamePhase.Menu;
 

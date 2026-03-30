@@ -6844,6 +6844,7 @@ GameObject:
   - component: {fileID: 891851651}
   - component: {fileID: 891851652}
   - component: {fileID: 891851654}
+  - component: {fileID: 891851655}
   m_Layer: 0
   m_Name: GameManager
   m_TagString: Untagged
@@ -6997,10 +6998,6 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   metronome: {fileID: 1433809952}
-  beatGenerator: {fileID: 891851644}
-  beatEvaluator: {fileID: 891851647}
-  visualScheduler: {fileID: 891851645}
-  playerInputVisual: {fileID: 891851649}
   timingCoordinator: {fileID: 891851653}
   screenTransition: {fileID: 437680356}
   menuManager: {fileID: 1601808757}
@@ -7010,7 +7007,7 @@ MonoBehaviour:
   blinking: {fileID: 1762856860}
   pauseHandler: {fileID: 891851652}
   sceneLoader: {fileID: 0}
-  barsBeforeEndForFinalBar: 1
+  bongoMode: {fileID: 891851655}
 --- !u!114 &891851649
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -7113,6 +7110,23 @@ MonoBehaviour:
   hardDurations:
   - 1
   - 0.5
+--- !u!114 &891851655
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 891851642}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 995512154d1e8304dbba5629456c76ad, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  beatGenerator: {fileID: 891851644}
+  beatEvaluator: {fileID: 891851647}
+  visualScheduler: {fileID: 891851645}
+  playerInputVisual: {fileID: 891851649}
+  barsBeforeEndForFinalBar: 1
 --- !u!224 &897368736 stripped
 RectTransform:
   m_CorrespondingSourceObject: {fileID: 2040462333756127397, guid: 09a82d829ba59174cac0e9f9b91043b3, type: 3}
@@ -13926,33 +13940,33 @@ MonoBehaviour:
   - pageName: Intro
     pageTransform: {fileID: 685055644}
     onScreenPosition: {x: 0, y: 0}
-    offScreenLeftPosition: {x: -718.32, y: 0}
-    offScreenRightPosition: {x: 718.32, y: 0}
+    offScreenLeftPosition: {x: -663.12, y: 0}
+    offScreenRightPosition: {x: 663.12, y: 0}
   - pageName: Main
     pageTransform: {fileID: 686828141}
     onScreenPosition: {x: 0, y: 0}
-    offScreenLeftPosition: {x: -718.32, y: 0}
-    offScreenRightPosition: {x: 718.32, y: 0}
+    offScreenLeftPosition: {x: -663.12, y: 0}
+    offScreenRightPosition: {x: 663.12, y: 0}
   - pageName: Song
     pageTransform: {fileID: 498961237}
     onScreenPosition: {x: 0, y: 0}
-    offScreenLeftPosition: {x: -718.32, y: 0}
-    offScreenRightPosition: {x: 718.32, y: 0}
+    offScreenLeftPosition: {x: -663.12, y: 0}
+    offScreenRightPosition: {x: 663.12, y: 0}
   - pageName: Difficulty
     pageTransform: {fileID: 1373578963}
     onScreenPosition: {x: 0, y: 0}
-    offScreenLeftPosition: {x: -718.32, y: 0}
-    offScreenRightPosition: {x: 718.32, y: 0}
+    offScreenLeftPosition: {x: -663.12, y: 0}
+    offScreenRightPosition: {x: 663.12, y: 0}
   - pageName: Customize
     pageTransform: {fileID: 1030085468}
     onScreenPosition: {x: 0, y: 0}
-    offScreenLeftPosition: {x: -718.32, y: 0}
-    offScreenRightPosition: {x: 718.32, y: 0}
+    offScreenLeftPosition: {x: -663.12, y: 0}
+    offScreenRightPosition: {x: 663.12, y: 0}
   - pageName: Score
     pageTransform: {fileID: 373518197}
     onScreenPosition: {x: 0, y: 0}
-    offScreenLeftPosition: {x: -718.32, y: 0}
-    offScreenRightPosition: {x: 718.32, y: 0}
+    offScreenLeftPosition: {x: -663.12, y: 0}
+    offScreenRightPosition: {x: 663.12, y: 0}
   startingPageName: Intro
   transitionDuration: 0.5
   transitionCurve:
