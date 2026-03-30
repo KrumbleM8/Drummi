@@ -6940,6 +6940,8 @@ MonoBehaviour:
   barSlider: {fileID: 733343579}
   indicatorParent: {fileID: 1791689115}
   beatIndicatorPrefab: {fileID: 2066059053099723872, guid: a64f9378c39e11f479d50bfb842dc6ab, type: 3}
+  leftBongoColor: {r: 0.25, g: 1, b: 0.38043475, a: 1}
+  rightBongoColor: {r: 1, g: 0.19999999, b: 0.29638556, a: 1}
   metronome: {fileID: 1433809952}
   beatGenerator: {fileID: 891851644}
   fullLoopBeats: 8
@@ -13924,33 +13926,33 @@ MonoBehaviour:
   - pageName: Intro
     pageTransform: {fileID: 685055644}
     onScreenPosition: {x: 0, y: 0}
-    offScreenLeftPosition: {x: -719.24, y: 0}
-    offScreenRightPosition: {x: 719.24, y: 0}
+    offScreenLeftPosition: {x: -718.32, y: 0}
+    offScreenRightPosition: {x: 718.32, y: 0}
   - pageName: Main
     pageTransform: {fileID: 686828141}
     onScreenPosition: {x: 0, y: 0}
-    offScreenLeftPosition: {x: -719.24, y: 0}
-    offScreenRightPosition: {x: 719.24, y: 0}
+    offScreenLeftPosition: {x: -718.32, y: 0}
+    offScreenRightPosition: {x: 718.32, y: 0}
   - pageName: Song
     pageTransform: {fileID: 498961237}
     onScreenPosition: {x: 0, y: 0}
-    offScreenLeftPosition: {x: -719.24, y: 0}
-    offScreenRightPosition: {x: 719.24, y: 0}
+    offScreenLeftPosition: {x: -718.32, y: 0}
+    offScreenRightPosition: {x: 718.32, y: 0}
   - pageName: Difficulty
     pageTransform: {fileID: 1373578963}
     onScreenPosition: {x: 0, y: 0}
-    offScreenLeftPosition: {x: -719.24, y: 0}
-    offScreenRightPosition: {x: 719.24, y: 0}
+    offScreenLeftPosition: {x: -718.32, y: 0}
+    offScreenRightPosition: {x: 718.32, y: 0}
   - pageName: Customize
     pageTransform: {fileID: 1030085468}
     onScreenPosition: {x: 0, y: 0}
-    offScreenLeftPosition: {x: -719.24, y: 0}
-    offScreenRightPosition: {x: 719.24, y: 0}
+    offScreenLeftPosition: {x: -718.32, y: 0}
+    offScreenRightPosition: {x: 718.32, y: 0}
   - pageName: Score
     pageTransform: {fileID: 373518197}
     onScreenPosition: {x: 0, y: 0}
-    offScreenLeftPosition: {x: -719.24, y: 0}
-    offScreenRightPosition: {x: 719.24, y: 0}
+    offScreenLeftPosition: {x: -718.32, y: 0}
+    offScreenRightPosition: {x: 718.32, y: 0}
   startingPageName: Intro
   transitionDuration: 0.5
   transitionCurve:

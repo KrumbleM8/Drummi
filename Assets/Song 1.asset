@@ -1,0 +1,37 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 68ecb1dec4be61b4aa5a0a337d03223d, type: 3}
+  m_Name: Song 1
+  m_EditorClassIdentifier: 
+  songName: Untitled
+  audioClip: {fileID: 0}
+  bpm: 120
+  beatsPerBar: 4
+  loopChart: 1
+  loopLengthBeats: 8
+  notes:
+  - beat: 1
+    lane: 0
+  - beat: 2
+    lane: 1
+  - beat: 3
+    lane: 1
+  - beat: 4
+    lane: 1
+  - beat: 5
+    lane: 1
+  - beat: 6
+    lane: 1
+  - beat: 7
+    lane: 1
+  - beat: 8
+    lane: 1
