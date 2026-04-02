@@ -9,7 +9,7 @@ public class DrumPadTouch : MonoBehaviour
     [SerializeField] private RectTransform leftPad;
     [SerializeField] private RectTransform rightPad;
 
-    private PlayerInputReader playerInputReader;
+    private BongoModeInputReader playerInputReader;
 
     private HashSet<int> processedFingers = new HashSet<int>();
     private const float AUDIO_LATENCY = 0.05f;
@@ -21,7 +21,7 @@ public class DrumPadTouch : MonoBehaviour
         TouchSimulation.Enable();
 #endif
 
-        playerInputReader = GameManager.instance.gameObject.GetComponent<PlayerInputReader>();
+        playerInputReader = GameManager.instance.gameObject.GetComponent<BongoModeInputReader>();
     }
 
     private void OnDisable()

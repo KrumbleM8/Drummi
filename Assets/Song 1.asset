@@ -12,26 +12,36 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 68ecb1dec4be61b4aa5a0a337d03223d, type: 3}
   m_Name: Song 1
   m_EditorClassIdentifier: 
-  songName: Untitled
-  audioClip: {fileID: 0}
-  bpm: 120
+  songName: Bossa 1
+  audioClip: {fileID: 8300000, guid: 83a7a8a481b489244ac4a683264864bd, type: 3}
+  bpm: 111
   beatsPerBar: 4
   loopChart: 1
   loopLengthBeats: 8
   notes:
+  - beat: 0
+    lane: 1
   - beat: 1
     lane: 0
+  - beat: 1.5
+    lane: 1
   - beat: 2
     lane: 1
-  - beat: 3
+  - beat: 2.5
+    lane: 0
+  - beat: 3.5
     lane: 1
   - beat: 4
     lane: 1
-  - beat: 5
+  - beat: 4
+    lane: 0
+  - beat: 5.5
     lane: 1
+  - beat: 5.5
+    lane: 0
   - beat: 6
     lane: 1
   - beat: 7
-    lane: 1
-  - beat: 8
+    lane: 0
+  - beat: 7.5
     lane: 1

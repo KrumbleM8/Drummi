@@ -33,13 +33,14 @@ public class ArcadeInputHandler : MonoBehaviour
     // ── Private ───────────────────────────────────────────────────────────
 
     private HitJudge _hitJudge;
-    private BongoAnimator bongoAnimator;
+    private HitZoneManager _hitZoneManager;
 
     // ── Unity ─────────────────────────────────────────────────────────────
 
     void Awake()
     {
         _hitJudge = GetComponent<HitJudge>();
+        _hitZoneManager = FindFirstObjectByType<HitZoneManager>(); // optional
     }
 
     void OnEnable()
@@ -50,10 +51,6 @@ public class ArcadeInputHandler : MonoBehaviour
     void OnDisable()
     {
         EnhancedTouchSupport.Disable();
-    }
-    private void Start()
-    {
-        bongoAnimator = FindAnyObjectByType<BongoAnimator>();
     }
 
     void Update()
@@ -90,21 +87,20 @@ public class ArcadeInputHandler : MonoBehaviour
 
     private void FireLane(Lane lane)
     {
-        HitJudgement result = _hitJudge.Judge(lane);
-
-        // Optional: visual press feedback on hit zone regardless of judgement
-        // e.g. hitZoneAnimator[lane].TriggerPress();
-        if(lane == Lane.Left)
+        // Instant press flash — before judgement so it feels responsive
+        _hitZoneManager?.NotifyPress(lane);
+        if (lane == Lane.Left)
         {
-            bongoAnimator.PlayBongoAnimation(true);
             AudioManager.instance.PlayBongoLeft();
+            BongoAnimator.instance.PlayBongoAnimation(true);
         }
         else
         {
-            bongoAnimator.PlayBongoAnimation(false);
             AudioManager.instance.PlayBongoRight();
+            BongoAnimator.instance.PlayBongoAnimation(false);
         }
 
+        HitJudgement result = _hitJudge.Judge(lane);
         Debug.Log($"[RhythmInput] {lane} tapped → {result}");
     }
 }

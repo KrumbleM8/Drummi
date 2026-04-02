@@ -1,11 +1,11 @@
-using System;
+﻿using System;
 using UnityEngine;
 
 /// <summary>
 /// Owns all Bongo mode gameplay logic: beat generation, evaluation, visuals, and scoring.
 /// Activated and cleaned up by GameManager. Fires OnModeComplete when the song ends.
 /// </summary>
-public class BongoModeController : MonoBehaviour
+public class BongoModeController : ModeController
 {
     #region Events
     /// <summary>Fired when the song ends. GameManager listens to trigger the results sequence.</summary>
@@ -24,63 +24,19 @@ public class BongoModeController : MonoBehaviour
     #endregion
 
     #region Public Properties
-    public int BarsBeforeEndForFinalBar => barsBeforeEndForFinalBar;
-    public int Score => beatEvaluator != null ? beatEvaluator.Score : 0;
-    public int TotalPerfectHits => beatEvaluator != null ? beatEvaluator.TotalPerfectHits : 0;
+    public override int BarsBeforeEndForFinalBar => barsBeforeEndForFinalBar;
+    public override int Score => beatEvaluator != null ? beatEvaluator.Score : 0;
+    public override int TotalPerfectHits => beatEvaluator != null ? beatEvaluator.TotalPerfectHits : 0;
     #endregion
 
     #region Lifecycle
-    private void OnEnable()
-    {
-        if (beatGenerator != null)
-        {
-            beatGenerator.OnSongComplete += HandleSongComplete;
-        }
-    }
 
-    private void OnDisable()
-    {
-        if (beatGenerator != null)
-        {
-            beatGenerator.OnSongComplete -= HandleSongComplete;
-        }
-    }
-    #endregion
+    // ── ModeController identity ───────────────────────────────────────────
+    public override string ModeId => "Bongo";
 
-    #region Public API
-    /// <summary>
-    /// Called by GameManager after shared systems (TimingCoordinator, Metronome, GameClock) are ready.
-    /// </summary>
-    /// <param name="bpm">Current song BPM, sourced from Metronome.</param>
-    /// <param name="virtualStartTime">Virtual start time from GameClock.</param>
-    /// <param name="realDspStartTime">Real DSP start time for audio scheduling.</param>
-    public void StartMode(int bpm, double virtualStartTime, double realDspStartTime)
-    {
-        Debug.Log("[BongoModeController] Starting Bongo mode");
+    // ── ModeController lifecycle ──────────────────────────────────────────
 
-        InitializeSystems(bpm);
-        SynchronizeVisuals();
-        ScheduleMusic(realDspStartTime);
-
-        beatGenerator.StartGameplay(virtualStartTime);
-
-        Debug.Log("[BongoModeController] Bongo mode active");
-    }
-
-    public void SetDifficulty(int difficultyIndex)
-    {
-        if (beatGenerator != null)
-        {
-            beatGenerator.difficultyIndex = difficultyIndex;
-            Debug.Log($"[BongoModeController] Difficulty set to {difficultyIndex}");
-        }
-    }
-
-    /// <summary>
-    /// Returns total beats for the selected song. Called by GameManager before StartMode
-    /// so TimingCoordinator can be initialized with the correct value.
-    /// </summary>
-    public int CalculateTotalBeats(int bpm)
+    public override int CalculateTotalBeats(int bpm)
     {
         if (AudioManager.instance == null)
         {
@@ -103,8 +59,20 @@ public class BongoModeController : MonoBehaviour
         return totalBeats;
     }
 
-    /// <summary>Called by GameManager during the results sequence.</summary>
-    public void Cleanup()
+    public override void StartMode(int bpm, double virtualStartTime, double realDspStartTime)
+    {
+        Debug.Log("[BongoModeController] Starting Bongo mode");
+
+        InitializeSystems(bpm);
+        SynchronizeVisuals();
+        ScheduleMusic(realDspStartTime);
+
+        beatGenerator.StartGameplay(virtualStartTime);
+
+        Debug.Log("[BongoModeController] Bongo mode active");
+    }
+
+    public override void Cleanup()
     {
         if (visualScheduler != null)
         {
@@ -125,8 +93,7 @@ public class BongoModeController : MonoBehaviour
         }
     }
 
-    /// <summary>Full reset to pre-game state. Called by GameManager.ResetGameValues().</summary>
-    public void ResetToInitialState()
+    public override void ResetToInitialState()
     {
         if (beatGenerator != null) beatGenerator.ResetToInitialState();
         if (visualScheduler != null) visualScheduler.ResetToInitialState();
@@ -134,6 +101,30 @@ public class BongoModeController : MonoBehaviour
         if (beatEvaluator != null) beatEvaluator.ResetScore();
 
         Debug.Log("[BongoModeController] Reset to initial state");
+    }
+
+    public override void SetDifficulty(int difficultyIndex)
+    {
+        if (beatGenerator != null)
+        {
+            beatGenerator.difficultyIndex = difficultyIndex;
+            Debug.Log($"[BongoModeController] Difficulty set to {difficultyIndex}");
+        }
+    }
+    private void OnEnable()
+    {
+        if (beatGenerator != null)
+        {
+            beatGenerator.OnSongComplete += HandleSongComplete;
+        }
+    }
+
+    private void OnDisable()
+    {
+        if (beatGenerator != null)
+        {
+            beatGenerator.OnSongComplete -= HandleSongComplete;
+        }
     }
     #endregion
 

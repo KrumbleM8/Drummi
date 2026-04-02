@@ -2,7 +2,13 @@ using UnityEngine;
 
 /// <summary>
 /// Streams NoteObjects into the scene as their hit time approaches.
-/// Uses GameClock.VirtualTime as the time source and supports chart looping.
+/// Uses GameClock.GameTime as the time source and supports chart looping.
+///
+/// IMPORTANT — spawning is gated. NoteSpawner does NOT begin spawning at Start().
+/// Call StartSpawning(virtualStartTime) from RhythmGameController after GameClock
+/// is reset and the session anchor time is known. Without this, all beat 0-relative
+/// hit times would be in the deep past relative to DSP time and every note would
+/// spawn and auto-miss on the first frame.
 ///
 /// SCROLL SPEED MATH:
 ///   scrollSpeed = scrollDistance / lookaheadSeconds
@@ -10,10 +16,6 @@ using UnityEngine;
 ///     spawnY = hitZoneY + scrollDistance
 ///   It then arrives at hitZoneY after lookaheadSeconds of travel.
 ///   Set scrollDistance to match your camera's vertical world-unit height.
-///
-/// LOOPING:
-///   When loopChart is enabled on the SongChart, the spawner re-queues the
-///   same note array each loop cycle, offsetting hit times by loopIndex * loopLengthSeconds.
 /// </summary>
 public class NoteSpawner : MonoBehaviour
 {
@@ -46,14 +48,16 @@ public class NoteSpawner : MonoBehaviour
     private int _loopIndex;
     private float _scrollSpeed;
     private double _lookaheadSeconds;
-    private bool _initialised;
+    private double _startVirtualTime;  // GameClock anchor for beat 0
+    private bool _initialised;       // Only true after StartSpawning() is called
 
     // ── Unity ─────────────────────────────────────────────────────────────
 
     void Start()
     {
-        if (!ValidateSetup()) return;
-        Initialise();
+        // Validate references at scene load but do NOT begin spawning.
+        // Spawning only begins when StartSpawning(virtualStartTime) is called.
+        ValidateSetup();
     }
 
     void Update()
@@ -63,67 +67,74 @@ public class NoteSpawner : MonoBehaviour
 
         double virtualTime = GameClock.Instance.GameTime;
 
-        // Check loop boundary before spawning
         if (chart.loopChart)
             AdvanceLoopIfNeeded(virtualTime);
 
-        // Spawn all notes whose hit time has entered the lookahead window
         while (_nextNoteIndex < chart.notes.Length)
         {
             NoteData note = chart.notes[_nextNoteIndex];
-            double hitTime = chart.BeatToAbsoluteSeconds(note.beat, _loopIndex);
+            double hitTime = _startVirtualTime + chart.BeatToAbsoluteSeconds(note.beat, _loopIndex);
 
             if (hitTime - virtualTime <= _lookaheadSeconds)
             {
                 SpawnNote(note, hitTime);
                 _nextNoteIndex++;
             }
-            else break; // chart is sorted — safe to early-exit
+            else break;
         }
     }
 
     // ── Public API ────────────────────────────────────────────────────────
 
-    /// <summary>Reset spawner to beginning — call on song restart or scene reload.</summary>
-    public void ResetSpawner()
-    {
-        _nextNoteIndex = 0;
-        _loopIndex = 0;
-    }
-
     /// <summary>
-    /// Recompute scroll speed — call if BPM changes at runtime
-    /// (e.g. tempo ramp or chart hot-swap).
+    /// Begin spawning notes anchored to a specific GameClock virtual time.
+    /// Call this from RhythmGameController after GameClock is reset and the
+    /// session start time is known.
+    ///
+    /// All note hit times are offset by startVirtualTime so they align with
+    /// real DSP time rather than starting from 0.
     /// </summary>
-    public void RefreshScrollSpeed() => ComputeScrollSpeed();
-
-    // ── Private ───────────────────────────────────────────────────────────
-
-    private void Initialise()
+    public void StartSpawning(double startVirtualTime)
     {
+        if (!ValidateSetup()) return;
+
+        _startVirtualTime = startVirtualTime;
         _nextNoteIndex = 0;
         _loopIndex = 0;
         ComputeScrollSpeed();
         _initialised = true;
+
+        Debug.Log($"[NoteSpawner] StartSpawning — VirtualStart: {startVirtualTime:F4} | " +
+                  $"ScrollSpeed: {_scrollSpeed:F2} units/s | Lookahead: {_lookaheadSeconds:F3}s");
     }
+
+    /// <summary>
+    /// Stop spawning and reset to idle state.
+    /// Call StartSpawning() again to restart.
+    /// </summary>
+    public void ResetSpawner()
+    {
+        _initialised = false;
+        _nextNoteIndex = 0;
+        _loopIndex = 0;
+        _startVirtualTime = 0;
+    }
+
+    /// <summary>Recompute scroll speed — call if BPM changes at runtime.</summary>
+    public void RefreshScrollSpeed() => ComputeScrollSpeed();
+
+    // ── Private ───────────────────────────────────────────────────────────
 
     private void ComputeScrollSpeed()
     {
         _lookaheadSeconds = lookaheadBeats * chart.SecondsPerBeat;
         _scrollSpeed = (float)(scrollDistance / _lookaheadSeconds);
-
-        Debug.Log(
-            $"[NoteSpawner] BPM: {chart.bpm} | " +
-            $"Lookahead: {_lookaheadSeconds:F3}s | " +
-            $"ScrollSpeed: {_scrollSpeed:F2} units/s"
-        );
     }
 
     private void AdvanceLoopIfNeeded(double virtualTime)
     {
-        double nextLoopStartTime = (_loopIndex + 1) * (double)chart.LoopLengthSeconds;
+        double nextLoopStartTime = _startVirtualTime + (_loopIndex + 1) * (double)chart.LoopLengthSeconds;
 
-        // If we've passed the start of the next loop cycle, advance
         if (virtualTime >= nextLoopStartTime - _lookaheadSeconds &&
             _nextNoteIndex >= chart.notes.Length)
         {

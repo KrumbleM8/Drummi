@@ -14,7 +14,7 @@ public class BeatGenerator : MonoBehaviour
     [Header("Core Systems")]
     [SerializeField] public Metronome metronome; // Still used for visual feedback
     [SerializeField] private BeatEvaluator evaluator;
-    [SerializeField] private PlayerInputReader playerInputReader;
+    [SerializeField] private BongoModeInputReader playerInputReader;
     [SerializeField] private CustardAnimationHandler custardAnimator;
 
     [Header("Visual Schedulers")]

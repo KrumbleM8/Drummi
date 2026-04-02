@@ -4,7 +4,7 @@ using UnityEngine;
 using UnityEngine.InputSystem;
 using static InputMatch;
 
-public class PlayerInputReader : MonoBehaviour
+public class BongoModeInputReader : MonoBehaviour
 {
     [SerializeField] private InputActionAsset actionMap;
 
