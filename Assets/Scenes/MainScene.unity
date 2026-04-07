@@ -5097,6 +5097,7 @@ MonoBehaviour:
   modeControllers:
   - {fileID: 891851655}
   defaultModeId: Bongo
+  currentPhase: 0
 --- !u!114 &891851649
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -5492,7 +5493,7 @@ Canvas:
   m_OverridePixelPerfect: 0
   m_SortingBucketNormalizedSize: 0
   m_VertexColorAlwaysGammaSpace: 0
-  m_AdditionalShaderChannelsFlag: 0
+  m_AdditionalShaderChannelsFlag: 25
   m_UpdateRectTransformForStandalone: 0
   m_SortingLayerID: 0
   m_SortingOrder: 100
@@ -10282,33 +10283,33 @@ MonoBehaviour:
   - pageName: Intro
     pageTransform: {fileID: 685055644}
     onScreenPosition: {x: 0, y: 0}
-    offScreenLeftPosition: {x: -663.12, y: 0}
-    offScreenRightPosition: {x: 663.12, y: 0}
+    offScreenLeftPosition: {x: -1393.6, y: 0}
+    offScreenRightPosition: {x: 1393.6, y: 0}
   - pageName: Main
     pageTransform: {fileID: 686828141}
     onScreenPosition: {x: 0, y: 0}
-    offScreenLeftPosition: {x: -663.12, y: 0}
-    offScreenRightPosition: {x: 663.12, y: 0}
+    offScreenLeftPosition: {x: -1393.6, y: 0}
+    offScreenRightPosition: {x: 1393.6, y: 0}
   - pageName: Song
     pageTransform: {fileID: 498961237}
     onScreenPosition: {x: 0, y: 0}
-    offScreenLeftPosition: {x: -663.12, y: 0}
-    offScreenRightPosition: {x: 663.12, y: 0}
+    offScreenLeftPosition: {x: -1393.6, y: 0}
+    offScreenRightPosition: {x: 1393.6, y: 0}
   - pageName: Difficulty
     pageTransform: {fileID: 1373578963}
     onScreenPosition: {x: 0, y: 0}
-    offScreenLeftPosition: {x: -663.12, y: 0}
-    offScreenRightPosition: {x: 663.12, y: 0}
+    offScreenLeftPosition: {x: -1393.6, y: 0}
+    offScreenRightPosition: {x: 1393.6, y: 0}
   - pageName: Customize
     pageTransform: {fileID: 1030085468}
     onScreenPosition: {x: 0, y: 0}
-    offScreenLeftPosition: {x: -663.12, y: 0}
-    offScreenRightPosition: {x: 663.12, y: 0}
+    offScreenLeftPosition: {x: -1393.6, y: 0}
+    offScreenRightPosition: {x: 1393.6, y: 0}
   - pageName: Score
     pageTransform: {fileID: 373518197}
     onScreenPosition: {x: 0, y: 0}
-    offScreenLeftPosition: {x: -663.12, y: 0}
-    offScreenRightPosition: {x: 663.12, y: 0}
+    offScreenLeftPosition: {x: -1393.6, y: 0}
+    offScreenRightPosition: {x: 1393.6, y: 0}
   startingPageName: Intro
   transitionDuration: 0.5
   transitionCurve:
@@ -13784,6 +13785,10 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 202069999}
     m_Modifications:
+    - target: {fileID: 1346042252614884724, guid: 118da57c0b55494449dd357a9d068a9e, type: 3}
+      propertyPath: m_Layer
+      value: 6
+      objectReference: {fileID: 0}
     - target: {fileID: 2317508532740449633, guid: 118da57c0b55494449dd357a9d068a9e, type: 3}
       propertyPath: m_LocalPosition.x
       value: 0
