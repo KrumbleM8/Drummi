@@ -1,15 +1,10 @@
-﻿using System.Collections.Generic;
-using System.IO;
+using System.Collections.Generic;
 using UnityEngine;
-using UnityEngine.InputSystem;
 using static InputMatch;
 
 public class BongoModeInputReader : MonoBehaviour
 {
-    [SerializeField] private InputActionAsset actionMap;
-
-    private InputAction leftAction;
-    private InputAction rightAction;
+    [SerializeField] private DrumPadTouch drumPadTouch;
 
     public bool allowInput = true;
 
@@ -17,63 +12,38 @@ public class BongoModeInputReader : MonoBehaviour
     public List<BongoInput> playerInputData = new List<BongoInput>();
     public PlayerInputVisualHandler playerInputVisualScheduler;
 
-    //Used for logging inputs as they are pressed:
+    // Used for logging inputs as they are pressed:
     public BeatEvaluator beatEvaluator;
 
     private void Awake()
     {
-        if (actionMap != null)
-        {
-            leftAction = actionMap.FindAction("Left");
-            rightAction = actionMap.FindAction("Right");
-        }
-        else
-        {
-            Debug.LogError("Input Action Map is not assigned!");
-        }
-
         beatEvaluator = GetComponent<BeatEvaluator>();
     }
 
     private void OnEnable()
     {
-        if (leftAction != null)
+        if (drumPadTouch != null)
         {
-            leftAction.Enable();
-            leftAction.started += OnLeft;
+            drumPadTouch.OnLeftHit += OnLeft;
+            drumPadTouch.OnRightHit += OnRight;
         }
-
-        if (rightAction != null)
+        else
         {
-            rightAction.Enable();
-            rightAction.started += OnRight;
+            Debug.LogError("[BongoModeInputReader] DrumPadTouch not assigned!");
         }
     }
 
     private void OnDisable()
     {
-        if (leftAction != null)
+        if (drumPadTouch != null)
         {
-            leftAction.Disable();
-            leftAction.started -= OnLeft;
-        }
-
-        if (rightAction != null)
-        {
-            rightAction.Disable();
-            rightAction.started -= OnRight;
+            drumPadTouch.OnLeftHit -= OnLeft;
+            drumPadTouch.OnRightHit -= OnRight;
         }
     }
 
-    private void OnLeft(InputAction.CallbackContext context)
-    {
-        TriggerInput(false);
-    }
-
-    private void OnRight(InputAction.CallbackContext context)
-    {
-        TriggerInput(true);
-    }
+    private void OnLeft() => TriggerInput(false);
+    private void OnRight() => TriggerInput(true);
 
     public void TriggerInput(bool isRightBongo)
     {
@@ -86,21 +56,17 @@ public class BongoModeInputReader : MonoBehaviour
             AudioManager.instance?.PlayBongoLeft();
 
         // Early exit if input not allowed or game paused
-        if (!allowInput || GameClock.Instance.IsPaused) // ← Changed from Time.timeScale == 0
+        if (!allowInput || GameClock.Instance.IsPaused)
             return;
 
         // Record input using GameClock time (not raw DSP time)
-        var input = new BongoInput(GameClock.Instance.GameTime, isRightBongo); // ← Changed
+        var input = new BongoInput(GameClock.Instance.GameTime, isRightBongo);
         playerInputData.Add(input);
 
-        // Check for Immediate Feedback
-        //playerInputVisualScheduler?.SpawnInputIndicator(isRightBongo,beatEvaluator.EvaluateSingleInput(input));
-        // ^ This might be more efficient
         var result = beatEvaluator.EvaluateSingleInput(input);
-        switch (result) //TODO: FINISH THIS
+        switch (result)
         {
             case InputMatch.MatchQuality.Perfect:
-                //Spawn a star behind the indicator, grow shrink and spin it, keep it 
                 playerInputVisualScheduler.SpawnInputIndicator(isRightBongo);
                 playerInputVisualScheduler.SpawnPerfectInputStar();
                 break;
@@ -108,13 +74,12 @@ public class BongoModeInputReader : MonoBehaviour
                 playerInputVisualScheduler?.SpawnInputIndicator(isRightBongo);
                 break;
             default:
-                //default = Miss, too late/early or wrong side.
                 playerInputVisualScheduler.SpawnMissedInputIndicator(isRightBongo, result);
-                break;          
+                break;
         }
 
-            // Note: Evaluation happens later in BeatGenerator.EvaluateBar()
-        }
+        // Note: Evaluation happens later in BeatGenerator.EvaluateBar()
+    }
 
     public void ResetInputs()
     {

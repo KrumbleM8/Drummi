@@ -1,18 +1,48 @@
+using System;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.InputSystem.EnhancedTouch;
 using Touch = UnityEngine.InputSystem.EnhancedTouch.Touch;
 using System.Collections.Generic;
 
+/// <summary>
+/// Mode-agnostic drum pad input handler.
+/// Detects left/right hits via touch (RectTransform bounds) or keyboard and fires
+/// OnLeftHit / OnRightHit events. Mode-specific components subscribe to these events.
+///
+/// SCENE SETUP:
+///   1. Assign leftPad and rightPad RectTransforms in the Inspector.
+///   2. Set leftKey / rightKey as needed (default A / L).
+///   3. Mode components (e.g. BongoModeInputReader) subscribe to OnLeftHit / OnRightHit.
+///
+/// NOTE: Garden mode has a different input style and is intentionally not supported here.
+/// </summary>
 public class DrumPadTouch : MonoBehaviour
 {
+    [Header("Pad Areas")]
     [SerializeField] private RectTransform leftPad;
     [SerializeField] private RectTransform rightPad;
 
-    private BongoModeInputReader playerInputReader;
+    [Header("Keyboard Bindings")]
+    [Tooltip("Key that triggers the left pad.")]
+    public Key leftKey = Key.A;
 
-    private HashSet<int> processedFingers = new HashSet<int>();
-    private const float AUDIO_LATENCY = 0.05f;
+    [Tooltip("Key that triggers the right pad.")]
+    public Key rightKey = Key.L;
+
+    // ── Events ────────────────────────────────────────────────────────────
+
+    /// <summary>Fired when the left pad is tapped or the left key is pressed.</summary>
+    public event Action OnLeftHit;
+
+    /// <summary>Fired when the right pad is tapped or the right key is pressed.</summary>
+    public event Action OnRightHit;
+
+    // ── Private ───────────────────────────────────────────────────────────
+
+    private readonly HashSet<int> _processedFingers = new HashSet<int>();
+
+    // ── Unity ─────────────────────────────────────────────────────────────
 
     private void OnEnable()
     {
@@ -20,8 +50,6 @@ public class DrumPadTouch : MonoBehaviour
 #if UNITY_EDITOR
         TouchSimulation.Enable();
 #endif
-
-        playerInputReader = GameManager.instance.gameObject.GetComponent<BongoModeInputReader>();
     }
 
     private void OnDisable()
@@ -34,40 +62,56 @@ public class DrumPadTouch : MonoBehaviour
 
     private void Update()
     {
-        // Clear processed fingers each frame
-        processedFingers.Clear();
+        if (GameClock.Instance != null && GameClock.Instance.IsPaused) return;
 
+        _processedFingers.Clear();
+        HandleTouch();
+        HandleKeyboard();
+    }
+
+    // ── Input Detection ───────────────────────────────────────────────────
+
+    private void HandleTouch()
+    {
         foreach (Touch touch in Touch.activeTouches)
         {
-            // Only process Began phase
             if (touch.phase != UnityEngine.InputSystem.TouchPhase.Began) continue;
 
             int fingerId = touch.finger.index;
-            if (processedFingers.Contains(fingerId)) continue;
-            processedFingers.Add(fingerId);
+            if (_processedFingers.Contains(fingerId)) continue;
+            _processedFingers.Add(fingerId);
 
             Vector2 screenPos = touch.screenPosition;
 
-            // Check left pad
-            if (RectTransformUtility.RectangleContainsScreenPoint(leftPad, screenPos))
+            if (leftPad != null && RectTransformUtility.RectangleContainsScreenPoint(leftPad, screenPos))
             {
-                PlayHit("LeftPad", fingerId);
+                FireHit(false);
                 continue;
             }
 
-            // Check right pad
-            if (RectTransformUtility.RectangleContainsScreenPoint(rightPad, screenPos))
+            if (rightPad != null && RectTransformUtility.RectangleContainsScreenPoint(rightPad, screenPos))
             {
-                PlayHit("RightPad", fingerId);
+                FireHit(true);
             }
         }
     }
 
-    private void PlayHit(string padName, int fingerId)
+    private void HandleKeyboard()
     {
-        bool isRightPad = padName == "RightPad";
-        playerInputReader.TriggerInput(isRightPad);
+        Keyboard kb = Keyboard.current;
+        if (kb == null) return;
 
-        Debug.Log($"{padName} hit by finger {fingerId} at {Time.time}");
+        if (kb[leftKey].wasPressedThisFrame) FireHit(false);
+        if (kb[rightKey].wasPressedThisFrame) FireHit(true);
+    }
+
+    private void FireHit(bool isRight)
+    {
+        if (isRight)
+            OnRightHit?.Invoke();
+        else
+            OnLeftHit?.Invoke();
+
+        Debug.Log($"[DrumPadTouch] {(isRight ? "Right" : "Left")} hit");
     }
 }

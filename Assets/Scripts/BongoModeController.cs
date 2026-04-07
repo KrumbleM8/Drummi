@@ -1,5 +1,4 @@
-﻿using System;
-using UnityEngine;
+﻿using UnityEngine;
 
 /// <summary>
 /// Owns all Bongo mode gameplay logic: beat generation, evaluation, visuals, and scoring.
@@ -7,11 +6,6 @@ using UnityEngine;
 /// </summary>
 public class BongoModeController : ModeController
 {
-    #region Events
-    /// <summary>Fired when the song ends. GameManager listens to trigger the results sequence.</summary>
-    public event Action OnModeComplete;
-    #endregion
-
     #region Inspector References
     [Header("Bongo Mode Systems")]
     [SerializeField] private BeatGenerator beatGenerator;
@@ -103,6 +97,21 @@ public class BongoModeController : ModeController
         Debug.Log("[BongoModeController] Reset to initial state");
     }
 
+    public override void OnPause()
+    {
+        if (beatEvaluator != null) beatEvaluator.SaveHighScore();
+        if (beatGenerator != null && beatGenerator.enabled) beatGenerator.OnPause();
+        if (playerInputVisual != null && playerInputVisual.enabled) playerInputVisual.OnPause();
+        if (visualScheduler != null && visualScheduler.enabled) visualScheduler.OnPause();
+    }
+
+    public override void OnResume()
+    {
+        if (beatGenerator != null && beatGenerator.enabled) beatGenerator.OnResume();
+        if (playerInputVisual != null && playerInputVisual.enabled) playerInputVisual.OnResume();
+        if (visualScheduler != null && visualScheduler.enabled) visualScheduler.OnResume();
+    }
+
     public override void SetDifficulty(int difficultyIndex)
     {
         if (beatGenerator != null)
@@ -187,7 +196,7 @@ public class BongoModeController : ModeController
     private void HandleSongComplete()
     {
         Debug.Log("[BongoModeController] Song complete");
-        OnModeComplete?.Invoke();
+        CompletMode();
     }
     #endregion
 }

@@ -205,6 +205,11 @@ public class GameManager : MonoBehaviour
         SetupGameplayUI();
         screenTransition.StartReveal();
 
+        // Reset timing state before calculating start times so any accumulated
+        // pause time from a previous session doesn't offset the new session.
+        GameClock.Instance?.Reset();
+        AudioManager.instance?.ResetState();
+
         const double LOOKAHEAD_TIME = 0.05;
         double baseStartTime = AudioSettings.dspTime + LOOKAHEAD_TIME;
         double virtualStartTime = GameClock.Instance.RealDspToVirtual(baseStartTime);
@@ -235,8 +240,6 @@ public class GameManager : MonoBehaviour
             totalBeats,
             _activeMode.BarsBeforeEndForFinalBar
         );
-
-        GameClock.Instance?.Reset();
 
         _activeMode.StartMode((int)metronome.bpm, virtualStartTime, baseStartTime);
 

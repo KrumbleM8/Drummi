@@ -43,6 +43,20 @@ public class ArcadeModeController : ModeController
     public override int Score => scoreTracker != null ? scoreTracker.Score : 0;
     public override int TotalPerfectHits => scoreTracker != null ? scoreTracker.MaxCombo : 0;
 
+    // ── Pause / Resume ────────────────────────────────────────────────────
+    // AudioManager.PauseAllAudio() only covers its own speakers array.
+    // ArcadeGameController owns its own AudioSource, so we pause/resume it here.
+
+    public override void OnPause()
+    {
+        arcadeGameController?.audioSource?.Pause();
+    }
+
+    public override void OnResume()
+    {
+        arcadeGameController?.audioSource?.UnPause();
+    }
+
     // ── Lifecycle ─────────────────────────────────────────────────────────
 
     public override int CalculateTotalBeats(int bpm)

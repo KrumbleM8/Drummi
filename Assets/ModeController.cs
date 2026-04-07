@@ -76,6 +76,22 @@ public abstract class ModeController : MonoBehaviour
     /// <summary>Total perfect hits. Read by GameManager to pass to ScoreScreen.</summary>
     public virtual int TotalPerfectHits => 0;
 
+    // ── Pause / Resume — override if mode has components to notify ────────
+
+    /// <summary>
+    /// Called by PauseHandler before shared systems (GameClock, Audio) are paused.
+    /// Cancel scheduled audio, stop coroutines, save volatile state here.
+    /// Default is a no-op.
+    /// </summary>
+    public virtual void OnPause() { }
+
+    /// <summary>
+    /// Called by PauseHandler after shared systems (GameClock, Audio) have resumed.
+    /// Reschedule audio using the updated VirtualToRealDsp conversion here.
+    /// Default is a no-op.
+    /// </summary>
+    public virtual void OnResume() { }
+
     // ── Difficulty — override if mode supports difficulty ─────────────────
 
     /// <summary>

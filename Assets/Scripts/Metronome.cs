@@ -82,12 +82,11 @@ public class Metronome : MonoBehaviour
 
     public void OnResume()
     {
-        if (GameClock.Instance.IsPaused)
-        {
-            double pauseDuration = AudioSettings.dspTime - GameClock.Instance.GetPauseStartTime();
-            nextTick += pauseDuration;
-            startTick += pauseDuration;
-        }
+        // GameClock.Resume() is always called before this, so IsPaused is already false.
+        // Use GetLastPauseDuration() which was recorded by GameClock.Resume().
+        double pauseDuration = GameClock.Instance.GetLastPauseDuration();
+        nextTick += pauseDuration;
+        startTick += pauseDuration;
     }
 
     public void ResetToInitialState()
