@@ -1275,9 +1275,9 @@ GameObject:
   - component: {fileID: 640807888}
   - component: {fileID: 640807885}
   - component: {fileID: 640807878}
+  - component: {fileID: 640807889}
   - component: {fileID: 640807884}
   - component: {fileID: 640807883}
-  - component: {fileID: 640807882}
   - component: {fileID: 640807881}
   - component: {fileID: 640807877}
   - component: {fileID: 640807876}
@@ -1430,21 +1430,6 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   perfectWindowSeconds: 0.05
   goodWindowSeconds: 0.1
---- !u!114 &640807882
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 640807875}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 9bd1a3105a8343f41bfe29dcb750a0b2, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  leftLaneKey: 61
-  rightLaneKey: 62
-  touchSplitNormalisedX: 0.5
 --- !u!114 &640807883
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1509,6 +1494,19 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &640807889
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 640807875}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9bd1a3105a8343f41bfe29dcb750a0b2, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  drumPadTouch: {fileID: 1439112194}
 --- !u!1 &653885887
 GameObject:
   m_ObjectHideFlags: 0
@@ -1647,13 +1645,13 @@ MonoBehaviour:
   - pageName: Main
     pageTransform: {fileID: 359866141}
     onScreenPosition: {x: 0, y: 0}
-    offScreenLeftPosition: {x: -663.12, y: 0}
-    offScreenRightPosition: {x: 663.12, y: 0}
+    offScreenLeftPosition: {x: -1393.6, y: 0}
+    offScreenRightPosition: {x: 1393.6, y: 0}
   - pageName: Main
     pageTransform: {fileID: 359866141}
     onScreenPosition: {x: 0, y: 0}
-    offScreenLeftPosition: {x: -663.12, y: 0}
-    offScreenRightPosition: {x: 663.12, y: 0}
+    offScreenLeftPosition: {x: -1393.6, y: 0}
+    offScreenRightPosition: {x: 1393.6, y: 0}
   startingPageName: Main
   transitionDuration: 0.5
   transitionCurve:
@@ -2653,10 +2651,6 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   metronome: {fileID: 0}
-  beatGenerator: {fileID: 0}
-  beatEvaluator: {fileID: 0}
-  visualScheduler: {fileID: 0}
-  playerInputVisualHandler: {fileID: 0}
 --- !u!114 &1259989722
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -3281,6 +3275,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   leftPad: {fileID: 467370439}
   rightPad: {fileID: 78339946}
+  leftKey: 61
+  rightKey: 62
 --- !u!114 &1439112195
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -3907,10 +3903,6 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   metronome: {fileID: 0}
-  beatGenerator: {fileID: 0}
-  beatEvaluator: {fileID: 0}
-  visualScheduler: {fileID: 0}
-  playerInputVisualHandler: {fileID: 0}
 --- !u!1 &2143936489
 GameObject:
   m_ObjectHideFlags: 0

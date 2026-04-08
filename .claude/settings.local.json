@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep -n \"abstract class\" *.cs)",
+      "Bash(grep -n \"^public.*ModeController\\\\|^abstract.*ModeController\\\\|^class ModeController\\\\|^public class ModeController\" *.cs)",
+      "Bash(xargs grep:*)",
+      "Bash(python3 -c ':*)",
+      "Bash(powershell:*)"
+    ]
+  }
+}

@@ -5047,7 +5047,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 99a3fe37580365246970f7e44ae6b5a7, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  actionMap: {fileID: -944628639613478452, guid: 2bcd2660ca9b64942af0de543d8d7100, type: 3}
+  drumPadTouch: {fileID: 1196828593}
   allowInput: 1
   metronome: {fileID: 1433809952}
   playerInputVisualScheduler: {fileID: 891851649}
@@ -5097,7 +5097,6 @@ MonoBehaviour:
   modeControllers:
   - {fileID: 891851655}
   defaultModeId: Bongo
-  currentPhase: 0
 --- !u!114 &891851649
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -5162,10 +5161,6 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   metronome: {fileID: 1433809952}
-  beatGenerator: {fileID: 891851644}
-  beatEvaluator: {fileID: 891851647}
-  visualScheduler: {fileID: 891851645}
-  playerInputVisualHandler: {fileID: 891851649}
 --- !u!114 &891851653
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -6817,6 +6812,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   leftPad: {fileID: 2079886361}
   rightPad: {fileID: 1244789046}
+  leftKey: 61
+  rightKey: 62
 --- !u!1 &1207495005
 GameObject:
   m_ObjectHideFlags: 0

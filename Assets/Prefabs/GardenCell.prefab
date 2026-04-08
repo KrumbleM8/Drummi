@@ -11,7 +11,6 @@ GameObject:
   - component: {fileID: 9008911888136552131}
   - component: {fileID: 303265271935230728}
   - component: {fileID: 24556792299962446}
-  - component: {fileID: 6907891276040843711}
   - component: {fileID: 2019522395692244351}
   m_Layer: 0
   m_Name: GardenCell
@@ -126,22 +125,6 @@ CircleCollider2D:
   m_CompositeOrder: 0
   m_Offset: {x: 0, y: 0}
   m_Radius: 0.49999997
---- !u!114 &6907891276040843711
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 4039243881102679970}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 92de8d532bdfc894db5ac14d94f28b44, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  dragThreshold: 5
-  onTap:
-    m_PersistentCalls:
-      m_Calls: []
 --- !u!114 &2019522395692244351
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -157,5 +140,9 @@ MonoBehaviour:
   Row: 0
   Col: 0
   inactiveColor: {r: 0.2, g: 0.2, b: 0.25, a: 1}
-  activeColor: {r: 0.9, g: 0.6, b: 0.1, a: 1}
-  stepColor: {r: 1, g: 1, b: 1, a: 1}
+  stepHighlightColor: {r: 1, g: 1, b: 1, a: 1}
+  soundColors:
+  - {r: 0.95, g: 0.55, b: 0.1, a: 1}
+  - {r: 0.25, g: 0.6, b: 1, a: 1}
+  - {r: 0.25, g: 0.9, b: 0.4, a: 1}
+  - {r: 0.9, g: 0.25, b: 0.6, a: 1}
