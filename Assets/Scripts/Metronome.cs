@@ -36,7 +36,12 @@ public class Metronome : MonoBehaviour
 
     private void Update()
     {
-        if (GameClock.Instance.IsPaused)
+        if (GameClock.Instance == null || GameClock.Instance.IsPaused)
+            return;
+
+        // Guard against uninitialized state — timePerTick is 0 until
+        // InitializeWithStartTime() is called, which would cause an infinite loop.
+        if (timePerTick <= 0)
             return;
 
         double dspTime = AudioSettings.dspTime;
@@ -50,7 +55,7 @@ public class Metronome : MonoBehaviour
 
     private void LateUpdate()
     {
-        if (GameClock.Instance.IsPaused)
+        if (GameClock.Instance == null || GameClock.Instance.IsPaused)
             return;
 
         double currentDspTime = AudioSettings.dspTime;
@@ -82,6 +87,7 @@ public class Metronome : MonoBehaviour
 
     public void OnResume()
     {
+        if (GameClock.Instance == null) return;
         // GameClock.Resume() is always called before this, so IsPaused is already false.
         // Use GetLastPauseDuration() which was recorded by GameClock.Resume().
         double pauseDuration = GameClock.Instance.GetLastPauseDuration();

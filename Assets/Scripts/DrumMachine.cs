@@ -75,12 +75,11 @@ public class DrumMachine : MonoBehaviour
 
     public void OnCellTapped(DrumGridCell cell)
     {
-        // Find which plot owns this cell and tell it to toggle
         foreach (var plot in plots)
         {
             if (plot.ContainsCell(cell))
             {
-                plot.ToggleCell(cell.Row, cell.Col);
+                plot.CycleCell(cell.Row, cell.Col);
                 return;
             }
         }

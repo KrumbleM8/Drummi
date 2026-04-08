@@ -11,6 +11,10 @@ public class AudioManager : MonoBehaviour
     public AudioClip[] bongoSounds;
     public AudioClip[] otherSounds;
 
+    [Header("Drum Machine")]
+    [Tooltip("Clips in DrumSoundType order: Kick, Snare, HiHat, Clap.")]
+    public AudioClip[] drumMachineSounds;
+
     // The DSP time at which the music should start playing.
     // This is usually set from elsewhere (e.g., by the rhythm system).
     public double scheduledStartTime;
@@ -25,12 +29,20 @@ public class AudioManager : MonoBehaviour
     {
         if (instance != null && instance != this)
         {
-            Destroy(this); // was Destroy(gameObject) — only destroy the duplicate component
+            Destroy(this); // was Destroy(gameObject) ï¿½ only destroy the duplicate component
             return;
         }
 
         instance = this;
         DontDestroyOnLoad(gameObject);
+    }
+
+    public void PlayDrumSound(DrumSoundType sound)
+    {
+        int index = (int)sound;
+        if (drumMachineSounds == null || index < 0 || index >= drumMachineSounds.Length) return;
+        if (drumMachineSounds[index] == null) return;
+        speakers[1].PlayOneShot(drumMachineSounds[index]);
     }
 
     // Play bongo sounds immediately using PlayOneShot.

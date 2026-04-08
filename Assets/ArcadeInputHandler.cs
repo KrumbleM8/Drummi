@@ -1,34 +1,19 @@
 using UnityEngine;
-using UnityEngine.InputSystem;
-using UnityEngine.InputSystem.EnhancedTouch;
-using Touch = UnityEngine.InputSystem.EnhancedTouch.Touch;
 
 /// <summary>
-/// Detects player input for Left and Right lanes via keyboard or screen touch
-/// and forwards taps to HitJudge. Uses Unity's new Input System + EnhancedTouch,
-/// consistent with Drummi's existing DrumInputHandler.
-///
-/// KEYBOARD: Configurable keys per lane (default A / L).
-/// TOUCH:    Left half of screen = Left lane. Right half = Right lane.
+/// Detects player input for Left and Right lanes via DrumPadTouch (hitbox-based touch
+/// and keyboard) and forwards hits to HitJudge. Delegates all input detection to
+/// DrumPadTouch so that touch and keyboard behaviour is identical to BongoMode.
 ///
 /// Place on the same GameObject as HitJudge.
+/// Assign the scene's DrumPadTouch in the Inspector.
 /// </summary>
 [RequireComponent(typeof(HitJudge))]
 public class ArcadeInputHandler : MonoBehaviour
 {
     // ── Inspector ─────────────────────────────────────────────────────────
 
-    [Header("Keyboard Bindings")]
-    [Tooltip("Key for the Left lane.")]
-    public Key leftLaneKey = Key.A;
-
-    [Tooltip("Key for the Right lane.")]
-    public Key rightLaneKey = Key.L;
-
-    [Header("Touch Settings")]
-    [Tooltip("Normalised X screen position used as the Left/Right boundary (0–1). Default 0.5 = screen centre.")]
-    [Range(0f, 1f)]
-    public float touchSplitNormalisedX = 0.5f;
+    [SerializeField] private DrumPadTouch drumPadTouch;
 
     // ── Private ───────────────────────────────────────────────────────────
 
@@ -41,64 +26,46 @@ public class ArcadeInputHandler : MonoBehaviour
     {
         _hitJudge = GetComponent<HitJudge>();
         _hitZoneManager = FindFirstObjectByType<HitZoneManager>(); // optional
+
+        if (drumPadTouch == null)
+            Debug.LogError("[ArcadeInputHandler] DrumPadTouch not assigned!");
     }
 
     void OnEnable()
     {
-        EnhancedTouchSupport.Enable();
+        if (drumPadTouch != null)
+        {
+            drumPadTouch.OnLeftHit += OnLeft;
+            drumPadTouch.OnRightHit += OnRight;
+        }
     }
 
     void OnDisable()
     {
-        EnhancedTouchSupport.Disable();
-    }
-
-    void Update()
-    {
-        if (GameClock.Instance.IsPaused) return;
-
-        HandleKeyboard();
-        HandleTouch();
+        if (drumPadTouch != null)
+        {
+            drumPadTouch.OnLeftHit -= OnLeft;
+            drumPadTouch.OnRightHit -= OnRight;
+        }
     }
 
     // ── Private ───────────────────────────────────────────────────────────
 
-    private void HandleKeyboard()
-    {
-        Keyboard kb = Keyboard.current;
-        if (kb == null) return;
-
-        if (kb[leftLaneKey].wasPressedThisFrame) FireLane(Lane.Left);
-        if (kb[rightLaneKey].wasPressedThisFrame) FireLane(Lane.Right);
-    }
-
-    private void HandleTouch()
-    {
-        foreach (Touch touch in Touch.activeTouches)
-        {
-            // Only register the initial tap frame
-            if (touch.phase != UnityEngine.InputSystem.TouchPhase.Began) continue;
-
-            float splitX = Screen.width * touchSplitNormalisedX;
-            Lane lane = touch.screenPosition.x < splitX ? Lane.Left : Lane.Right;
-            FireLane(lane);
-        }
-    }
+    private void OnLeft() => FireLane(Lane.Left);
+    private void OnRight() => FireLane(Lane.Right);
 
     private void FireLane(Lane lane)
     {
+        // Always play animation and sound (for player feedback), matching BongoModeInputReader behaviour
+        bool isRight = lane == Lane.Right;
+        BongoAnimator.instance.PlayBongoAnimation(isRight);
+        if (isRight)
+            AudioManager.instance?.PlayBongoRight();
+        else
+            AudioManager.instance?.PlayBongoLeft();
+
         // Instant press flash — before judgement so it feels responsive
         _hitZoneManager?.NotifyPress(lane);
-        if (lane == Lane.Left)
-        {
-            AudioManager.instance.PlayBongoLeft();
-            BongoAnimator.instance.PlayBongoAnimation(true);
-        }
-        else
-        {
-            AudioManager.instance.PlayBongoRight();
-            BongoAnimator.instance.PlayBongoAnimation(false);
-        }
 
         HitJudgement result = _hitJudge.Judge(lane);
         Debug.Log($"[RhythmInput] {lane} tapped → {result}");
