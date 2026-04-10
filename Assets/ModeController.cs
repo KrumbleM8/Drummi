@@ -76,6 +76,9 @@ public abstract class ModeController : MonoBehaviour
     /// <summary>Total perfect hits. Read by GameManager to pass to ScoreScreen.</summary>
     public virtual int TotalPerfectHits => 0;
 
+    /// <summary>True if the final score beats the high score from the start of this session.</summary>
+    public virtual bool IsNewHighScore => false;
+
     // ── Pause / Resume — override if mode has components to notify ────────
 
     /// <summary>

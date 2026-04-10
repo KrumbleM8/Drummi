@@ -34,11 +34,16 @@ public class BeatEvaluator : MonoBehaviour
     public int PerfectHits { get; private set; }
     public int TotalPerfectHits { get; private set; }
     public bool HasFailedOnce { get; private set; }
+
+    /// <summary>True if the current Score exceeds the high score recorded at the start of this session.</summary>
+    public bool IsNewHighScore => Score > _previousHighScore;
     #endregion
 
     #region Constants
     private const string HIGH_SCORE_KEY = "GlitchyHS";
     #endregion
+
+    private int _previousHighScore;
 
     #region Lifecycle
     private void Start()
@@ -305,7 +310,6 @@ public class BeatEvaluator : MonoBehaviour
 
         // Update score
         Score += points;
-        SaveHighScore();
         UpdateScoreDisplay();
 
         // Reset failure state
@@ -409,8 +413,10 @@ public class BeatEvaluator : MonoBehaviour
 
     public void ResetScore()
     {
+        _previousHighScore = PlayerPrefs.GetInt(HIGH_SCORE_KEY, 0);
         Score = 0;
         PerfectHits = 0;
+        TotalPerfectHits = 0;
         HasFailedOnce = false;
         UpdateScoreDisplay();
     }

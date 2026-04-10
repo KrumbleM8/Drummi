@@ -335,7 +335,7 @@ public class GameManager : MonoBehaviour
         var scoreScreen = menuManager.currentPage.pageTransform.GetComponent<ScoreScreen>();
         if (scoreScreen != null)
         {
-            scoreScreen.DisplayScore(_activeMode.Score, _activeMode.TotalPerfectHits);
+            scoreScreen.DisplayScore(_activeMode.Score, _activeMode.TotalPerfectHits, _activeMode.IsNewHighScore);
             Debug.Log($"[GameManager] Score displayed: {_activeMode.Score}");
         }
         else

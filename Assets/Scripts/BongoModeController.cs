@@ -21,6 +21,7 @@ public class BongoModeController : ModeController
     public override int BarsBeforeEndForFinalBar => barsBeforeEndForFinalBar;
     public override int Score => beatEvaluator != null ? beatEvaluator.Score : 0;
     public override int TotalPerfectHits => beatEvaluator != null ? beatEvaluator.TotalPerfectHits : 0;
+    public override bool IsNewHighScore => beatEvaluator != null && beatEvaluator.IsNewHighScore;
     #endregion
 
     #region Lifecycle
@@ -57,6 +58,8 @@ public class BongoModeController : ModeController
     {
         Debug.Log("[BongoModeController] Starting Bongo mode");
 
+        if (beatEvaluator != null) beatEvaluator.ResetScore();
+
         InitializeSystems(bpm);
         SynchronizeVisuals();
         ScheduleMusic(realDspStartTime);
@@ -68,6 +71,8 @@ public class BongoModeController : ModeController
 
     public override void Cleanup()
     {
+        if (beatEvaluator != null) beatEvaluator.SaveHighScore();
+
         if (visualScheduler != null)
         {
             visualScheduler.CleanupAndDisable();

@@ -34,7 +34,7 @@ public class ScoreScreen : MonoBehaviour
         }
     }
 
-    public void DisplayScore(int score, int perfectHits)
+    public void DisplayScore(int score, int perfectHits, bool isNewHighScore = false)
     {
         targetScore = score;
 
@@ -55,16 +55,16 @@ public class ScoreScreen : MonoBehaviour
             perfectHitsText.text = $"Perfect Hits: {perfectHits}";
         }
 
-        int highScore = PlayerPrefs.GetInt("GlitchyHS", 0);
         if (highScoreText != null)
         {
-            if (score >= highScore)
+            if (isNewHighScore)
             {
-                highScoreText.text = "NEW HIGH SCORE!";
+                highScoreText.text = $"NEW HIGH SCORE: {score}!";
                 highScoreText.color = Color.yellow;
             }
             else
             {
+                int highScore = PlayerPrefs.GetInt("GlitchyHS", 0);
                 highScoreText.text = $"High Score: {highScore}";
                 highScoreText.color = Color.white;
             }
@@ -72,7 +72,7 @@ public class ScoreScreen : MonoBehaviour
 
         UpdateGradeDisplay(score);
 
-        Debug.Log($"[ScoreScreen] Displaying - Score: {score}, Perfect Hits: {perfectHits}, High Score: {highScore}");
+        Debug.Log($"[ScoreScreen] Displaying - Score: {score}, Perfect Hits: {perfectHits}, New High Score: {isNewHighScore}");
     }
 
     private void SetScoreImmediate()

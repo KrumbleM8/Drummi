@@ -433,10 +433,10 @@ public class BeatGenerator : MonoBehaviour
         );
 
         // === NEW: Process adaptive difficulty ===
-        if (difficultyIndex == 0 && !isFinalBar && enableAdaptiveDifficulty == true)
+        if (difficultyIndex == 0 && !isFinalBar && enableAdaptiveDifficulty == true && result != null)
         {
-            // Determine if round was successful
-            bool wasSuccessful = DetermineRoundSuccess();
+            // Use the evaluator's actual grade — anything above Failed is a success
+            bool wasSuccessful = result.Grade != EvaluationGrade.Failed;
 
             bool stateChanged = adaptiveDifficulty.ProcessRoundResult(wasSuccessful);
 
@@ -477,34 +477,6 @@ public class BeatGenerator : MonoBehaviour
         }
     }
 
-    /// <summary>
-    /// Determine if a round was successful based on player performance.
-    /// Adjust this logic based on your success criteria.
-    /// </summary>
-    private bool DetermineRoundSuccess()
-    {
-        // Count valid inputs (hits that were registered)
-        int validInputs = 0;
-
-        foreach (var input in playerInputReader.playerInputData)
-        {
-            // Assuming input.inputTime > 0 means the player hit something
-            // Adjust this condition based on your PlayerInputData structure
-            if (input.inputTime > 0)
-            {
-                validInputs++;
-            }
-        }
-
-        // Success = player hit at least 2 out of 3 beats (66% success rate)
-        // You can adjust this threshold as needed
-        int requiredHits = Mathf.CeilToInt(scheduledBeats.Count * 0.66f);
-        bool success = validInputs >= requiredHits;
-
-        Debug.Log($"[BeatGenerator] Round result: {validInputs}/{scheduledBeats.Count} hits = {(success ? "SUCCESS" : "FAIL")}");
-
-        return success;
-    }
     #endregion
 
     #region Timed Triggers
