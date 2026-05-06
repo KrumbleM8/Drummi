@@ -4622,7 +4622,11 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 8955039649062183717, guid: 09a82d829ba59174cac0e9f9b91043b3, type: 3}
       propertyPath: bpm
-      value: 94
+      value: 150
+      objectReference: {fileID: 0}
+    - target: {fileID: 8955039649062183717, guid: 09a82d829ba59174cac0e9f9b91043b3, type: 3}
+      propertyPath: title
+      value: Fast
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
@@ -5091,6 +5095,7 @@ MonoBehaviour:
   menuManager: {fileID: 1601808757}
   gameplayElements: {fileID: 1850612188}
   pageToCloseOnStart: {fileID: 1373578962}
+  songCarouselContent: {fileID: 1903016}
   gameplayElementsObject: {fileID: 1850612188}
   blinking: {fileID: 1762856860}
   pauseHandler: {fileID: 891851652}
@@ -10280,33 +10285,33 @@ MonoBehaviour:
   - pageName: Intro
     pageTransform: {fileID: 685055644}
     onScreenPosition: {x: 0, y: 0}
-    offScreenLeftPosition: {x: -1393.6, y: 0}
-    offScreenRightPosition: {x: 1393.6, y: 0}
+    offScreenLeftPosition: {x: -1136, y: 0}
+    offScreenRightPosition: {x: 1136, y: 0}
   - pageName: Main
     pageTransform: {fileID: 686828141}
     onScreenPosition: {x: 0, y: 0}
-    offScreenLeftPosition: {x: -1393.6, y: 0}
-    offScreenRightPosition: {x: 1393.6, y: 0}
+    offScreenLeftPosition: {x: -1136, y: 0}
+    offScreenRightPosition: {x: 1136, y: 0}
   - pageName: Song
     pageTransform: {fileID: 498961237}
     onScreenPosition: {x: 0, y: 0}
-    offScreenLeftPosition: {x: -1393.6, y: 0}
-    offScreenRightPosition: {x: 1393.6, y: 0}
+    offScreenLeftPosition: {x: -1136, y: 0}
+    offScreenRightPosition: {x: 1136, y: 0}
   - pageName: Difficulty
     pageTransform: {fileID: 1373578963}
     onScreenPosition: {x: 0, y: 0}
-    offScreenLeftPosition: {x: -1393.6, y: 0}
-    offScreenRightPosition: {x: 1393.6, y: 0}
+    offScreenLeftPosition: {x: -1136, y: 0}
+    offScreenRightPosition: {x: 1136, y: 0}
   - pageName: Customize
     pageTransform: {fileID: 1030085468}
     onScreenPosition: {x: 0, y: 0}
-    offScreenLeftPosition: {x: -1393.6, y: 0}
-    offScreenRightPosition: {x: 1393.6, y: 0}
+    offScreenLeftPosition: {x: -1136, y: 0}
+    offScreenRightPosition: {x: 1136, y: 0}
   - pageName: Score
     pageTransform: {fileID: 373518197}
     onScreenPosition: {x: 0, y: 0}
-    offScreenLeftPosition: {x: -1393.6, y: 0}
-    offScreenRightPosition: {x: 1393.6, y: 0}
+    offScreenLeftPosition: {x: -1136, y: 0}
+    offScreenRightPosition: {x: 1136, y: 0}
   startingPageName: Intro
   transitionDuration: 0.5
   transitionCurve:
@@ -10865,7 +10870,11 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 8955039649062183717, guid: 09a82d829ba59174cac0e9f9b91043b3, type: 3}
       propertyPath: bpm
-      value: 94
+      value: 110
+      objectReference: {fileID: 0}
+    - target: {fileID: 8955039649062183717, guid: 09a82d829ba59174cac0e9f9b91043b3, type: 3}
+      propertyPath: title
+      value: Boppy
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
@@ -13769,6 +13778,10 @@ PrefabInstance:
       propertyPath: m_Name
       value: AudioManager
       objectReference: {fileID: 0}
+    - target: {fileID: 7393367102448485377, guid: 224849741a3b61240bab10e68db2c086, type: 3}
+      propertyPath: 'musicTracks.Array.data[2]'
+      value: 
+      objectReference: {fileID: 8300000, guid: f8c1351ddc3921148a17a8e5274f2635, type: 3}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
@@ -14321,6 +14334,10 @@ PrefabInstance:
     - target: {fileID: 8801984547330413169, guid: 09a82d829ba59174cac0e9f9b91043b3, type: 3}
       propertyPath: m_Color.r
       value: 0.5205036
+      objectReference: {fileID: 0}
+    - target: {fileID: 8955039649062183717, guid: 09a82d829ba59174cac0e9f9b91043b3, type: 3}
+      propertyPath: bpm
+      value: 105
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []

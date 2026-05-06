@@ -35,6 +35,10 @@ public class GameManager : MonoBehaviour
     [SerializeField] private GameObject gameplayElements;
     [SerializeField] private GameObject pageToCloseOnStart;
 
+    [Header("Song Selection")]
+    [Tooltip("The Transform that is the direct parent of the SongItem carousel children.")]
+    [SerializeField] private Transform songCarouselContent;
+
     [Header("Misc")]
     [SerializeField] private GameObject gameplayElementsObject;
     [SerializeField] private EyeBlinker blinking;
@@ -163,14 +167,22 @@ public class GameManager : MonoBehaviour
             return;
         }
 
-        metronome.bpm = songIndex switch
+        if (songCarouselContent != null && songIndex >= 0 && songIndex < songCarouselContent.childCount)
         {
-            0 => 111,
-            1 => 111,
-            2 => 94,
-            3 => 150,
-            _ => 105
-        };
+            SongItem songItem = songCarouselContent.GetChild(songIndex).GetComponent<SongItem>();
+            if (songItem != null)
+            {
+                metronome.bpm = songItem.bpm;
+            }
+            else
+            {
+                Debug.LogWarning($"[GameManager] No SongItem found on carousel child {songIndex} — BPM unchanged.");
+            }
+        }
+        else
+        {
+            Debug.LogWarning($"[GameManager] songCarouselContent not set or index {songIndex} out of range — BPM unchanged.");
+        }
 
         AudioManager.instance.selectedSongIndex = songIndex;
         Debug.Log($"[GameManager] Music set to index {songIndex}, BPM: {metronome.bpm}");
@@ -203,7 +215,7 @@ public class GameManager : MonoBehaviour
         yield return StartCoroutine(TransitionScreenCover());
 
         SetupGameplayUI();
-        screenTransition.StartReveal();
+        screenTransition?.StartReveal();
 
         // Reset timing state before calculating start times so any accumulated
         // pause time from a previous session doesn't offset the new session.
@@ -270,6 +282,10 @@ public class GameManager : MonoBehaviour
             if (blinking.transform.childCount > 0)
                 blinking.transform.GetChild(0).gameObject.SetActive(false);
         }
+
+        // Deselect any focused UI element so keyboard keys (especially Space)
+        // are not consumed by button navigation during gameplay.
+        UnityEngine.EventSystems.EventSystem.current?.SetSelectedGameObject(null);
     }
     #endregion
 

@@ -21,11 +21,15 @@ public class DrumPadTouch : MonoBehaviour
 {
     [Header("Pad Areas")]
     [SerializeField] private RectTransform leftPad;
+    [SerializeField] private RectTransform centerPad; // Optional — Dungeon mode only
     [SerializeField] private RectTransform rightPad;
 
     [Header("Keyboard Bindings")]
     [Tooltip("Key that triggers the left pad.")]
     public Key leftKey = Key.A;
+
+    [Tooltip("Key that triggers the center pad (Dungeon mode).")]
+    public Key centerKey = Key.Space;
 
     [Tooltip("Key that triggers the right pad.")]
     public Key rightKey = Key.L;
@@ -34,6 +38,9 @@ public class DrumPadTouch : MonoBehaviour
 
     /// <summary>Fired when the left pad is tapped or the left key is pressed.</summary>
     public event Action OnLeftHit;
+
+    /// <summary>Fired when the center pad is tapped or the center key is pressed.</summary>
+    public event Action OnCenterHit;
 
     /// <summary>Fired when the right pad is tapped or the right key is pressed.</summary>
     public event Action OnRightHit;
@@ -89,6 +96,13 @@ public class DrumPadTouch : MonoBehaviour
                 continue;
             }
 
+            if (centerPad != null && RectTransformUtility.RectangleContainsScreenPoint(centerPad, screenPos))
+            {
+                OnCenterHit?.Invoke();
+                Debug.Log("[DrumPadTouch] Center hit");
+                continue;
+            }
+
             if (rightPad != null && RectTransformUtility.RectangleContainsScreenPoint(rightPad, screenPos))
             {
                 FireHit(true);
@@ -101,8 +115,9 @@ public class DrumPadTouch : MonoBehaviour
         Keyboard kb = Keyboard.current;
         if (kb == null) return;
 
-        if (kb[leftKey].wasPressedThisFrame) FireHit(false);
-        if (kb[rightKey].wasPressedThisFrame) FireHit(true);
+        if (kb[leftKey].wasPressedThisFrame)   FireHit(false);
+        if (kb[centerKey].wasPressedThisFrame) OnCenterHit?.Invoke();
+        if (kb[rightKey].wasPressedThisFrame)  FireHit(true);
     }
 
     private void FireHit(bool isRight)

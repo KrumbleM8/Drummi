@@ -59,7 +59,7 @@ public class UIQuickSpawnEffect : MonoBehaviour
             yield return Animate(rect.localScale, originalScale,
                                  rect.localRotation, originalRotation, settleDuration);
 
-            bouncerRef.enabled = true;
+            if (bouncerRef != null) bouncerRef.enabled = true;
         }
     }
 

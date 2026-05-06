@@ -48,11 +48,13 @@ public class AudioManager : MonoBehaviour
     // Play bongo sounds immediately using PlayOneShot.
     public void PlayBongoLeft()
     {
+        if (bongoSounds == null || bongoSounds.Length < 1 || bongoSounds[0] == null) return;
         speakers[1].PlayOneShot(bongoSounds[0]);
     }
 
     public void PlayBongoRight()
     {
+        if (bongoSounds == null || bongoSounds.Length < 2 || bongoSounds[1] == null) return;
         speakers[1].PlayOneShot(bongoSounds[1]);
     }
 
@@ -80,25 +82,31 @@ public class AudioManager : MonoBehaviour
 
     public void PlayIncorrect()
     {
+        if (otherSounds == null || otherSounds.Length < 1 || otherSounds[0] == null) return;
         speakers[2].PlayOneShot(otherSounds[0]);
     }
 
     public void PlayPassable()
     {
+        if (otherSounds == null || otherSounds.Length < 5 || otherSounds[4] == null) return;
         speakers[2].PlayOneShot(otherSounds[4]);
     }
+
     public void PlayCorrect()
     {
+        if (otherSounds == null || otherSounds.Length < 2 || otherSounds[1] == null) return;
         speakers[2].PlayOneShot(otherSounds[1]);
     }
 
     public void PlayAllPerfect()
     {
-        Debug.Log("AudioManager - Perfect");
+        if (otherSounds == null || otherSounds.Length < 4 || otherSounds[3] == null) return;
         speakers[2].PlayOneShot(otherSounds[3]);
     }
+
     public void PlayTotalFail()
     {
+        if (otherSounds == null || otherSounds.Length < 3 || otherSounds[2] == null) return;
         speakers[2].PlayOneShot(otherSounds[2]);
     }
     //public void PlayTurnSignal(double time)
@@ -108,6 +116,7 @@ public class AudioManager : MonoBehaviour
 
     public void PlayTurnSignal(double scheduledDspTime)
     {
+        if (otherSounds == null || otherSounds.Length < 6 || otherSounds[5] == null) return;
         var go = new GameObject("TurnSignalVoice");
         go.transform.SetParent(transform);
         var src = go.AddComponent<AudioSource>();
