@@ -91,15 +91,16 @@ public class DungeonEvaluator : MonoBehaviour
 
     /// <summary>
     /// Immediate single-input evaluation for visual feedback.
-    /// Returns MatchQuality so the input reader can style the indicator.
+    /// Returns the MatchQuality and the specific beat that was matched so the caller
+    /// can resolve the exact paired enemy (Bug 2 fix).
     /// </summary>
-    public InputMatch.MatchQuality EvaluateSingleInput(
+    public (InputMatch.MatchQuality quality, DungeonScheduledBeat matchedBeat) EvaluateSingleInput(
         DungeonInput               input,
         List<DungeonScheduledBeat> beats,
         double                     timeOffset)
     {
         if (beats == null || beats.Count == 0)
-            return InputMatch.MatchQuality.Miss;
+            return (InputMatch.MatchQuality.Miss, null);
 
         // Find the closest adjusted beat to this input
         DungeonScheduledBeat closest  = null;
@@ -115,13 +116,14 @@ public class DungeonEvaluator : MonoBehaviour
         double adjusted = closest.scheduledTime + timeOffset;
         double error    = input.inputTime - adjusted;
 
-        if (error < -GoodThreshold) return InputMatch.MatchQuality.TooEarly;
-        if (error >  GoodThreshold) return InputMatch.MatchQuality.TooLate;
-        if (closest.enemyType != input.enemyType) return InputMatch.MatchQuality.WrongSide;
+        if (error < -GoodThreshold) return (InputMatch.MatchQuality.TooEarly,  closest);
+        if (error >  GoodThreshold) return (InputMatch.MatchQuality.TooLate,   closest);
+        if (closest.enemyType != input.enemyType) return (InputMatch.MatchQuality.WrongSide, closest);
 
-        return Mathf.Abs((float)error) <= PerfectThreshold
+        var q = Mathf.Abs((float)error) <= PerfectThreshold
             ? InputMatch.MatchQuality.Perfect
             : InputMatch.MatchQuality.Good;
+        return (q, closest);
     }
     #endregion
 

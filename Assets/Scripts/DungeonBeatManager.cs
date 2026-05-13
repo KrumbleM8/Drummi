@@ -186,11 +186,13 @@ public class DungeonBeatManager : MonoBehaviour
 
         foreach (var beat in currentPattern)
         {
-            double virtualTime = PatternStartTime + (beat.timeSlot * beatInterval);
-            scheduledBeats.Add(new DungeonScheduledBeat(virtualTime, beat.enemyType));
+            double virtualTime   = PatternStartTime + (beat.timeSlot * beatInterval);
+            var    scheduledBeat = new DungeonScheduledBeat(virtualTime, beat.enemyType);
+            scheduledBeats.Add(scheduledBeat);
             ScheduleSpawnAudio(virtualTime, beat.enemyType);
-            visualController.ScheduleSpawnMarker(virtualTime, beat.enemyType);
+            visualController.ScheduleSpawnMarker(virtualTime, beat.enemyType, scheduledBeat);
         }
+        visualController.FinalizeBarEnemyPositions();
     }
 
     private void ScheduleSpawnAudio(double virtualTime, DungeonEnemyType type)
