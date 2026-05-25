@@ -76,6 +76,7 @@ public class DungeonVisualController : MonoBehaviour
 
     private double phaseDuration; // 4 beats — each phase (spawn or response) lasts 4 beats
     private bool   isFrozen;
+    private bool   _visualIndicatorActive = true;
 
     private Sprite _defaultEnemySprite;
 
@@ -102,6 +103,23 @@ public class DungeonVisualController : MonoBehaviour
     /// <summary>Called by DungeonModeController.StartMode() after BPM is set.</summary>
     public void Initialize()
     {
+        // Force-clear any state left from a previous room.
+        // The final bar of a room never calls ScheduleNewPattern(), so ResetVisuals() is
+        // never triggered for it — enemies and indicator children carry over without this.
+        // ReturnToPool()'s InPool guard safely no-ops any in-flight DespawnBarEnd callbacks.
+        _pendingMarkers.Clear();
+        _beatToEnemy.Clear();
+        _barEnemyTotal = 0;
+        _barSpawnIndex = 0;
+
+        foreach (var visual in _activeEnemies)
+            ReturnToPool(visual);
+        _activeEnemies.Clear();
+
+        if (indicatorParent != null)
+            for (int i = indicatorParent.childCount - 1; i >= 0; i--)
+                Destroy(indicatorParent.GetChild(i).gameObject);
+
         phaseDuration = 4 * (60.0 / metronome.bpm);
         isFrozen      = false;
 
@@ -301,6 +319,32 @@ public class DungeonVisualController : MonoBehaviour
         enabled = false;
     }
 
+    /// <summary>
+    /// Toggles sprite visibility on all active and future enemy visuals.
+    /// When false, sprites are kept at alpha 0 — beats still fire, audio still plays,
+    /// hit windows still open, only the sprite is hidden.
+    /// <br/><br/>
+    /// Boss mechanic: audio-only mode per GDD design note.
+    /// Haptic fallback: call Handheld.Vibrate() on beat spawn if platform is mobile.
+    /// </summary>
+    public void SetVisualIndicatorActive(bool active)
+    {
+        _visualIndicatorActive = active;
+
+        // Apply immediately to any enemies that are already on screen
+        foreach (var visual in _activeEnemies)
+        {
+            visual.HideSprite = !active;
+            var sr = visual.GetComponent<SpriteRenderer>();
+            if (sr != null)
+            {
+                Color c = sr.color;
+                c.a     = active ? 1f : 0f;
+                sr.color = c;
+            }
+        }
+    }
+
     // ── Private — Marker Placement ────────────────────────────────────────
 
     private void PlaceSpawnMarker(DungeonEnemyType type, float spawnX, DungeonScheduledBeat beat)
@@ -331,6 +375,8 @@ public class DungeonVisualController : MonoBehaviour
             sr.sortingOrder = BaseEnemySortingOrder + (_barEnemyTotal - _barSpawnIndex);
         _barSpawnIndex++;
 
+        // Propagate audio-only mode before Init() so SpawnAnim respects HideSprite from frame 1
+        visual.HideSprite = !_visualIndicatorActive;
         visual.Init(GetOrCreateEnemySprite(), color, new Vector3(spawnX, enemySpawnY, 0f), type, indicatorGO);
         _activeEnemies.Add(visual);
 

@@ -8,6 +8,7 @@ public class ScoreScreen : MonoBehaviour
     public TMP_Text finalScoreText;
     public TMP_Text perfectHitsText;
     public TMP_Text highScoreText;
+    public TMP_Text roomsClearedText;
 
     [Header("Optional Grade Display")]
     public TMP_Text gradeText;
@@ -34,7 +35,7 @@ public class ScoreScreen : MonoBehaviour
         }
     }
 
-    public void DisplayScore(int score, int perfectHits, bool isNewHighScore = false)
+    public void DisplayScore(int score, int perfectHits, bool isNewHighScore = false, int roomsCleared = 0)
     {
         targetScore = score;
 
@@ -55,6 +56,11 @@ public class ScoreScreen : MonoBehaviour
             perfectHitsText.text = $"Perfect Hits: {perfectHits}";
         }
 
+        if (roomsClearedText != null)
+        {
+            roomsClearedText.text = $"Rooms Cleared: {roomsCleared}";
+        }
+
         if (highScoreText != null)
         {
             if (isNewHighScore)
@@ -72,7 +78,7 @@ public class ScoreScreen : MonoBehaviour
 
         UpdateGradeDisplay(score);
 
-        Debug.Log($"[ScoreScreen] Displaying - Score: {score}, Perfect Hits: {perfectHits}, New High Score: {isNewHighScore}");
+        Debug.Log($"[ScoreScreen] Displaying - Score: {score}, Perfect Hits: {perfectHits}, Rooms Cleared: {roomsCleared}, New High Score: {isNewHighScore}");
     }
 
     private void SetScoreImmediate()

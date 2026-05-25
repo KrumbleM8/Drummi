@@ -36,7 +36,8 @@ public class DungeonBeatManager : MonoBehaviour
     [SerializeField] private AudioClip[]   enemySoundClips;
 
     [Header("Song Progression")]
-    [SerializeField] private float delayBeforeResults = 2f;
+    [SerializeField] private float delayBeforeResults  = 2f;
+    [SerializeField] private int   maxBarsPerEncounter = 8;
     #endregion
 
     #region Events
@@ -52,6 +53,7 @@ public class DungeonBeatManager : MonoBehaviour
     private double beatInterval;
     private bool   hasScheduledFirstPattern = false;
     private bool   isFinalBar               = false;
+    private int    _barsPlayed              = 0;
 
     // Tracks scheduled audio for pause/resume (virtual times only)
     private class ScheduledSpawnAudio
@@ -78,23 +80,38 @@ public class DungeonBeatManager : MonoBehaviour
     #endregion
 
     #region Public API — Initialization
-    public void Initialize(int bpm)
+    /// <summary>
+    /// Prepares the beat manager for a new session.
+    /// </summary>
+    /// <param name="bpm">Beats per minute for this session.</param>
+    /// <param name="patternDurations">
+    /// Duration weights passed to DungeonPatternGenerator.
+    /// Pass null to use the default weights { 1f, 0.5f }.
+    /// </param>
+    public void Initialize(int bpm, float[] patternDurations = null)
     {
         metronome.bpm  = bpm;
         beatInterval   = 60.0 / bpm;
-        patternGenerator = new DungeonPatternGenerator(new float[] { 1f, 0.5f });
+
+        float[] durations = (patternDurations != null && patternDurations.Length > 0)
+            ? patternDurations
+            : new float[] { 1f, 0.5f };
+        patternGenerator = new DungeonPatternGenerator(durations);
 
         currentState             = GameState.WaitingForFirstBar;
         hasScheduledFirstPattern = false;
         isFinalBar               = false;
+        _barsPlayed              = 0;
 
-        Debug.Log($"[DungeonBeatManager] Initialized — BPM: {bpm}, beat: {beatInterval:F4}s");
+        Debug.Log($"[DungeonBeatManager] Initialized — BPM: {bpm}, beat: {beatInterval:F4}s, " +
+                  $"durations: [{string.Join(", ", durations)}]");
     }
 
     public void StartGameplay(double startTimeVirtual)
     {
         ClearState();
         currentState = GameState.WaitingForFirstBar;
+        if (inputReader != null) inputReader.EncounterActive = true;
 
         // Schedule grace-period turn signal (bar 0)
         double graceTurnSignal = TimingCoordinator.Instance.CurrentBar.TurnSignalTime;
@@ -268,10 +285,15 @@ public class DungeonBeatManager : MonoBehaviour
         inputReader.allowInput = false;
         inputReader.ResetInputs();
 
-        if (isFinalBar)
+        _barsPlayed++;
+        bool barLimitReached = maxBarsPerEncounter > 0 && _barsPlayed >= maxBarsPerEncounter;
+
+        if (isFinalBar || barLimitReached)
         {
             currentState = GameState.EvaluatingFinalBar;
-            Debug.Log("[DungeonBeatManager] *** FINAL BAR EVALUATED ***");
+            Debug.Log(barLimitReached
+                ? $"[DungeonBeatManager] *** BAR LIMIT ({_barsPlayed}/{maxBarsPerEncounter}) — ending encounter ***"
+                : "[DungeonBeatManager] *** FINAL BAR EVALUATED ***");
             OnFinalBarComplete?.Invoke();
             Invoke(nameof(HandleGameComplete), 0.5f);
         }
@@ -290,6 +312,7 @@ public class DungeonBeatManager : MonoBehaviour
         StopAllCoroutines();
         CancelInvoke();
         inputReader.allowInput = false;
+        if (inputReader != null) inputReader.EncounterActive = false;
 
         Debug.Log($"[DungeonBeatManager] *** GAME COMPLETE — Score: {evaluator.Score} ***");
         Invoke(nameof(TriggerSongComplete), delayBeforeResults);
@@ -382,6 +405,14 @@ public class DungeonBeatManager : MonoBehaviour
         _scheduledTurnSignals.Clear();
         hasScheduledFirstPattern = false;
         isFinalBar               = false;
+
+        // Ensure the input reader is gated off — covers cleanup paths that bypass
+        // HandleGameComplete (e.g. direct Cleanup() call on health depletion).
+        if (inputReader != null)
+        {
+            inputReader.EncounterActive = false;
+            inputReader.allowInput      = false;
+        }
     }
 
     public void ResetToInitialState()

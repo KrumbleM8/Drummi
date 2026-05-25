@@ -53,6 +53,11 @@ public class GameManager : MonoBehaviour
 
     [Tooltip("ModeId to activate at Start() if SetMode() has not been called yet.")]
     [SerializeField] private string defaultModeId = "";
+
+    [Header("Roguelike Layer")]
+    [Tooltip("Optional. When a run is active, GameManager defers post-encounter " +
+             "routing to DungeonRunner instead of showing the Score screen.")]
+    [SerializeField] private DungeonRunner dungeonRunner;
     #endregion
 
     #region Game State
@@ -188,6 +193,29 @@ public class GameManager : MonoBehaviour
         Debug.Log($"[GameManager] Music set to index {songIndex}, BPM: {metronome.bpm}");
     }
 
+    /// <summary>
+    /// Entry point for starting a dungeon run via DungeonRunner.
+    /// Covers the screen, activates gameplay UI, then hands off to DungeonRunner.StartRun().
+    /// Wire the dungeon start button to this instead of StartGame().
+    /// </summary>
+    public void StartDungeonRun()
+    {
+        if (dungeonRunner == null)
+        {
+            Debug.LogError("[GameManager] StartDungeonRun: no DungeonRunner assigned.");
+            return;
+        }
+        StartCoroutine(StartDungeonRunSequence());
+    }
+
+    private IEnumerator StartDungeonRunSequence()
+    {
+        currentPhase = GamePhase.Playing;
+        yield return StartCoroutine(TransitionScreenCover());
+        SetupGameplayUI();
+        dungeonRunner.StartRun();
+    }
+
     public void TogglePause() => pauseHandler?.TogglePause();
 
     public void ResetDrummi() => SceneLoadManager.instance.ResetDrummi();
@@ -253,6 +281,11 @@ public class GameManager : MonoBehaviour
             _activeMode.BarsBeforeEndForFinalBar
         );
 
+        // Reset per-run state before starting — score and health no longer reset
+        // inside StartMode itself (that fires every room). ResetToInitialState also
+        // covers visuals and beat-manager state, which is safe here since StartMode
+        // re-initialises all of them immediately after.
+        _activeMode.ResetToInitialState();
         _activeMode.StartMode((int)metronome.bpm, virtualStartTime, baseStartTime);
 
         currentPhase = GamePhase.Playing;
@@ -290,6 +323,24 @@ public class GameManager : MonoBehaviour
     #endregion
 
     #region Game Sequence — End
+    /// <summary>
+    /// Immediately starts the results sequence, bypassing the beat cycle.
+    /// Call this when the player loses all health — it decouples the results screen
+    /// from beat timing so the transition fires at the moment of death, not at bar end.
+    /// Safe to call when a run is active or not; guards against double-entry.
+    /// </summary>
+    public void TriggerGameOver()
+    {
+        if (currentPhase == GamePhase.ShowingResults)
+        {
+            Debug.LogWarning("[GameManager] TriggerGameOver called but already showing results.");
+            return;
+        }
+        currentPhase = GamePhase.ShowingResults;
+        Debug.Log("[GameManager] TriggerGameOver — starting results sequence immediately.");
+        StartCoroutine(ShowResultsSequence());
+    }
+
     private void HandleModeComplete()
     {
         if (currentPhase == GamePhase.ShowingResults)
@@ -297,6 +348,15 @@ public class GameManager : MonoBehaviour
             Debug.LogWarning("[GameManager] Already showing results.");
             return;
         }
+
+        // When a DungeonRunner run is active, RoomController owns post-encounter
+        // routing. Skip the score screen so music keeps playing between rooms.
+        if (dungeonRunner != null && dungeonRunner.IsRunActive)
+        {
+            Debug.Log("[GameManager] Run active — deferring to DungeonRunner.");
+            return;
+        }
+
         currentPhase = GamePhase.ShowingResults;
         Debug.Log($"[GameManager] Mode '{_activeMode.ModeId}' complete — transitioning to results.");
         StartCoroutine(ShowResultsSequence());
@@ -306,7 +366,7 @@ public class GameManager : MonoBehaviour
     {
         Debug.Log("=== SHOWING RESULTS SEQUENCE ===");
 
-        if (screenTransition != null)
+        if (screenTransition != null && !screenTransition.IsScreenCovered)
         {
             screenTransition.StartCover();
             while (!screenTransition.IsScreenCovered) yield return null;
@@ -351,7 +411,8 @@ public class GameManager : MonoBehaviour
         var scoreScreen = menuManager.currentPage.pageTransform.GetComponent<ScoreScreen>();
         if (scoreScreen != null)
         {
-            scoreScreen.DisplayScore(_activeMode.Score, _activeMode.TotalPerfectHits, _activeMode.IsNewHighScore);
+            int roomsCleared = dungeonRunner != null ? dungeonRunner.RoomsCleared : 0;
+            scoreScreen.DisplayScore(_activeMode.Score, _activeMode.TotalPerfectHits, _activeMode.IsNewHighScore, roomsCleared);
             Debug.Log($"[GameManager] Score displayed: {_activeMode.Score}");
         }
         else

@@ -2595,6 +2595,9 @@ MonoBehaviour:
   bongoSounds:
   - {fileID: 8300000, guid: 3e52228fda3fad64aabad0a85443b431, type: 3}
   - {fileID: 8300000, guid: 25fccdb7f43f5304bb52b298b37d100e, type: 3}
+  - {fileID: 8300000, guid: 7fdf5a76e8fcf89448b97c96a8a4df1d, type: 3}
+  - {fileID: 8300000, guid: 4001f93a3d582aa4284fa8f89f9d43ef, type: 3}
+  - {fileID: 8300000, guid: 01119d00a82597f498d3d0be37c1b874, type: 3}
   otherSounds:
   - {fileID: 8300000, guid: 37fa3163447b4914cae0ba8e39f81c63, type: 3}
   - {fileID: 8300000, guid: 3814022259be0684585019433742e966, type: 3}
@@ -2603,10 +2606,11 @@ MonoBehaviour:
   - {fileID: 8300000, guid: 3141822e3d2d5d3438ec019925008422, type: 3}
   - {fileID: 8300000, guid: 3f1342bdec851f14faca1fe6e8c1df0e, type: 3}
   - {fileID: 8300000, guid: 84461c801a025d14f8a4e44d70eb7d4a, type: 3}
+  gameOverSoundIndex: 6
   drumMachineSounds:
-  - {fileID: 8300000, guid: 2a969eb5f12f98a4894a5f8e7a1fb3c6, type: 3}
-  - {fileID: 8300000, guid: 1f117970a4229464297fcd42d85a0817, type: 3}
-  - {fileID: 8300000, guid: c6f8ebf74385c5c4bb76c9af8287491d, type: 3}
+  - {fileID: 8300000, guid: 7fdf5a76e8fcf89448b97c96a8a4df1d, type: 3}
+  - {fileID: 8300000, guid: 4001f93a3d582aa4284fa8f89f9d43ef, type: 3}
+  - {fileID: 8300000, guid: 01119d00a82597f498d3d0be37c1b874, type: 3}
   scheduledStartTime: 0
 --- !u!1 &4664207595197671052
 GameObject:

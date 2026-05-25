@@ -31,6 +31,9 @@ public class DungeonModeController : ModeController
     public override bool   IsNewHighScore        => evaluator != null && evaluator.IsNewHighScore;
     #endregion
 
+    // Stashed by StartRoom(); consumed and cleared on the next StartMode() call.
+    private float[] _pendingPatternDurations;
+
     #region ModeController — Lifecycle
     public override int CalculateTotalBeats(int bpm)
     {
@@ -56,24 +59,125 @@ public class DungeonModeController : ModeController
     {
         Debug.Log("[DungeonModeController] Starting Dungeon mode");
 
-        if (evaluator      != null) evaluator.ResetScore();
-        if (health         != null) health.ResetHealth();
+        // Score and health are NOT reset here — this method fires on every room start.
+        // Reset is done once at run/session start: DungeonRunner.StartRun() for the
+        // roguelike path, GameManager.StartGameSequence() for standalone play.
 
-        // Initialize BeatManager first (sets metronome.bpm)
+        // Initialize BeatManager first (sets metronome.bpm).
+        // _pendingPatternDurations is non-null when called via StartRoom(); null otherwise (uses defaults).
         if (beatManager    != null)
         {
             beatManager.enabled = true;
-            beatManager.Initialize(bpm);
+            beatManager.Initialize(bpm, _pendingPatternDurations);
+            _pendingPatternDurations = null;
         }
 
         // Initialize visuals after BPM is set (reads metronome.bpm)
-        if (visualController != null) visualController.Initialize();
+        // Re-enable in case CleanupAndDisable() left it disabled from a previous round.
+        if (visualController != null)
+        {
+            visualController.enabled = true;
+            visualController.Initialize();
+        }
 
         ScheduleMusic(realDspStartTime);
 
         if (beatManager != null) beatManager.StartGameplay(virtualStartTime);
 
         Debug.Log("[DungeonModeController] Dungeon mode active");
+    }
+
+    /// <summary>
+    /// Overload for callers that need to specify pattern durations without a full RoomDefinition
+    /// (e.g. DungeonRunner, test harnesses).
+    /// Stashes <paramref name="patternDurations"/> so the existing StartMode(bpm, …) path
+    /// passes them to DungeonBeatManager.Initialize(); falls through to default durations if null.
+    /// Timing setup mirrors StartRoom — use StartRoom when a full RoomDefinition is available.
+    /// </summary>
+    /// <param name="patternDurations">
+    /// Duration weights for DungeonPatternGenerator, matching the parameter name in
+    /// DungeonBeatManager.Initialize(int bpm, float[] patternDurations).
+    /// Pass null to use the default weights { 1f, 0.5f }.
+    /// </param>
+    public void StartMode(float[] patternDurations)
+    {
+        // Standalone (non-run) entry point — reset once here since there is no
+        // DungeonRunner.StartRun() call to do it.
+        if (evaluator != null) evaluator.ResetScore();
+        if (health    != null) health.ResetHealth();
+
+        _pendingPatternDurations = (patternDurations != null && patternDurations.Length > 0)
+            ? patternDurations
+            : null;
+
+        GameClock.Instance?.Reset();
+        AudioManager.instance?.ResetState();
+
+        const double LOOKAHEAD  = 0.05;
+        double baseStartTime    = AudioSettings.dspTime + LOOKAHEAD;
+        double virtualStartTime = GameClock.Instance != null
+            ? GameClock.Instance.RealDspToVirtual(baseStartTime)
+            : baseStartTime;
+
+        int bpm = (beatManager?.metronome != null) ? (int)beatManager.metronome.bpm : 120;
+
+        if (beatManager?.metronome != null)
+        {
+            beatManager.metronome.InitializeWithStartTime(virtualStartTime);
+            beatManager.metronome.enabled = true;
+        }
+
+        int totalBeats = CalculateTotalBeats(bpm);
+        TimingCoordinator.Instance?.Initialize(virtualStartTime, bpm, totalBeats, BarsBeforeEndForFinalBar);
+
+        StartMode(bpm, virtualStartTime, baseStartTime);
+    }
+
+    /// <summary>
+    /// High-level entry point called by RoomController instead of GameManager.StartGame().
+    /// Sets the BGM track and pattern durations from <paramref name="def"/>, resets timing
+    /// systems, then drives the same startup sequence as GameManager.StartGameSequence()
+    /// (minus screen transitions — those are RoomController's responsibility).
+    /// </summary>
+    public void StartRoom(RoomDefinition def)
+    {
+        if (def == null)
+        {
+            Debug.LogError("[DungeonModeController] StartRoom: RoomDefinition is null");
+            return;
+        }
+
+        // Apply room-specific BGM track
+        if (AudioManager.instance != null)
+            AudioManager.instance.selectedSongIndex = def.BgmTrackIndex;
+
+        // Stash pattern durations — StartMode will pick them up and clear the field
+        _pendingPatternDurations = def.PatternDurations;
+
+        // Reset timing systems (mirrors GameManager.StartGameSequence)
+        GameClock.Instance?.Reset();
+        AudioManager.instance?.ResetState();
+
+        const double LOOKAHEAD     = 0.05;
+        double baseStartTime       = AudioSettings.dspTime + LOOKAHEAD;
+        double virtualStartTime    = GameClock.Instance != null
+            ? GameClock.Instance.RealDspToVirtual(baseStartTime)
+            : baseStartTime;
+
+        int bpm = (beatManager?.metronome != null) ? (int)beatManager.metronome.bpm : 120;
+
+        if (beatManager?.metronome != null)
+        {
+            beatManager.metronome.InitializeWithStartTime(virtualStartTime);
+            beatManager.metronome.enabled = true;
+        }
+
+        int totalBeats = CalculateTotalBeats(bpm);
+        TimingCoordinator.Instance?.Initialize(virtualStartTime, bpm, totalBeats, BarsBeforeEndForFinalBar);
+
+        StartMode(bpm, virtualStartTime, baseStartTime);
+
+        Debug.Log($"[DungeonModeController] StartRoom — Room: '{def.RoomName}', Tier: {def.Tier}, BPM: {bpm}");
     }
 
     public override void Cleanup()

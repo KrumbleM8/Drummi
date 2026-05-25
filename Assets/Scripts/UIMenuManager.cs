@@ -280,6 +280,8 @@ public class UIMenuManager : MonoBehaviour
     public void ShowPageRight(string pageName) => ShowPage(pageName, false);
     public void GoToArcadeScene() => TransitionToScene("Arcade", swipeLeft: true);
     public void GoToGardenScene() => TransitionToScene("Garden", swipeLeft: true);
+    public void GoToDungeonScene() => TransitionToScene("Dungeon", swipeLeft: true);
+    public void GoToBongoScene() => TransitionToScene("Bongo", swipeLeft: true);
 
 #if UNITY_EDITOR
     private void OnValidate()

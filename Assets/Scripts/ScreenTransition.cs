@@ -80,10 +80,11 @@ public class ScreenTransition : MonoBehaviour
     /// </summary>
     public void StartCover()
     {
-        if (!_isTransitioning)
-        {
-            StartCoroutine(CoverRoutine());
-        }
+        // Guard: ignore if already transitioning, or already fully covered.
+        // Without the _isCovered check, calling this on an already-covered screen
+        // snaps the panel off-screen and re-animates, causing a visible stutter.
+        if (_isTransitioning || _isCovered) return;
+        StartCoroutine(CoverRoutine());
     }
 
     /// <summary>

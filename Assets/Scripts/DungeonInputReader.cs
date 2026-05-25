@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -33,8 +34,24 @@ public class DungeonInputReader : MonoBehaviour
     [Header("Timing")]
     [SerializeField] private float barStartInputBufferSeconds = 0.125f;
 
+    /// <summary>
+    /// Fired immediately after a Perfect or Good hit is confirmed by DungeonEvaluator.
+    /// Subscribers (e.g. EliteEnemyController) can register damage without a direct
+    /// reference back to DungeonInputReader.
+    /// </summary>
+    public event Action<DungeonEnemyType, InputMatch.MatchQuality> OnHit;
+
     // Controlled by DungeonBeatManager — false outside the response window
     public bool allowInput = false;
+
+    /// <summary>
+    /// True only while a Dungeon encounter is actively running.
+    /// Set by DungeonBeatManager on StartGameplay / HandleGameComplete / ClearState.
+    /// Inputs received while false are silently ignored — no health loss, no evaluation.
+    /// This prevents penalty application on the intro screen, during transitions,
+    /// between rounds, and after game-over.
+    /// </summary>
+    public bool EncounterActive { get; set; } = false;
 
     public List<DungeonInput> playerInputData = new();
 
@@ -92,9 +109,9 @@ public class DungeonInputReader : MonoBehaviour
 
     // ── Event Handlers ────────────────────────────────────────────────────
 
-    private void OnLeft()   { AudioManager.instance?.PlayBongoLeft();  TriggerInput(DungeonEnemyType.Left);   }
-    private void OnCenter() { AudioManager.instance?.PlayBongoLeft();  TriggerInput(DungeonEnemyType.Center); }
-    private void OnRight()  { AudioManager.instance?.PlayBongoRight(); TriggerInput(DungeonEnemyType.Right);  }
+    private void OnLeft()   { AudioManager.instance?.PlayPadLeft();  TriggerInput(DungeonEnemyType.Left);   }
+    private void OnCenter() { AudioManager.instance?.PlayPadCenter();  TriggerInput(DungeonEnemyType.Center); }
+    private void OnRight()  { AudioManager.instance?.PlayPadRight(); TriggerInput(DungeonEnemyType.Right);  }
 
     // ── Core ──────────────────────────────────────────────────────────────
 
@@ -103,6 +120,11 @@ public class DungeonInputReader : MonoBehaviour
         // Audio is played by the event handlers (OnLeft/OnCenter/OnRight) so that
         // coyote-buffer replays via ReplayBuffer() don't double-fire the sound.
         if (GameClock.Instance.IsPaused) return;
+
+        // Silently ignore all inputs when no encounter is running (intro screen,
+        // transitions, between rounds, post-game-over). Only DungeonBeatManager
+        // activates this flag via StartGameplay / HandleGameComplete / ClearState.
+        if (!EncounterActive) return;
 
         if (!allowInput)
         {
@@ -139,7 +161,10 @@ public class DungeonInputReader : MonoBehaviour
 
             visualController?.SpawnInputMarker(type, quality);
             if (isHit)
+            {
                 visualController?.NotifyEnemyHit(matchedBeat);
+                OnHit?.Invoke(type, quality);
+            }
             else
                 health?.TakeOutOfWindowPenalty();
         }

@@ -28,6 +28,13 @@ public class DungeonEnemyVisual : MonoBehaviour
     /// <summary>True while the object is idle in the pool; prevents stale callbacks.</summary>
     public bool InPool { get; set; } = true;
 
+    /// <summary>
+    /// When true, the sprite is kept at alpha 0 throughout all animations.
+    /// Set by DungeonVisualController for the Boss audio-only mechanic.
+    /// Hit windows, audio, and beat logic all remain active.
+    /// </summary>
+    public bool HideSprite { get; set; }
+
     private SpriteRenderer _sr;
     private Coroutine      _activeCoroutine;
 
@@ -81,6 +88,7 @@ public class DungeonEnemyVisual : MonoBehaviour
 
         transform.rotation = Quaternion.identity;
         if (_sr != null) _sr.color = Color.clear;
+        HideSprite = false;
     }
 
     // ── Private ───────────────────────────────────────────────────────────────
@@ -103,7 +111,7 @@ public class DungeonEnemyVisual : MonoBehaviour
             float ease = 1f - (1f - t) * (1f - t); // quadratic ease-out
 
             transform.position = Vector3.Lerp(startPos, finalPos, ease);
-            c.a                = ease;
+            c.a                = HideSprite ? 0f : ease;
             _sr.color          = c;
 
             elapsed += Time.deltaTime;

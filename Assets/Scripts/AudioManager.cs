@@ -11,6 +11,9 @@ public class AudioManager : MonoBehaviour
     public AudioClip[] bongoSounds;
     public AudioClip[] otherSounds;
 
+    [Header("Game Over")]
+    [SerializeField] private int gameOverSoundIndex = 6;
+
     [Header("Drum Machine")]
     [Tooltip("Clips in DrumSoundType order: Kick, Snare, HiHat, Clap.")]
     public AudioClip[] drumMachineSounds;
@@ -56,6 +59,24 @@ public class AudioManager : MonoBehaviour
     {
         if (bongoSounds == null || bongoSounds.Length < 2 || bongoSounds[1] == null) return;
         speakers[1].PlayOneShot(bongoSounds[1]);
+    }
+
+    public void PlayPadLeft()
+    {
+        if (bongoSounds == null || bongoSounds.Length < 3 || bongoSounds[2] == null) return;
+        speakers[1].PlayOneShot(bongoSounds[2]);
+    }
+
+    public void PlayPadRight()
+    {
+        if (bongoSounds == null || bongoSounds.Length < 4 || bongoSounds[3] == null) return;
+        speakers[1].PlayOneShot(bongoSounds[3]);
+    }
+
+    public void PlayPadCenter()
+    {
+        if (bongoSounds == null || bongoSounds.Length < 5 || bongoSounds[4] == null) return;
+        speakers[1].PlayOneShot(bongoSounds[4]);
     }
 
     // Schedule the music to start playing at the (adjusted) scheduled time.
@@ -113,6 +134,14 @@ public class AudioManager : MonoBehaviour
     //{
     //    speakers[3].PlayScheduled(time);
     //}
+
+    /// <summary>Plays the game-over audio sting via otherSounds[gameOverSoundIndex].</summary>
+    public void PlayGameOver()
+    {
+        if (otherSounds == null || gameOverSoundIndex < 0 || gameOverSoundIndex >= otherSounds.Length) return;
+        if (otherSounds[gameOverSoundIndex] == null) return;
+        speakers[2].PlayOneShot(otherSounds[gameOverSoundIndex]);
+    }
 
     public void PlayTurnSignal(double scheduledDspTime)
     {
