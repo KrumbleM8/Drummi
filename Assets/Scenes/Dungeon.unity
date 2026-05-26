@@ -1169,23 +1169,23 @@ MonoBehaviour:
   - pageName: Intro
     pageTransform: {fileID: 693986492}
     onScreenPosition: {x: 0, y: 0}
-    offScreenLeftPosition: {x: -902.32, y: 0}
-    offScreenRightPosition: {x: 902.32, y: 0}
+    offScreenLeftPosition: {x: -710.95996, y: 0}
+    offScreenRightPosition: {x: 710.95996, y: 0}
   - pageName: Main
     pageTransform: {fileID: 1943619380}
     onScreenPosition: {x: 0, y: 0}
-    offScreenLeftPosition: {x: -902.32, y: 0}
-    offScreenRightPosition: {x: 902.32, y: 0}
+    offScreenLeftPosition: {x: -710.95996, y: 0}
+    offScreenRightPosition: {x: 710.95996, y: 0}
   - pageName: Customize
     pageTransform: {fileID: 1312737091}
     onScreenPosition: {x: 0, y: 0}
-    offScreenLeftPosition: {x: -902.32, y: 0}
-    offScreenRightPosition: {x: 902.32, y: 0}
+    offScreenLeftPosition: {x: -710.95996, y: 0}
+    offScreenRightPosition: {x: 710.95996, y: 0}
   - pageName: Score
     pageTransform: {fileID: 1848881446}
     onScreenPosition: {x: 0, y: 0}
-    offScreenLeftPosition: {x: -902.32, y: 0}
-    offScreenRightPosition: {x: 902.32, y: 0}
+    offScreenLeftPosition: {x: -710.95996, y: 0}
+    offScreenRightPosition: {x: 710.95996, y: 0}
   startingPageName: Intro
   transitionDuration: 0.5
   transitionCurve:
@@ -2211,11 +2211,11 @@ MonoBehaviour:
   - {fileID: 671429851}
   - {fileID: 1450184937}
   enemySoundClips:
-  - {fileID: 8300000, guid: 2a969eb5f12f98a4894a5f8e7a1fb3c6, type: 3}
-  - {fileID: 8300000, guid: 2a969eb5f12f98a4894a5f8e7a1fb3c6, type: 3}
-  - {fileID: 8300000, guid: 2a969eb5f12f98a4894a5f8e7a1fb3c6, type: 3}
+  - {fileID: 8300000, guid: 7fdf5a76e8fcf89448b97c96a8a4df1d, type: 3}
+  - {fileID: 8300000, guid: 01119d00a82597f498d3d0be37c1b874, type: 3}
+  - {fileID: 8300000, guid: 4001f93a3d582aa4284fa8f89f9d43ef, type: 3}
   delayBeforeResults: 2
-  maxBarsPerEncounter: 8
+  maxBarsPerEncounter: 3
 --- !u!114 &482265712
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -8155,6 +8155,7 @@ MonoBehaviour:
   finalScoreText: {fileID: 106361306}
   perfectHitsText: {fileID: 450148782}
   highScoreText: {fileID: 834093276}
+  roomsClearedText: {fileID: 0}
   gradeText: {fileID: 1123297567}
   gradeImage: {fileID: 813010301}
   sRankSprite: {fileID: 21300000, guid: 820c8adf04c97f546844af77a837c8a5, type: 3}
@@ -8642,6 +8643,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   roomController: {fileID: 2008353636}
+  modeController: {fileID: 0}
   floors:
   - {fileID: 11400000, guid: 879138b4b8ae51d458b53dd7042a5254, type: 2}
   - {fileID: 11400000, guid: 1474bf15f832f0743a2b190384bbb778, type: 2}
