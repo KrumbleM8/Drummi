@@ -18,4 +18,8 @@ MonoBehaviour:
   - 1
   - 0.5
   bgmTrackIndex: 0
+  backgroundSprite: {fileID: 0}
   artOverrideKey: 
+  roomType: 0
+  overrideBgm: 0
+  roomLengthBars: 4

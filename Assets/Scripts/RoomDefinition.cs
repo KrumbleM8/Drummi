@@ -33,6 +33,13 @@ public class RoomDefinition : ScriptableObject
     [Tooltip("CombatEncounter — normal enemy fight. DirectionChoice — player picks a door, no combat.")]
     [SerializeField] private RoomType roomType = RoomType.CombatEncounter;
 
+    [Header("BGM Override")]
+    [Tooltip("If true, this room switches to BgmTrackIndex when entered. If false, the current music continues uninterrupted.")]
+    [SerializeField] private bool overrideBgm;
+
+    [Tooltip("Room length in bars. Used when music is continuous so the room ends at the right time rather than relying on clip length. 0 = derive from clip length (first room or override rooms).")]
+    [SerializeField] private int roomLengthBars;
+
     // ── Accessors ─────────────────────────────────────────────────────────────
 
     /// <summary>Display name for this room.</summary>
@@ -60,6 +67,19 @@ public class RoomDefinition : ScriptableObject
 
     /// <summary>Room archetype — determines whether combat or direction-choice flow is used.</summary>
     public RoomType RoomType => roomType;
+
+    /// <summary>
+    /// When true, this room overrides the current BGM track with <see cref="BgmTrackIndex"/>
+    /// at the next bar boundary. When false, the current music plays through uninterrupted.
+    /// </summary>
+    public bool OverrideBgm => overrideBgm;
+
+    /// <summary>
+    /// Room length in bars. When non-zero, used instead of clip length to determine
+    /// how many beats the combat encounter lasts. Required for rooms that do not
+    /// restart the music (OverrideBgm = false) so the room ends at the right time.
+    /// </summary>
+    public int RoomLengthBars => roomLengthBars;
 }
 
 /// <summary>Enemy difficulty tier for a dungeon room.</summary>

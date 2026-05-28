@@ -195,6 +195,22 @@ public class AudioManager : MonoBehaviour
         speakers[0].Stop();
     }
 
+    /// <summary>
+    /// Stops the current music source and schedules a new track to begin at
+    /// <paramref name="realDspSeamTime"/> (a real DSP timestamp, not virtual).
+    /// Call this for special rooms that override the BGM mid-run.
+    /// Pause offset is applied automatically so the swap stays aligned after any pauses.
+    /// </summary>
+    public void ScheduleTrackSwap(int trackIndex, double realDspSeamTime)
+    {
+        speakers[0].Stop();
+        selectedSongIndex = trackIndex;
+        speakers[0].clip = musicTracks[trackIndex];
+        speakers[0].loop = false;
+        speakers[0].PlayScheduled(realDspSeamTime + accumulatedPauseDuration);
+        Debug.Log($"[AudioManager] Track swap — index {trackIndex} scheduled at DSP {realDspSeamTime + accumulatedPauseDuration:F4}");
+    }
+
     public void ResetState()
     {
         // Stop every speaker cleanly before the new session starts
