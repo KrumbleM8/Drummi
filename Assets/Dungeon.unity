@@ -2215,7 +2215,7 @@ MonoBehaviour:
   - {fileID: 8300000, guid: 01119d00a82597f498d3d0be37c1b874, type: 3}
   - {fileID: 8300000, guid: 4001f93a3d582aa4284fa8f89f9d43ef, type: 3}
   delayBeforeResults: 2
-  maxBarsPerEncounter: 8
+  maxBarsPerEncounter: 4
 --- !u!114 &482265712
 MonoBehaviour:
   m_ObjectHideFlags: 0

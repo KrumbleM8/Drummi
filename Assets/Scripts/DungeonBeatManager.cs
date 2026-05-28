@@ -54,6 +54,7 @@ public class DungeonBeatManager : MonoBehaviour
     private bool   hasScheduledFirstPattern = false;
     private bool   isFinalBar               = false;
     private int    _barsPlayed              = 0;
+    private bool   _skipGracePeriod         = false;
 
     // Tracks scheduled audio for pause/resume (virtual times only)
     private class ScheduledSpawnAudio
@@ -88,7 +89,12 @@ public class DungeonBeatManager : MonoBehaviour
     /// Duration weights passed to DungeonPatternGenerator.
     /// Pass null to use the default weights { 1f, 0.5f }.
     /// </param>
-    public void Initialize(int bpm, float[] patternDurations = null)
+    /// <param name="skipGracePeriod">
+    /// When true, the bar-0 grace period is skipped and the first pattern spawns
+    /// immediately on <see cref="StartGameplay"/>. Pass true for all rooms after
+    /// the first so the player sees enemies straight away.
+    /// </param>
+    public void Initialize(int bpm, float[] patternDurations = null, bool skipGracePeriod = false)
     {
         metronome.bpm  = bpm;
         beatInterval   = 60.0 / bpm;
@@ -102,9 +108,10 @@ public class DungeonBeatManager : MonoBehaviour
         hasScheduledFirstPattern = false;
         isFinalBar               = false;
         _barsPlayed              = 0;
+        _skipGracePeriod         = skipGracePeriod;
 
         Debug.Log($"[DungeonBeatManager] Initialized — BPM: {bpm}, beat: {beatInterval:F4}s, " +
-                  $"durations: [{string.Join(", ", durations)}]");
+                  $"durations: [{string.Join(", ", durations)}], skipGrace: {skipGracePeriod}");
     }
 
     public void StartGameplay(double startTimeVirtual)
@@ -113,12 +120,25 @@ public class DungeonBeatManager : MonoBehaviour
         currentState = GameState.WaitingForFirstBar;
         if (inputReader != null) inputReader.EncounterActive = true;
 
-        // Schedule grace-period turn signal (bar 0)
-        double graceTurnSignal = TimingCoordinator.Instance.CurrentBar.TurnSignalTime;
-        if (graceTurnSignal > GameClock.Instance.GameTime)
-            ScheduleTurnSignal(graceTurnSignal, 0);
+        if (_skipGracePeriod)
+        {
+            // Skip bar 0 entirely — schedule the first pattern immediately so
+            // enemies appear on beat 1 of this room.
+            ScheduleNewPattern(TimingCoordinator.Instance.CurrentBar);
+            hasScheduledFirstPattern = true;
+            currentState = GameState.Playing;
+            Debug.Log($"[DungeonBeatManager] Grace period skipped — gameplay begins immediately (Virtual: {startTimeVirtual:F4})");
+        }
+        else
+        {
+            // Bar 0 grace period: schedule the turn signal cue so the player
+            // knows the first pattern is coming, then wait for bar 1.
+            double graceTurnSignal = TimingCoordinator.Instance.CurrentBar.TurnSignalTime;
+            if (graceTurnSignal > GameClock.Instance.GameTime)
+                ScheduleTurnSignal(graceTurnSignal, 0);
 
-        Debug.Log($"[DungeonBeatManager] Gameplay started (Virtual: {startTimeVirtual:F4})");
+            Debug.Log($"[DungeonBeatManager] Gameplay started with grace period (Virtual: {startTimeVirtual:F4})");
+        }
     }
     #endregion
 

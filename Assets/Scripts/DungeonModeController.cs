@@ -45,6 +45,10 @@ public class DungeonModeController : ModeController
     // Used by StartRoom() for rooms where the music continues uninterrupted.
     private bool _suppressMusicSchedule;
 
+    // When true, StartMode passes skipGracePeriod=true to BeatManager.Initialize() once.
+    // Set by StartRoom() for all rooms after the first.
+    private bool _skipGracePeriod;
+
     #region ModeController — Lifecycle
     public override int CalculateTotalBeats(int bpm)
     {
@@ -79,8 +83,9 @@ public class DungeonModeController : ModeController
         if (beatManager    != null)
         {
             beatManager.enabled = true;
-            beatManager.Initialize(bpm, _pendingPatternDurations);
+            beatManager.Initialize(bpm, _pendingPatternDurations, _skipGracePeriod);
             _pendingPatternDurations = null;
+            _skipGracePeriod         = false;
         }
 
         // Initialize visuals after BPM is set (reads metronome.bpm)
@@ -244,7 +249,9 @@ public class DungeonModeController : ModeController
             TimingCoordinator.Instance?.Initialize(seamVirtual, bpm, totalBeats, BarsBeforeEndForFinalBar);
 
             // Tell StartMode not to call ScheduleMusic — the audio is already handled above.
+            // Also skip the grace period so enemies appear immediately.
             _suppressMusicSchedule = true;
+            _skipGracePeriod       = true;
             StartMode(bpm, seamVirtual, seamDsp);
 
             Debug.Log($"[DungeonModeController] StartRoom (continuing) — Room: '{def.RoomName}', seam virtual: {seamVirtual:F4}, override: {def.OverrideBgm}");
@@ -264,8 +271,9 @@ public class DungeonModeController : ModeController
         if (visualController != null) visualController.ResetVisuals();
         if (evaluator        != null) evaluator.ResetScore();
         if (health           != null) health.ResetHealth();
-        _isFirstRoom           = true;
-        _suppressMusicSchedule = false;
+        _isFirstRoom             = true;
+        _suppressMusicSchedule   = false;
+        _skipGracePeriod         = false;
         _sessionStartVirtualTime = 0.0;
         Debug.Log("[DungeonModeController] Reset to initial state");
     }
