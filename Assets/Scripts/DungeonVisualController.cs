@@ -59,8 +59,9 @@ public class DungeonVisualController : MonoBehaviour
     [SerializeField] private Color missedColor = Color.gray;
 
     [Header("Enemy Visuals")]
-    [SerializeField] private Transform enemyContainer;
-    [SerializeField] private Sprite    enemySprite;
+    [SerializeField] private Transform  enemyContainer;
+    [SerializeField] private GameObject enemyPrefab;
+    [SerializeField] private Sprite     enemySprite;
     [SerializeField] private float     enemySpawnY         = 0f;  // world-space Y; 0 = camera centre
     [SerializeField] private float     enemySpawnBandWidth = 4f;  // total world-unit spread on X
 
@@ -402,11 +403,20 @@ public class DungeonVisualController : MonoBehaviour
     private DungeonEnemyVisual CreatePooledEnemy()
     {
         EnsureEnemyContainer();
-        var go = new GameObject("EnemyVisual");
-        go.transform.SetParent(enemyContainer, false);
-        go.transform.localScale = Vector3.one * 0.5f;
-        go.AddComponent<SpriteRenderer>();
-        return go.AddComponent<DungeonEnemyVisual>();
+
+        if (enemyPrefab != null)
+        {
+            var go = Instantiate(enemyPrefab, enemyContainer, false);
+            go.transform.localScale = Vector3.one * 0.5f;
+            return go.GetComponent<DungeonEnemyVisual>();
+        }
+
+        // Fallback: build the object in code if no prefab is assigned
+        var fallback = new GameObject("EnemyVisual");
+        fallback.transform.SetParent(enemyContainer, false);
+        fallback.transform.localScale = Vector3.one * 0.5f;
+        fallback.AddComponent<SpriteRenderer>();
+        return fallback.AddComponent<DungeonEnemyVisual>();
     }
 
     private DungeonEnemyVisual GetFromPool()

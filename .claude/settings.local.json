@@ -5,7 +5,13 @@
       "Bash(grep -n \"^public.*ModeController\\\\|^abstract.*ModeController\\\\|^class ModeController\\\\|^public class ModeController\" *.cs)",
       "Bash(xargs grep:*)",
       "Bash(python3 -c ':*)",
-      "Bash(powershell:*)"
+      "Bash(powershell:*)",
+      "mcp__coplay-mcp__get_unity_editor_state",
+      "mcp__coplay-mcp__list_game_objects_in_hierarchy",
+      "mcp__coplay-mcp__create_game_object",
+      "mcp__coplay-mcp__add_component",
+      "mcp__coplay-mcp__create_prefab",
+      "mcp__coplay-mcp__delete_game_object"
     ]
   }
 }
