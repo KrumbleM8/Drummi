@@ -56,6 +56,12 @@ public class DungeonBeatManager : MonoBehaviour
     private int    _barsPlayed              = 0;
     private bool   _skipGracePeriod         = false;
 
+    // Minimum audio lookahead (seconds) used when scheduling the first bar for
+    // skip-grace rooms. Must be large enough to survive initialization overhead
+    // and Unity's audio-thread scheduling latency. Bar 2+ naturally gets ~0.25s
+    // (half a beat at 120 BPM); 0.3s gives the first bar a consistent match.
+    private const double FirstBarScheduleLookahead = 0.3;
+
     // Tracks scheduled audio for pause/resume (virtual times only)
     private class ScheduledSpawnAudio
     {
@@ -122,12 +128,13 @@ public class DungeonBeatManager : MonoBehaviour
 
         if (_skipGracePeriod)
         {
-            // Skip bar 0 entirely — schedule the first pattern immediately so
-            // enemies appear on beat 1 of this room.
-            ScheduleNewPattern(TimingCoordinator.Instance.CurrentBar);
-            hasScheduledFirstPattern = true;
-            currentState = GameState.Playing;
-            Debug.Log($"[DungeonBeatManager] Grace period skipped — gameplay begins immediately (Virtual: {startTimeVirtual:F4})");
+            // Scheduling is deferred to Update() so the first bar's audio always
+            // has at least FirstBarScheduleLookahead seconds of DSP headroom.
+            // Calling ScheduleNewPattern() here (synchronously after all the
+            // Initialize() work) can leave < 80 ms of real lookahead when the
+            // seam is close — enough to cause missed or glitchy PlayScheduled
+            // calls on mobile. Update() handles it cleanly once we are close.
+            Debug.Log($"[DungeonBeatManager] Grace period skipped — awaiting seam (Virtual: {startTimeVirtual:F4})");
         }
         else
         {
@@ -152,9 +159,27 @@ public class DungeonBeatManager : MonoBehaviour
         // ── Grace period → first pattern ────────────────────────────────
         if (!hasScheduledFirstPattern && currentState == GameState.WaitingForFirstBar)
         {
-            if (coordinator.GetCurrentBarIndex() == 0)
+            double now = GameClock.Instance.GameTime;
+
+            if (_skipGracePeriod)
             {
-                double timeUntilNextBar = coordinator.NextBar.BarStartTime - GameClock.Instance.GameTime;
+                // Room 2+: schedule bar 0 directly once we are within
+                // FirstBarScheduleLookahead of its pattern start. This gives
+                // PlayScheduled the same comfortable window that bar 2+ naturally
+                // gets (~0.25 s) instead of the < 80 ms worst case from calling
+                // ScheduleNewPattern immediately after all initialization work.
+                if (coordinator.CurrentBar.PatternStartTime - now <= FirstBarScheduleLookahead)
+                {
+                    ScheduleNewPattern(coordinator.CurrentBar);
+                    hasScheduledFirstPattern = true;
+                    currentState = GameState.Playing;
+                    Debug.Log($"[DungeonBeatManager] First pattern scheduled (skip-grace, " +
+                              $"lookahead: {coordinator.CurrentBar.PatternStartTime - now:F3}s)");
+                }
+            }
+            else if (coordinator.GetCurrentBarIndex() == 0)
+            {
+                double timeUntilNextBar = coordinator.NextBar.BarStartTime - now;
                 if (timeUntilNextBar <= 0.1)
                 {
                     coordinator.AdvanceToNextBar();

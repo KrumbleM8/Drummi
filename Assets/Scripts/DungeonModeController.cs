@@ -220,7 +220,11 @@ public class DungeonModeController : ModeController
 
             // Safety: if the transition animation has eaten into the next bar,
             // push one bar further so we never schedule in the past.
-            const double MIN_LOOKAHEAD = 0.1;
+            // Must be > FirstBarScheduleLookahead (0.3 s) so that when Update()
+            // fires ScheduleNewPattern for the first bar, there is still at least
+            // ~0.3 s of real DSP headroom for PlayScheduled (bar 2+ naturally gets
+            // ~0.25 s; 0.35 gives the first bar a consistent, reliable window).
+            const double MIN_LOOKAHEAD = 0.35;
             if (seamVirtual - currentVirtual < MIN_LOOKAHEAD)
                 seamVirtual += barDuration;
 
