@@ -26,6 +26,12 @@ public class ScreenTransition : MonoBehaviour
         get { return _isCovered && !_isTransitioning; }
     }
 
+    /// <summary>
+    /// True while any transition coroutine is running (cover or reveal in progress).
+    /// Use this alongside IsScreenCovered to distinguish "fully revealed" from "mid-transition".
+    /// </summary>
+    public bool IsTransitioning => _isTransitioning;
+
     void Awake()
     {
         Debug.Log("ScreenTransition Awake called.");

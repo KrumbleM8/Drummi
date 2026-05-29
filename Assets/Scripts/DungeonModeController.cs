@@ -258,6 +258,16 @@ public class DungeonModeController : ModeController
         }
     }
 
+    /// <summary>
+    /// Clears all visual state (enemies, indicators, slider) immediately without
+    /// touching audio, score, or health. Call before the next room's reveal begins
+    /// so old visuals are gone while the screen is still covered.
+    /// </summary>
+    public void ClearVisuals()
+    {
+        if (visualController != null) visualController.Initialize();
+    }
+
     public override void Cleanup()
     {
         if (evaluator        != null) evaluator.SaveHighScore();

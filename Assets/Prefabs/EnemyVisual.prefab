@@ -119,7 +119,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   metronome: {fileID: 0}
-  rotationAmount: 12
+  rotationAmount: 10
   beatsPerCycle: 2
   phaseOffsetBeats: 0
   easeCurve:

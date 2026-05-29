@@ -81,9 +81,12 @@ public class RoomController : MonoBehaviour
     {
         switch (_state)
         {
-            // Transition to Playing once the reveal animation exposes the screen.
+            // Transition to Playing only once the reveal animation is fully complete.
+            // IsScreenCovered becomes false the moment the transition *starts*, so
+            // we also guard on !IsTransitioning to avoid calling StartRoom while the
+            // screen is still animating (which would start spawn audio during the wipe).
             case RoomState.Entering:
-                if (!screenTransition.IsScreenCovered)
+                if (!screenTransition.IsScreenCovered && !screenTransition.IsTransitioning)
                     SetState(RoomState.Playing);
                 break;
 
@@ -106,6 +109,7 @@ public class RoomController : MonoBehaviour
         switch (next)
         {
             case RoomState.Entering:
+                modeController.ClearVisuals();
                 ApplyBackground();
                 screenTransition.StartReveal();
                 break;

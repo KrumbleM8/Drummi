@@ -2147,6 +2147,7 @@ MonoBehaviour:
   rightColor: {r: 1, g: 0.3, b: 0.3, a: 1}
   missedColor: {r: 0.5, g: 0.5, b: 0.5, a: 1}
   enemyContainer: {fileID: 546675871}
+  enemyPrefab: {fileID: 8565711510244083800, guid: 47e06e1f98816f946bf25bda965f51cc, type: 3}
   enemySprite: {fileID: -1047039540263961326, guid: aa0ea803f463b844a8ac753e29905884, type: 3}
   enemySpawnY: 0
   enemySpawnBandWidth: 4
