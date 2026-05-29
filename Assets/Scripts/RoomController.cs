@@ -21,7 +21,8 @@ public class RoomController : MonoBehaviour
     private enum RoomState { Entering, Playing, Evaluating, Exiting, Complete }
 
     [SerializeField] private DungeonModeController modeController;
-    [SerializeField] private ScreenTransition      screenTransition;
+    [SerializeField] private ScreenTransition       screenTransition;
+    [SerializeField] private DungeonZoomTransition  dungeonTransition;
     [SerializeField] private DungeonHealth         playerHealth;
     [SerializeField] private SpriteRenderer        backgroundRenderer;
     [SerializeField] private GameObject            doorsUI;
@@ -91,7 +92,7 @@ public class RoomController : MonoBehaviour
                 break;
 
             case RoomState.Exiting:
-                if (screenTransition.IsScreenCovered)
+                if (dungeonTransition.IsScreenCovered)
                 {
                     SetState(RoomState.Complete);
                     OnRoomComplete?.Invoke(_result);
@@ -112,6 +113,7 @@ public class RoomController : MonoBehaviour
                 modeController.ClearVisuals();
                 ApplyBackground();
                 screenTransition.StartReveal();
+                dungeonTransition.StartReveal();
                 break;
 
             case RoomState.Playing:
@@ -132,7 +134,7 @@ public class RoomController : MonoBehaviour
 
             case RoomState.Exiting:
                 if (doorsUI != null) doorsUI.SetActive(false);
-                screenTransition.StartCover();
+                dungeonTransition.StartCover();
                 break;
         }
     }
