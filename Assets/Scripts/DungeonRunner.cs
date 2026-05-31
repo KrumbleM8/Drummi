@@ -98,7 +98,7 @@ public class DungeonRunner : MonoBehaviour
 
         roomController.OnRoomComplete    += HandleRoomComplete;
         roomController.OnDirectionChosen += HandleDirectionChosen;
-        roomController.LoadRoom(room);
+        roomController.LoadRoom(room, floor);
     }
 
     private void HandleDirectionChosen(int directionIndex)

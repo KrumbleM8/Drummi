@@ -374,6 +374,7 @@ public class GameManager : MonoBehaviour
 
         CleanupSharedSystems();
         _activeMode.Cleanup();
+        dungeonRunner?.GetComponent<RoomController>()?.ResetToTitleBackground();
         ShowResultsUI();
         screenTransition?.StartReveal();
 

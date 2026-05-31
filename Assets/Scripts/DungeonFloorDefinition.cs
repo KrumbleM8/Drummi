@@ -16,6 +16,10 @@ public class DungeonFloorDefinition : ScriptableObject
     [Tooltip("Zero-based index used by DungeonRunner to order floors.")]
     [SerializeField] private int floorIndex;
 
+    [Header("Visuals")]
+    [Tooltip("Default background sprite used for all rooms on this floor. Overridden per-room by RoomDefinition.BackgroundSprite when non-null.")]
+    [SerializeField] private Sprite backgroundSprite;
+
     [Header("Rooms")]
     [Tooltip("Ordered list of rooms. DungeonRunner steps through these in sequence.")]
     [SerializeField] private List<RoomDefinition> rooms = new List<RoomDefinition>();
@@ -27,6 +31,9 @@ public class DungeonFloorDefinition : ScriptableObject
 
     /// <summary>Zero-based floor index used by DungeonRunner.</summary>
     public int FloorIndex => floorIndex;
+
+    /// <summary>Default background sprite for this floor. Individual rooms may override this.</summary>
+    public Sprite BackgroundSprite => backgroundSprite;
 
     /// <summary>Ordered room sequence for this floor.</summary>
     public IReadOnlyList<RoomDefinition> Rooms => rooms;

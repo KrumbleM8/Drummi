@@ -14,6 +14,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   floorName: Floor 2
   floorIndex: 1
+  backgroundSprite: {fileID: 21300000, guid: acf087d741353c04fa3a41cf8d11689c, type: 3}
   rooms:
   - {fileID: 11400000, guid: 5ea77e9fc5953ba4198537a941df212e, type: 2}
   - {fileID: 11400000, guid: 5ea77e9fc5953ba4198537a941df212e, type: 2}

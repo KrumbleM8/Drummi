@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cd /d)",
+      "Read(//d/UnityProjects/Unity Projects/Drummi 2/Assets/Scenes/**)",
+      "Bash(grep -n \"--- !u!1 &\" \"/d/UnityProjects/Unity Projects/Drummi 2/Assets/Scenes/Dungeon.unity\")",
+      "Bash(grep -l \"Canvas\\\\|curtain\\\\|reveal\\\\|transition\" \"/d/UnityProjects/Unity Projects/Drummi 2/Assets/Scripts\"/*.cs)",
+      "mcp__coplay-mcp__get_unity_editor_state",
+      "mcp__coplay-mcp__list_game_objects_in_hierarchy",
+      "mcp__coplay-mcp__get_game_object_info",
+      "mcp__coplay-mcp__check_compile_errors",
+      "mcp__coplay-mcp__execute_script",
+      "mcp__coplay-mcp__save_scene",
+      "Bash(git -C \"D:/UnityProjects/Unity Projects/Drummi 2\" diff Assets/Scenes/Dungeon.unity)",
+      "Bash(git:*)",
+      "mcp__coplay-mcp__get_unity_logs"
+    ]
+  }
+}

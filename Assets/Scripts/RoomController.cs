@@ -25,6 +25,8 @@ public class RoomController : MonoBehaviour
     [SerializeField] private DungeonZoomTransition  dungeonTransition;
     [SerializeField] private DungeonHealth         playerHealth;
     [SerializeField] private SpriteRenderer        backgroundRenderer;
+    [SerializeField] private SpriteRenderer        backgroundZoomerRenderer;
+    [SerializeField] private Sprite                titleBackgroundSprite;
     [SerializeField] private GameObject            doorsUI;
 
     /// <summary>Fired when the room is fully exited, carrying the outcome.</summary>
@@ -37,10 +39,11 @@ public class RoomController : MonoBehaviour
     /// </summary>
     public event Action<int> OnDirectionChosen;
 
-    private RoomState      _state       = RoomState.Complete;
-    private RoomDefinition _currentDef;
-    private RoomResult     _result;
-    private float          _roomStartTime;
+    private RoomState             _state       = RoomState.Complete;
+    private RoomDefinition        _currentDef;
+    private DungeonFloorDefinition _currentFloor;
+    private RoomResult            _result;
+    private float                 _roomStartTime;
 
     // ── Public API ────────────────────────────────────────────────────────────
 
@@ -48,7 +51,12 @@ public class RoomController : MonoBehaviour
     /// Begins a new room encounter. Triggers the reveal transition, then starts gameplay.
     /// Safe to call only when the current state is Complete (i.e. no room in progress).
     /// </summary>
-    public void LoadRoom(RoomDefinition def)
+    /// <param name="def">The room to load.</param>
+    /// <param name="floor">
+    /// The floor this room belongs to. Its <see cref="DungeonFloorDefinition.BackgroundSprite"/>
+    /// is used as the background fallback when the room's own sprite is null.
+    /// </param>
+    public void LoadRoom(RoomDefinition def, DungeonFloorDefinition floor = null)
     {
         if (_state != RoomState.Complete)
         {
@@ -56,7 +64,8 @@ public class RoomController : MonoBehaviour
             return;
         }
 
-        _currentDef = def;
+        _currentDef   = def;
+        _currentFloor = floor;
         SetState(RoomState.Entering);
     }
 
@@ -192,9 +201,29 @@ public class RoomController : MonoBehaviour
         };
     }
 
+    /// <summary>
+    /// Resets both background renderers to the title-screen sprite.
+    /// Call this before revealing the screen after a game over so the
+    /// score page is shown against the original background.
+    /// </summary>
+    public void ResetToTitleBackground()
+    {
+        if (titleBackgroundSprite == null) return;
+        if (backgroundRenderer       != null) backgroundRenderer.sprite       = titleBackgroundSprite;
+        if (backgroundZoomerRenderer != null) backgroundZoomerRenderer.sprite = titleBackgroundSprite;
+    }
+
     private void ApplyBackground()
     {
-        if (backgroundRenderer != null && _currentDef?.BackgroundSprite != null)
-            backgroundRenderer.sprite = _currentDef.BackgroundSprite;
+        // Use explicit Unity null checks — the ?? operator bypasses Unity's
+        // custom == override and will incorrectly treat missing-reference
+        // (fake-null) Sprite fields as non-null.
+        Sprite roomSprite  = _currentDef  != null ? _currentDef.BackgroundSprite  : null;
+        Sprite floorSprite = _currentFloor != null ? _currentFloor.BackgroundSprite : null;
+        Sprite sprite      = roomSprite != null ? roomSprite : floorSprite;
+        if (sprite == null) return;
+
+        if (backgroundRenderer       != null) backgroundRenderer.sprite       = sprite;
+        if (backgroundZoomerRenderer != null) backgroundZoomerRenderer.sprite = sprite;
     }
 }
