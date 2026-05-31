@@ -327,6 +327,11 @@ public class DungeonBeatManager : MonoBehaviour
         double timeOffset = InputStartTime - PatternStartTime;
         evaluator.EvaluateBar(inputReader.playerInputData, scheduledBeats, timeOffset);
 
+        // Health depletion fires synchronously inside EvaluateBar and can trigger
+        // Cleanup() → ResetToInitialState(), which sets state to Uninitialized.
+        // Bail here so we don't schedule the next bar's audio after cleanup.
+        if (currentState == GameState.Uninitialized) return;
+
         inputReader.allowInput = false;
         inputReader.ResetInputs();
 
@@ -433,6 +438,7 @@ public class DungeonBeatManager : MonoBehaviour
     {
         StopAllCoroutines();
         CancelInvoke();
+        CancelAllTurnSignals();
 
         // Stop and destroy any live SpawnVoice one-shot objects
         foreach (var a in _scheduledAudio)

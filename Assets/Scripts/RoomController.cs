@@ -171,7 +171,11 @@ public class RoomController : MonoBehaviour
         // trigger a second ShowResultsSequence after the run has already handled routing.
         modeController.Cleanup();
         BuildResult(survived: false);
-        SetState(RoomState.Exiting);
+        // Skip the zoom transition on death — the dungeon zoom is a room-change visual.
+        // GameManager.ShowResultsSequence will cover the screen with the standard
+        // transition before revealing the score page.
+        _state = RoomState.Complete;
+        OnRoomComplete?.Invoke(_result);
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
