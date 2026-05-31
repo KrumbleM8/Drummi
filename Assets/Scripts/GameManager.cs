@@ -366,6 +366,14 @@ public class GameManager : MonoBehaviour
     {
         Debug.Log("=== SHOWING RESULTS SEQUENCE ===");
 
+        // Capture before the first yield. Coroutines run synchronously up to their
+        // first yield, so this executes in the same call stack as StartCoroutine —
+        // before any in-flight gameplay logic (e.g. DungeonEvaluator's double-fail
+        // Score = 0 reset) can overwrite the values after TriggerGameOver returns.
+        int  finalScore          = _activeMode != null ? _activeMode.Score          : 0;
+        int  finalPerfectHits    = _activeMode != null ? _activeMode.TotalPerfectHits : 0;
+        bool finalIsNewHighScore = _activeMode != null && _activeMode.IsNewHighScore;
+
         if (screenTransition != null && !screenTransition.IsScreenCovered)
         {
             screenTransition.StartCover();
@@ -375,7 +383,7 @@ public class GameManager : MonoBehaviour
         CleanupSharedSystems();
         _activeMode.Cleanup();
         dungeonRunner?.GetComponent<RoomController>()?.ResetToTitleBackground();
-        ShowResultsUI();
+        ShowResultsUI(finalScore, finalPerfectHits, finalIsNewHighScore);
         screenTransition?.StartReveal();
 
         Debug.Log("=== RESULTS SEQUENCE COMPLETE ===");
@@ -403,7 +411,7 @@ public class GameManager : MonoBehaviour
         }
     }
 
-    private void ShowResultsUI()
+    private void ShowResultsUI(int score, int perfectHits, bool isNewHighScore)
     {
         if (menuManager == null) { Debug.LogError("[GameManager] UIMenuManager missing!"); return; }
 
@@ -413,8 +421,8 @@ public class GameManager : MonoBehaviour
         if (scoreScreen != null)
         {
             int roomsCleared = dungeonRunner != null ? dungeonRunner.RoomsCleared : 0;
-            scoreScreen.DisplayScore(_activeMode.Score, _activeMode.TotalPerfectHits, _activeMode.IsNewHighScore, roomsCleared);
-            Debug.Log($"[GameManager] Score displayed: {_activeMode.Score}");
+            scoreScreen.DisplayScore(score, perfectHits, isNewHighScore, roomsCleared);
+            Debug.Log($"[GameManager] Score displayed: {score}");
         }
         else
         {
