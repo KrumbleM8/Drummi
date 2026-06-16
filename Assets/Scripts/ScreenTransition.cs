@@ -113,7 +113,7 @@ public class ScreenTransition : MonoBehaviour
         {
             float t = elapsed / transitionDuration;
             _rectTransform.anchoredPosition = Vector2.Lerp(startPos, endPos, t);
-            elapsed += Time.deltaTime;
+            elapsed += Time.unscaledDeltaTime;
             yield return null;
         }
 
@@ -146,7 +146,7 @@ public class ScreenTransition : MonoBehaviour
         {
             float t = elapsed / transitionDuration;
             _rectTransform.anchoredPosition = Vector2.Lerp(startPos, endPos, t);
-            elapsed += Time.deltaTime;
+            elapsed += Time.unscaledDeltaTime;
             yield return null;
         }
         // Snap to final position.

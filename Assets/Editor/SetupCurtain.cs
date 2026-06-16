@@ -63,7 +63,7 @@ public static class SetupCurtain
         img.raycastTarget   = false; // curtain is visual-only; don't block pad touches
 
         // ── Add CurtainController ─────────────────────────────────────────────
-        var controller = curtainGO.AddComponent<KrumbleHut.DrummiDungeons.UI.CurtainController>();
+        var controller = curtainGO.AddComponent<KrumbleHut.Drummi.UI.CurtainController>();
 
         // Use SerializedObject to set private serialized fields
         var so = new SerializedObject(controller);

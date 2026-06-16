@@ -24,6 +24,10 @@ namespace KrumbleHut.Drummi.UI
         [SerializeField] private string musicVolumeParam = "MusicVolume";
         [SerializeField] private string sfxVolumeParam   = "SFXVolume";
 
+        [Header("Pause")]
+        [Tooltip("Optional. When assigned, opening/closing settings automatically pauses and resumes the game. Leave null on scenes with no gameplay (e.g. Home).")]
+        [SerializeField] private PauseHandler pauseHandler;
+
         [Header("Scene Transition")]
         [SerializeField] private ScreenTransition screenTransitioner;
 
@@ -56,19 +60,21 @@ namespace KrumbleHut.Drummi.UI
 
         // ── Settings Panel ─────────────────────────────────────────────────────
 
-        /// <summary>Opens the settings panel with a slide-up animation.</summary>
+        /// <summary>Opens the settings panel with a slide-up animation and pauses the game if a PauseHandler is assigned.</summary>
         public void OpenSettings()
         {
             if (_settingsOpen) return;
             _settingsOpen = true;
+            pauseHandler?.TogglePause();
             AnimatePanel(show: true);
         }
 
-        /// <summary>Closes the settings panel with a slide-down animation.</summary>
+        /// <summary>Closes the settings panel with a slide-down animation and resumes the game if a PauseHandler is assigned.</summary>
         public void CloseSettings()
         {
             if (!_settingsOpen) return;
             _settingsOpen = false;
+            pauseHandler?.TogglePause();
             AnimatePanel(show: false);
         }
 
@@ -96,7 +102,7 @@ namespace KrumbleHut.Drummi.UI
             float elapsed = 0f;
             while (elapsed < panelSlideDuration)
             {
-                elapsed += Time.deltaTime;
+                elapsed += Time.unscaledDeltaTime;
                 float t = panelCurve.Evaluate(Mathf.Clamp01(elapsed / panelSlideDuration));
                 settingsPanel.anchoredPosition = Vector2.Lerp(from, to, t);
                 yield return null;
@@ -179,10 +185,20 @@ namespace KrumbleHut.Drummi.UI
 
         private IEnumerator SceneTransitionRoutine(string sceneName)
         {
+            // If the game is paused, resume it before transitioning so that
+            // AudioManager, GameClock, and Time.timeScale are all clean for the new scene.
+            if (pauseHandler != null && GameClock.Instance != null && GameClock.Instance.IsPaused)
+                pauseHandler.TogglePause();
+
+            // Stop persistent music now, before the new scene loads.
+            // PlayOnAwake audio in the incoming scene runs during its own Awake — after this point —
+            // so it is never interrupted.
+            AudioManager.instance?.StopMusic();
+
             if (screenTransitioner != null)
             {
                 screenTransitioner.StartCover();
-                yield return new WaitForSeconds(screenTransitioner.transitionDuration * 1.13f);
+                yield return new WaitForSecondsRealtime(screenTransitioner.transitionDuration * 1.13f);
             }
             SceneManager.LoadScene(sceneName);
         }
