@@ -11,7 +11,11 @@
       "mcp__coplay-mcp__create_game_object",
       "mcp__coplay-mcp__add_component",
       "mcp__coplay-mcp__create_prefab",
-      "mcp__coplay-mcp__delete_game_object"
+      "mcp__coplay-mcp__delete_game_object",
+      "Bash(grep -l \"ModeController\" Assets/Scripts/*.cs)",
+      "Bash(find Assets -name \"*.cs\" -exec grep -l \"^public class ModeController\" {} \\\\;)",
+      "Bash(find Assets/Scripts -name \"*.cs\" -exec grep -l \"abstract.*ModeController\\\\|class ModeController\" {} \\\\;)",
+      "Bash(grep -n \"CompletMode\\\\|OnModeComplete\" Assets/Scripts/*.cs)"
     ]
   }
 }
