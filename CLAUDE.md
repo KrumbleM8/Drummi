@@ -1,7 +1,12 @@
 # Drummi Dungeons — Project Context
 
 ## What this project is
-A mobile-first rhythm roguelike dungeon crawler built in Unity 6.
+Drummi is a mobile-first rhythm game built in Unity 6 with multiple gamemodes:
+- **Bongo** — tap left/right pads to rhythm
+- **Arcade** — Guitar Hero-style note lanes
+- **Garden** — drum machine / creative mode
+- **Drummi Dungeons** — rhythm roguelike dungeon crawler (active development)
+
 Arcade tone, short sessions, portrait orientation.
 Platforms: iOS, Android (primary), PC (later port).
 
@@ -42,7 +47,7 @@ Working on Drummi Dungeons roguelike layer.
 Standard combat is complete. Building room/floor/progression systems.
 
 ## Naming conventions
-- Namespace: KrumbleHut.DrummiDungeons.[System]
+- Namespace: KrumbleHut.Drummi.[System] (e.g. KrumbleHut.Drummi.UI, KrumbleHut.Drummi.Dungeons)
 - ScriptableObjects: suffix Definition (e.g. RoomDefinition, BossPhaseDefinition)
 - MonoBehaviours: suffix Controller, Handler, Manager, Runner
 - Plain data classes: no suffix (e.g. RoomResult, DungeonInput)

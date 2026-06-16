@@ -1,7 +1,7 @@
 using System.Collections;
 using UnityEngine;
 
-namespace KrumbleHut.DrummiDungeons.UI
+namespace KrumbleHut.Drummi.UI
 {
     /// <summary>
     /// On Dungeon scene load, a full-screen curtain panel covers all layers below
@@ -19,8 +19,8 @@ namespace KrumbleHut.DrummiDungeons.UI
         [Tooltip("DrumPadTouch that fires the hit events.")]
         [SerializeField] private DrumPadTouch drumPadTouch;
 
-        [Tooltip("The IntroMenu root GameObject to reveal when threshold is reached.")]
-        [SerializeField] private GameObject introMenu;
+        [Tooltip("The ObjectToSpawn root GameObject to reveal when threshold is reached.")]
+        [SerializeField] private GameObject ObjectToSpawn;
 
         [Header("Physics")]
         [Tooltip("Upward impulse added per drum hit (canvas units / second).")]
@@ -33,7 +33,7 @@ namespace KrumbleHut.DrummiDungeons.UI
         [SerializeField] private float maxUpSpeed = 1000f;
 
         [Header("Reveal")]
-        [Tooltip("How far up the curtain must travel (canvas units) before IntroMenu is shown.")]
+        [Tooltip("How far up the curtain must travel (canvas units) before ObjectToSpawn is shown.")]
         [SerializeField] private float revealThreshold = 650f;
 
         // ── State ─────────────────────────────────────────────────────────────
@@ -50,8 +50,8 @@ namespace KrumbleHut.DrummiDungeons.UI
             // then immediately hide it behind the curtain.
             yield return null;
 
-            if (introMenu != null)
-                introMenu.SetActive(false);
+            if (ObjectToSpawn != null)
+                ObjectToSpawn.SetActive(false);
 
             SubscribeInput();
             _active = true;
@@ -115,11 +115,11 @@ namespace KrumbleHut.DrummiDungeons.UI
             _active = false;
             UnsubscribeInput();
 
-            if (introMenu != null)
-                introMenu.SetActive(true);
+            if (ObjectToSpawn != null)
+                ObjectToSpawn.SetActive(true);
 
             // Disable the curtain object — no further rendering or Update cost.
-            gameObject.SetActive(false);
+            curtainRect.gameObject.SetActive(false);
         }
     }
 }
