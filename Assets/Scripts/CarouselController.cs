@@ -54,6 +54,28 @@ public class CarouselController : MonoBehaviour
     /// </summary>
     public bool SuppressChildTap => promotedToDrag || Time.unscaledTime < suppressClickUntil;
 
+    /// <summary>
+    /// Read/write access to the carousel's internal horizontal offset.
+    /// Intended for an external coordinator (e.g. <c>SongSelectController</c>) to animate
+    /// the carousel to a target position while drag input is disabled via
+    /// <see cref="SetInputEnabled"/>. Setting this value immediately repositions all child
+    /// items by calling <c>UpdateCarouselItems</c>, so each assigned frame renders without
+    /// waiting for the next <c>Update</c> tick.
+    /// <para>
+    /// Do not write this property while drag input is enabled — the drag handlers also write
+    /// <c>currentOffset</c> directly and will override any externally set value.
+    /// </para>
+    /// </summary>
+    public float CurrentOffset
+    {
+        get => currentOffset;
+        set
+        {
+            currentOffset = value;
+            UpdateCarouselItems();
+        }
+    }
+
     private void Awake()
     {
         // Create and bind the InputActions.
@@ -82,6 +104,37 @@ public class CarouselController : MonoBehaviour
         dragAction.Disable();
         pointerDownAction.Disable();
         pointerUpAction.Disable();
+    }
+
+    /// <summary>
+    /// Gates pointer drag input without stopping the <c>Update</c> loop.
+    /// When <paramref name="enabled"/> is <c>false</c>, the three InputActions are disabled so
+    /// no drag, pointer-down, or pointer-up callbacks fire. <c>Update</c> continues to run,
+    /// so <c>currentOffset</c> can be driven externally (e.g. animated to centre an album card)
+    /// and item positions / visibility continue to be refreshed every frame.
+    /// <para>
+    /// Note: if called while a drag gesture is in progress, <c>isDragging</c> is reset to
+    /// <c>false</c> and <c>velocity</c> is zeroed so inertia does not resume on re-enable.
+    /// </para>
+    /// </summary>
+    public void SetInputEnabled(bool enabled)
+    {
+        if (enabled)
+        {
+            dragAction.Enable();
+            pointerDownAction.Enable();
+            pointerUpAction.Enable();
+        }
+        else
+        {
+            dragAction.Disable();
+            pointerDownAction.Disable();
+            pointerUpAction.Disable();
+
+            // Clean up any in-progress gesture so inertia doesn't resume on re-enable.
+            isDragging = false;
+            velocity = 0f;
+        }
     }
 
     private void Update()
@@ -257,9 +310,12 @@ public class CarouselController : MonoBehaviour
     }
 
     /// <summary>
-    /// Center the carousel so that the specified child index is at x = 0.
+    /// Sets <c>currentOffset</c> so that the child at <paramref name="index"/> is
+    /// centered on the X axis (anchoredPosition.x == 0). Clamps out-of-range indices.
+    /// Zeroes <c>velocity</c> to prevent inertia from drifting away immediately after centering.
+    /// Calls <see cref="UpdateCarouselItems"/> so positions are applied in the same frame.
     /// </summary>
-    private void CenterOnChild(int index)
+    public void CenterOnChild(int index)
     {
         int count = transform.childCount;
         if (count == 0)
