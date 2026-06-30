@@ -24,6 +24,10 @@ namespace KrumbleHut.Drummi.UI
             "until AudioManager is refactored to accept SongDefinition directly.")]
         [SerializeField] private int trackIndex;
 
+        [Tooltip("Start time (seconds) within the track for the song-select preview loop. " +
+                 "The controller clamps this so previewStart + previewLength ≤ clip.length.")]
+        [SerializeField] private float previewStartSeconds = 15f;
+
         [Header("Progress")]
         [Tooltip("Player's personal best score for this song. Persisted externally (PlayerPrefs / save file).")]
         [SerializeField] private int bestScore;
@@ -49,5 +53,11 @@ namespace KrumbleHut.Drummi.UI
 
         /// <summary>Player's personal best score for this song.</summary>
         public int BestScore => bestScore;
+
+        /// <summary>
+        /// Start time (seconds) within the audio track for the song-select preview loop.
+        /// The controller clamps this so <c>previewStart + previewLength ≤ clip.length</c>.
+        /// </summary>
+        public float PreviewStartSeconds => previewStartSeconds;
     }
 }

@@ -1,3 +1,5 @@
+using System.Collections;
+using System.Collections.Generic;
 using DG.Tweening;
 using TMPro;
 using UnityEngine;
@@ -73,6 +75,12 @@ namespace KrumbleHut.Drummi.UI
         [Tooltip("Text label inside the popup that displays the selected song title.")]
         [SerializeField] private TMP_Text popupSongTitle;
 
+        [Tooltip("Duration (seconds) for the popup slide-up / slide-down animation.")]
+        [SerializeField] private float popupSlideDuration = 0.25f;
+
+        [Tooltip("Easing curve for the popup slide animation (horizontal axis = normalised time, vertical = normalised position).")]
+        [SerializeField] private AnimationCurve popupCurve = AnimationCurve.EaseInOut(0, 0, 1, 1);
+
         [Tooltip("One indicator GameObject per difficulty slot (index 0 / 1 / 2). " +
                  "Made active for the selected difficulty, inactive for all others. " +
                  "Wire each difficulty button's onClick → SelectDifficulty(n) in the Inspector.")]
@@ -93,6 +101,50 @@ namespace KrumbleHut.Drummi.UI
 
         [Tooltip("How far (RectTransform units) the album card rises when expanded.")]
         [SerializeField] private float liftDistance = 150f;
+
+        [Header("Vinyl Fan Animation")]
+        [Tooltip("Shared start anchoredPosition (relative to SongSelect) that all vinyls " +
+                 "animate FROM. Position this at roughly the centre of the lifted album cover.")]
+        [SerializeField] private Vector2 vinylFanStartLocalPos = new Vector2(0f, -60f);
+
+        [Tooltip("Uniform scale applied to every vinyl at animation start. Tweens to 1.")]
+        [SerializeField] private float vinylFanStartScale = 0.6f;
+
+        [Tooltip("Duration (seconds) for each vinyl's position and scale fan-out tween.")]
+        [SerializeField] private float vinylFanDuration = 0.35f;
+
+        [Tooltip("Easing applied to both the position and scale fan-out tweens.")]
+        [SerializeField] private Ease vinylFanEase = Ease.OutCubic;
+
+        [Tooltip("Extra delay (seconds) added per slot (slot 0 = no delay, " +
+                 "slot 1 = 1×stagger, slot 2 = 2×stagger). Set 0 for simultaneous.")]
+        [SerializeField] private float vinylFanStagger = 0.06f;
+
+        [Header("Start Icon")]
+        [Tooltip("Overlay indicator that tracks the currently-previewed vinyl. Must be parented " +
+                 "under SongSelect so its anchoredPosition space matches the vinyl slots.")]
+        [SerializeField] private RectTransform startIcon;
+
+        [Header("Audio Preview")]
+        [Tooltip("Dedicated AudioSource for song-select previews. Created automatically in Awake " +
+                 "if left null. Must NOT be one of AudioManager.speakers[].")]
+        [SerializeField] private AudioSource previewSource;
+
+        [Tooltip("How many seconds of the track to play per loop iteration.")]
+        [SerializeField] private float previewLengthSeconds = 10f;
+
+        [Tooltip("Volume fade-in duration (seconds) at the start of each preview iteration.")]
+        [SerializeField] private float previewFadeInSeconds = 0.6f;
+
+        [Tooltip("Volume fade-out duration (seconds) at the end of each preview iteration.")]
+        [SerializeField] private float previewFadeOutSeconds = 0.4f;
+
+        [Tooltip("Duration (seconds) to fade to silence when StopPreview is called mid-loop.")]
+        [SerializeField] private float previewStopFadeSeconds = 0.15f;
+
+        [Tooltip("Duration (seconds) for the simultaneous fade-out/fade-in when switching " +
+                 "from one vinyl preview to another while audio is already playing.")]
+        [SerializeField] private float crossfadeDuration = 0.4f;
 
         // ── Runtime state ─────────────────────────────────────────────────────
 
@@ -122,13 +174,81 @@ namespace KrumbleHut.Drummi.UI
         /// </summary>
         private Sequence _activeSequence;
 
+        /// <summary>True after <see cref="Start"/> has executed. Guards <see cref="OnEnable"/>
+        /// from running reset logic before the controller is fully initialised.</summary>
+        private bool _started;
+
+        /// <summary>
+        /// Authored rest anchoredPositions read from each vinyl's RectTransform in Start.
+        /// Stored separately so that editor repositioning is picked up automatically.
+        /// </summary>
+        private Vector2[] _vinylRestPos;
+
+        /// <summary>
+        /// Running fan-out tweens (position + scale per vinyl, plus the sibling-restoration
+        /// callback). All are killed by <see cref="KillVinylTweens"/> when Collapse fires
+        /// mid-fan so no vinyl is left stranded behind the carousel or mid-travel.
+        /// </summary>
+        private readonly List<Tween> _vinylTweens = new List<Tween>();
+
+        private Tween     _previewFadeTween;
+        private Tween     _crossfadeFadeTween;
+        private Coroutine _previewLoopCoroutine;
+        private AudioSource _outgoingSource;
+
+        private RectTransform _popupRect;
+        private Vector2       _popupShownPos;
+        private Vector2       _popupHiddenPos;
+        private Coroutine     _popupCoroutine;
+
         /// <summary>Current state of the song-select screen.</summary>
         public SelectState State => _state;
 
         // ── Lifecycle ─────────────────────────────────────────────────────────
 
+        private void OnEnable()
+        {
+            // Skip on first activation — Start() handles initial setup.
+            if (!_started) return;
+            ResetToDefault();
+        }
+
+        private void Awake()
+        {
+            if (previewSource == null)
+            {
+                previewSource              = gameObject.AddComponent<AudioSource>();
+                previewSource.playOnAwake  = false;
+                previewSource.loop         = false;
+                previewSource.spatialBlend = 0f;
+            }
+
+            _outgoingSource              = gameObject.AddComponent<AudioSource>();
+            _outgoingSource.playOnAwake  = false;
+            _outgoingSource.loop         = false;
+            _outgoingSource.spatialBlend = 0f;
+        }
+
+        private void OnDisable()
+        {
+            TearDownPreview();
+            if (previewSource  != null) previewSource.Stop();
+            if (_outgoingSource != null) _outgoingSource.Stop();
+        }
+
         private void Start()
         {
+            _started = true;
+
+            // Cache each vinyl's authored anchoredPosition before HideVinyls resets anything.
+            // Reading from the RectTransform means Inspector edits are picked up automatically.
+            _vinylRestPos = new Vector2[vinyls.Length];
+            for (int i = 0; i < vinyls.Length; i++)
+            {
+                if (vinyls[i] != null)
+                    _vinylRestPos[i] = vinyls[i].GetComponent<RectTransform>().anchoredPosition;
+            }
+
             // Subscribe to every AlbumItem that is a direct carousel child.
             for (int i = 0; i < carousel.transform.childCount; i++)
             {
@@ -149,13 +269,74 @@ namespace KrumbleHut.Drummi.UI
                 tapCatcher.gameObject.SetActive(false);
             }
 
-            if (popupRoot != null) popupRoot.SetActive(false);
+            if (popupRoot != null)
+            {
+                Canvas.ForceUpdateCanvases();
+                _popupRect      = popupRoot.GetComponent<RectTransform>();
+                _popupShownPos  = _popupRect.anchoredPosition;
+                _popupHiddenPos = new Vector2(_popupShownPos.x, _popupShownPos.y - _popupRect.rect.height - 100f);
+                _popupRect.anchoredPosition = _popupHiddenPos;
+                popupRoot.SetActive(false);
+            }
             HideVinyls();
+        }
+
+        /// <summary>
+        /// Resets the controller to its default browsing state. Called by <see cref="OnEnable"/>
+        /// whenever the song-select page is re-activated (e.g. returning from the results screen)
+        /// so no stale expanded album, vinyls, popup, or audio preview survives the round-trip.
+        /// </summary>
+        private void ResetToDefault()
+        {
+            // Kill any in-flight expand / collapse sequence.
+            _activeSequence?.Kill();
+            _activeSequence = null;
+
+            // Restore the lifted album card to its pre-expand Y before clearing the reference.
+            if (_expandedAlbum != null)
+            {
+                var albumRect = _expandedAlbum.GetComponent<RectTransform>();
+                if (albumRect != null)
+                    albumRect.anchoredPosition = new Vector2(albumRect.anchoredPosition.x, _originalAlbumPos.y);
+                _expandedAlbum.SetStartIconVisible(true);
+                _expandedAlbum = null;
+            }
+
+            // Re-enable carousel drag (may have been locked by an expand).
+            carousel?.SetInputEnabled(true);
+
+            // Hide vinyls: kills fan tweens, calls CancelSelection on each, resets transforms.
+            HideVinyls();
+
+            // Deactivate the tap-catcher overlay.
+            if (tapCatcher != null) tapCatcher.gameObject.SetActive(false);
+
+            // Close popup instantly (no slide animation).
+            if (_popupCoroutine != null) { StopCoroutine(_popupCoroutine); _popupCoroutine = null; }
+            if (popupRoot != null && _popupRect != null)
+            {
+                _popupRect.anchoredPosition = _popupHiddenPos;
+                popupRoot.SetActive(false);
+            }
+
+            // Stop any preview audio (OnDisable already ran TearDown, but be defensive).
+            TearDownPreview();
+            if (previewSource  != null) previewSource.Stop();
+            if (_outgoingSource != null) _outgoingSource.Stop();
+
+            // Reset state variables.
+            _state              = SelectState.Browsing;
+            _previewingSlot     = -1;
+            _selectedDifficulty = -1;
         }
 
         private void OnDestroy()
         {
             _activeSequence?.Kill();
+            KillVinylTweens();
+            TearDownPreview();
+            if (previewSource  != null) previewSource.Stop();
+            if (_outgoingSource != null) _outgoingSource.Stop();
 
             if (carousel == null) return;
             for (int i = 0; i < carousel.transform.childCount; i++)
@@ -163,6 +344,13 @@ namespace KrumbleHut.Drummi.UI
                 var album = carousel.transform.GetChild(i).GetComponent<AlbumItem>();
                 if (album != null) album.Tapped -= OnAlbumTapped;
             }
+        }
+
+        private void LateUpdate()
+        {
+            if (_state != SelectState.Previewing || startIcon == null || _previewingSlot < 0) return;
+            if (_previewingSlot >= vinyls.Length || vinyls[_previewingSlot] == null) return;
+            startIcon.anchoredPosition = vinyls[_previewingSlot].GetComponent<RectTransform>().anchoredPosition;
         }
 
         // ── Public API ────────────────────────────────────────────────────────
@@ -184,6 +372,9 @@ namespace KrumbleHut.Drummi.UI
             _expandedAlbum = album;
             var albumRect = album.GetComponent<RectTransform>();
 
+            // Hide the play icon immediately — it is not relevant while a vinyl is showing.
+            album.SetStartIconVisible(false);
+
             // Store originals BEFORE any animation so Collapse can restore both exactly.
             _originalAlbumPos = albumRect.anchoredPosition;
             _originalOffset   = carousel.CurrentOffset;
@@ -196,8 +387,10 @@ namespace KrumbleHut.Drummi.UI
             // and lets Collapse fire (guarded by Expanded/Previewing) during the animation.
             _state = SelectState.Expanded;
 
-            // Target offset: the value of CurrentOffset at which this child sits at X = 0.
-            float targetOffset = ComputeCenteredOffset(album.transform.GetSiblingIndex());
+            // Target offset: nearest equivalent of the canonical center so the carousel
+            // animates the short way even after multiple wraps.
+            float canonical    = ComputeCenteredOffset(album.transform.GetSiblingIndex());
+            float targetOffset = NearestEquivalentOffset(canonical, carousel.CurrentOffset);
 
             _activeSequence?.Kill();
             _activeSequence = DOTween.Sequence()
@@ -260,15 +453,17 @@ namespace KrumbleHut.Drummi.UI
                         liftDuration)
                         .SetEase(liftEase))
                     // Simultaneously slide the carousel back to its exact pre-tap offset.
-                    // Joined so both axes animate together over the same liftDuration.
+                    // Use the nearest equivalent so collapse never flings across wraps.
+                    // Captured before the tween so it isn't re-evaluated as CurrentOffset changes.
                     .Join(DOTween.To(
                         ()  => carousel.CurrentOffset,
                         x   => carousel.CurrentOffset = x,
-                        _originalOffset,
+                        NearestEquivalentOffset(_originalOffset, carousel.CurrentOffset),
                         liftDuration)
                         .SetEase(liftEase))
                     .OnComplete(() =>
                     {
+                        _expandedAlbum.SetStartIconVisible(true);
                         _expandedAlbum = null;
                         carousel.SetInputEnabled(true);
                         _state = SelectState.Browsing;
@@ -278,6 +473,7 @@ namespace KrumbleHut.Drummi.UI
             else
             {
                 // Safety path — no rect found, reset synchronously.
+                _expandedAlbum.SetStartIconVisible(true);
                 _expandedAlbum = null;
                 carousel.SetInputEnabled(true);
                 _state = SelectState.Browsing;
@@ -300,8 +496,9 @@ namespace KrumbleHut.Drummi.UI
             if (_state == SelectState.Expanded)
             {
                 _previewingSlot = songSlot;
-                // TODO(Phase 3): scale + spin vinyl at songSlot
-                // TODO(Phase 5): StartPreview(songSlot)
+                vinyls[songSlot].Select();
+                StartPreview(songSlot);
+                if (startIcon != null) startIcon.gameObject.SetActive(true);
                 _state = SelectState.Previewing;
                 return;
             }
@@ -314,9 +511,13 @@ namespace KrumbleHut.Drummi.UI
                 }
                 else
                 {
+                    // Capture old slot before overwriting so we can deselect it.
+                    int prevSlot    = _previewingSlot;
                     _previewingSlot = songSlot;
-                    // TODO(Phase 3): move scale + spin to new vinyl
-                    // TODO(Phase 5): restart preview for new slot
+                    if (prevSlot >= 0 && prevSlot < vinyls.Length && vinyls[prevSlot] != null)
+                        vinyls[prevSlot].Deselect();
+                    vinyls[songSlot].Select();
+                    CrossfadeToPreview(songSlot);
                     // State stays Previewing.
                 }
             }
@@ -343,8 +544,9 @@ namespace KrumbleHut.Drummi.UI
                 return;
             }
 
-            // 2. Default difficulty to Starter (0) if nothing has been explicitly chosen.
-            int selectedDifficulty = (_selectedDifficulty >= 0) ? _selectedDifficulty : 0;
+            // 2. Default difficulty to Standard/Normal (1) if nothing has been explicitly chosen.
+            //    OpenPopup always calls SelectDifficulty(1), so this is a safety net only.
+            int selectedDifficulty = (_selectedDifficulty >= 0) ? _selectedDifficulty : 1;
 
             // 3. Stop any preview audio (Phase 5 will implement the body).
             StopPreview();
@@ -364,12 +566,136 @@ namespace KrumbleHut.Drummi.UI
         }
 
         /// <summary>
-        /// Stops any currently-playing song preview.
-        /// Phase 5 will implement the body; the stub exists so callers compile cleanly.
+        /// Fades out and stops any currently-playing preview. Safe to call when nothing is playing.
         /// </summary>
         private void StopPreview()
         {
-            // TODO(Phase 5): stop preview audio
+            TearDownPreview();
+            if (previewSource != null && previewSource.isPlaying)
+            {
+                previewSource.DOFade(0f, previewStopFadeSeconds)
+                    .OnComplete(() => previewSource.Stop())
+                    .SetLink(gameObject);
+            }
+        }
+
+        /// <summary>
+        /// Resolves the song for <paramref name="slot"/> within the currently expanded album,
+        /// then starts a looping preview: seeks to <see cref="SongDefinition.PreviewStartSeconds"/>,
+        /// fades in, holds, fades out, re-seeks, and repeats until <see cref="StopPreview"/> is
+        /// called. No-op if the song or clip cannot be resolved.
+        /// <para>
+        /// <paramref name="firstFadeIn"/> overrides the first iteration's fade-in duration —
+        /// used by <see cref="CrossfadeToPreview"/> so the incoming clip fades in over
+        /// <see cref="crossfadeDuration"/> while the outgoing clip fades out simultaneously.
+        /// Subsequent loop iterations always use <see cref="previewFadeInSeconds"/>.
+        /// </para>
+        /// </summary>
+        private void StartPreview(int slot, float firstFadeIn = -1f)
+        {
+            TearDownPreview();
+            if (previewSource != null) previewSource.Stop();
+
+            if (_expandedAlbum == null) return;
+            var songs = _expandedAlbum.Definition?.Songs;
+            if (songs == null || slot < 0 || slot >= songs.Count) return;
+            SongDefinition song = songs[slot];
+            if (song == null) return;
+
+            var tracks = AudioManager.instance?.musicTracks;
+            if (tracks == null || song.TrackIndex < 0 || song.TrackIndex >= tracks.Length) return;
+            AudioClip clip = tracks[song.TrackIndex];
+            if (clip == null) return;
+
+            // Clamp so the preview window fits within the clip.
+            float start  = song.PreviewStartSeconds;
+            float length = previewLengthSeconds;
+            if (start + length > clip.length)
+                start = Mathf.Max(0f, clip.length - length);
+
+            previewSource.clip   = clip;
+            previewSource.volume = 0f;
+            previewSource.time   = start;
+            previewSource.Play();
+
+            float fadeIn = firstFadeIn >= 0f ? firstFadeIn : previewFadeInSeconds;
+            _previewLoopCoroutine = StartCoroutine(PreviewLoop(start, length, fadeIn));
+        }
+
+        /// <summary>
+        /// Snapshots the currently playing preview into an outgoing <see cref="AudioSource"/>,
+        /// fades it out over <see cref="crossfadeDuration"/>, and simultaneously starts the
+        /// new clip fading in over the same duration. The outgoing source is stopped automatically
+        /// when its fade completes. Safe to call when nothing is playing (degrades to StartPreview).
+        /// </summary>
+        private void CrossfadeToPreview(int slot)
+        {
+            // Snapshot current playback into the outgoing source before TearDown kills the tween.
+            _crossfadeFadeTween?.Kill();
+            if (previewSource != null && previewSource.isPlaying)
+            {
+                _outgoingSource.clip   = previewSource.clip;
+                _outgoingSource.time   = previewSource.time;
+                _outgoingSource.volume = previewSource.volume;
+                _outgoingSource.Play();
+                _crossfadeFadeTween = _outgoingSource.DOFade(0f, crossfadeDuration)
+                    .OnComplete(() => _outgoingSource.Stop())
+                    .SetLink(gameObject);
+            }
+
+            // Start the new clip on previewSource, using crossfadeDuration as the first fade-in
+            // so incoming and outgoing overlap perfectly.
+            StartPreview(slot, crossfadeDuration);
+        }
+
+        /// <summary>
+        /// Coroutine that owns the preview loop structure: fade-in → hold → fade-out → re-seek,
+        /// repeating indefinitely. DOTween owns the actual volume fades. Uses
+        /// <c>WaitForSecondsRealtime</c> so the loop stays accurate if game time is paused.
+        /// <paramref name="fadeInDuration"/> applies only to the first iteration; all subsequent
+        /// iterations use <see cref="previewFadeInSeconds"/>.
+        /// </summary>
+        private IEnumerator PreviewLoop(float start, float length, float fadeInDuration)
+        {
+            while (true)
+            {
+                float holdTime = Mathf.Max(0f, length - fadeInDuration - previewFadeOutSeconds);
+
+                _previewFadeTween = previewSource.DOFade(1f, fadeInDuration).SetLink(gameObject);
+                yield return new WaitForSecondsRealtime(fadeInDuration);
+
+                if (holdTime > 0f)
+                    yield return new WaitForSecondsRealtime(holdTime);
+
+                _previewFadeTween = previewSource.DOFade(0f, previewFadeOutSeconds).SetLink(gameObject);
+                yield return new WaitForSecondsRealtime(previewFadeOutSeconds);
+
+                previewSource.time   = start;
+                previewSource.volume = 0f;
+
+                // After the first iteration all subsequent loops use the normal fade-in.
+                fadeInDuration = previewFadeInSeconds;
+            }
+        }
+
+        /// <summary>
+        /// Kills both fade tweens and stops the preview coroutine without touching either
+        /// <see cref="AudioSource"/> directly. Called by <see cref="StopPreview"/> (which
+        /// then fades out the main source) and at the top of <see cref="StartPreview"/> /
+        /// <see cref="CrossfadeToPreview"/> to prevent orphaned coroutines and tweens.
+        /// </summary>
+        private void TearDownPreview()
+        {
+            _previewFadeTween?.Kill();
+            _previewFadeTween = null;
+            _crossfadeFadeTween?.Kill();
+            _crossfadeFadeTween = null;
+            if (_previewLoopCoroutine != null)
+            {
+                StopCoroutine(_previewLoopCoroutine);
+                _previewLoopCoroutine = null;
+            }
+            if (_outgoingSource != null) _outgoingSource.Stop();
         }
 
         /// <summary>
@@ -380,9 +706,44 @@ namespace KrumbleHut.Drummi.UI
         {
             if (_state != SelectState.Popup) return;
 
-            if (popupRoot != null) popupRoot.SetActive(false);
+            AnimatePopup(show: false);
             if (tapCatcher != null) tapCatcher.gameObject.SetActive(true);
+            if (startIcon != null) startIcon.gameObject.SetActive(true);
+
+            // Popup is dismissed — re-select the still-previewing vinyl so it
+            // scales and spins again as the player returns to Previewing state.
+            if (_previewingSlot >= 0 && _previewingSlot < vinyls.Length && vinyls[_previewingSlot] != null)
+                vinyls[_previewingSlot].Select();
+
             _state = SelectState.Previewing;
+        }
+
+        private void AnimatePopup(bool show)
+        {
+            if (popupRoot == null) return;
+            if (_popupCoroutine != null) StopCoroutine(_popupCoroutine);
+            _popupCoroutine = StartCoroutine(PopupRoutine(show));
+        }
+
+        private IEnumerator PopupRoutine(bool show)
+        {
+            popupRoot.SetActive(true);
+
+            Vector2 from = show ? _popupHiddenPos : _popupShownPos;
+            Vector2 to   = show ? _popupShownPos  : _popupHiddenPos;
+
+            float elapsed = 0f;
+            while (elapsed < popupSlideDuration)
+            {
+                elapsed += Time.unscaledDeltaTime;
+                float t = popupCurve.Evaluate(Mathf.Clamp01(elapsed / popupSlideDuration));
+                _popupRect.anchoredPosition = Vector2.Lerp(from, to, t);
+                yield return null;
+            }
+
+            _popupRect.anchoredPosition = to;
+            if (!show) popupRoot.SetActive(false);
+            _popupCoroutine = null;
         }
 
         /// <summary>
@@ -417,51 +778,154 @@ namespace KrumbleHut.Drummi.UI
         }
 
         /// <summary>
-        /// Activates vinyl slots and populates each one from the album's song list.
+        /// Returns the offset that is visually equivalent to <paramref name="targetOffset"/>
+        /// and numerically closest to <paramref name="currentOffset"/>.
+        /// <para>
+        /// The carousel's offset space is modular with period <c>count × spacing</c>: any two
+        /// offsets that differ by an integer multiple of that period produce an identical visual
+        /// layout. Animating toward the nearest equivalent prevents cross-wrap lurching when a
+        /// player taps an album (or collapses back) after scrolling through several wraps.
+        /// </para>
+        /// </summary>
+        private float NearestEquivalentOffset(float targetOffset, float currentOffset)
+        {
+            int count = carousel.transform.childCount;
+            if (count == 0) return targetOffset;
+            float period = count * carousel.spacing;
+            if (period <= 0f) return targetOffset;
+            float n = Mathf.Round((currentOffset - targetOffset) / period);
+            return targetOffset + n * period;
+        }
+
+        /// <summary>
+        /// Populates each vinyl from the album's song list and kicks off the fan-out animation:
+        /// vinyls start at <see cref="vinylFanStartLocalPos"/> (scaled down, behind the album
+        /// cover) and tween to their authored rest positions with a per-slot stagger.
         /// Slots with no corresponding song remain inactive.
         /// </summary>
         private void ShowVinyls(AlbumDefinition album)
         {
             if (album == null) return;
-            var songs = album.Songs;
+            var songs      = album.Songs;
+            int lastActive = -1;
+
             for (int i = 0; i < vinyls.Length; i++)
             {
                 if (vinyls[i] == null) continue;
+
                 bool hasSong = i < songs.Count;
-                vinyls[i].gameObject.SetActive(hasSong);
-                if (hasSong) vinyls[i].Populate(songs[i]);
+                if (!hasSong)
+                {
+                    vinyls[i].gameObject.SetActive(false);
+                    continue;
+                }
+
+                vinyls[i].Populate(songs[i]);
+
+                var rt = vinyls[i].GetComponent<RectTransform>();
+
+                // Set start state: positioned at cover centre, scaled down, rotation clean.
+                vinyls[i].gameObject.SetActive(true);
+                rt.anchoredPosition = vinylFanStartLocalPos;
+                rt.localScale       = new Vector3(vinylFanStartScale, vinylFanStartScale, 1f);
+                rt.localRotation    = Quaternion.identity;
+
+                // Move behind the carousel (sibling 0) so the vinyl appears to slide out
+                // FROM UNDER the album cover during travel. Processing slots 0→1→2 in order
+                // means the final arrangement is [Vinyl2, Vinyl1, Vinyl0, Carousel, …] —
+                // all three vinyls are below the carousel in render order. ✓
+                vinyls[i].transform.SetSiblingIndex(0);
+
+                float delay = i * vinylFanStagger;
+
+                Tween posTween = rt.DOAnchorPos(_vinylRestPos[i], vinylFanDuration)
+                    .SetEase(vinylFanEase)
+                    .SetDelay(delay)
+                    .SetLink(gameObject);
+
+                Tween scaleTween = rt.DOScale(Vector3.one, vinylFanDuration)
+                    .SetEase(vinylFanEase)
+                    .SetDelay(delay)
+                    .SetLink(gameObject);
+
+                _vinylTweens.Add(posTween);
+                _vinylTweens.Add(scaleTween);
+                lastActive = i;
+            }
+
+            if (lastActive >= 0)
+            {
+                // Single restoration callback fires after the last vinyl arrives.
+                // Restoring all indices together (rather than per-vinyl in OnComplete)
+                // avoids the cascading sibling-shift that occurs when earlier vinyls
+                // complete and shift later ones before they finish travelling.
+                float restoreAt = vinylFanDuration + lastActive * vinylFanStagger;
+                Tween restoreTween = DOVirtual.DelayedCall(restoreAt, RestoreVinylSiblingOrder, false)
+                    .SetLink(gameObject);
+                _vinylTweens.Add(restoreTween);
             }
         }
 
-        /// <summary>Deactivates all vinyl slot GameObjects.</summary>
+        /// <summary>
+        /// Kills any running fan-out tweens and instantly deactivates all vinyl slot GameObjects,
+        /// resetting each to its rest transform and authored sibling index. Iterates in reverse
+        /// index order so sibling restoration does not cascade-shift lower-index vinyls out of
+        /// position. Safe to call from <see cref="Start"/> (before any animation) and from
+        /// <see cref="Collapse"/> (mid-fan-out).
+        /// </summary>
         private void HideVinyls()
         {
-            foreach (var vinyl in vinyls)
+            if (startIcon != null) startIcon.gameObject.SetActive(false);
+            KillVinylTweens();
+
+            // Reverse iteration: restoring the highest sibling index first prevents each
+            // SetSiblingIndex call from displacing vinyls that haven't been restored yet.
+            for (int i = vinyls.Length - 1; i >= 0; i--)
             {
-                if (vinyl != null) vinyl.gameObject.SetActive(false);
+                if (vinyls[i] == null) continue;
+                // Kill any running scale tween and stop the spin loop before deactivating
+                // so no vinyl is left with _spinning=true or a live tween while inactive.
+                vinyls[i].CancelSelection();
+                vinyls[i].gameObject.SetActive(false);
+
+                var rt = vinyls[i].GetComponent<RectTransform>();
+                if (_vinylRestPos != null && i < _vinylRestPos.Length)
+                    rt.anchoredPosition = _vinylRestPos[i];
+                rt.localScale    = Vector3.one;
+                rt.localRotation = Quaternion.identity;
+
+                vinyls[i].transform.SetSiblingIndex(3 + i);
             }
         }
 
         /// <summary>
         /// Transitions to <see cref="SelectState.Popup"/>: deactivates the tap-catcher,
-        /// populates the popup's song title, resets difficulty selection, then activates the popup.
+        /// populates the popup's song title, preselects Normal difficulty, then activates the popup.
+        /// <para>
+        /// Difficulty always resets to Standard/Normal (index 1) on every open — intentional.
+        /// <see cref="SelectDifficulty"/> both stores the value and drives the indicator visuals,
+        /// keeping them in sync via a single call.
+        /// </para>
         /// </summary>
         private void OpenPopup()
         {
             if (tapCatcher != null) tapCatcher.gameObject.SetActive(false);
+            if (startIcon != null) startIcon.gameObject.SetActive(false);
+
+            // Settle the selected vinyl — popup covers it, and we don't want it
+            // spinning/scaled when the popup reopens or if the popup is dismissed.
+            if (_previewingSlot >= 0 && _previewingSlot < vinyls.Length && vinyls[_previewingSlot] != null)
+                vinyls[_previewingSlot].Deselect();
 
             SongDefinition song = GetCurrentSong();
             if (popupSongTitle != null)
                 popupSongTitle.text = song?.Title ?? string.Empty;
 
-            _selectedDifficulty = -1;
-            for (int i = 0; i < difficultySelectedIndicators.Length; i++)
-            {
-                if (difficultySelectedIndicators[i] != null)
-                    difficultySelectedIndicators[i].SetActive(false);
-            }
+            // Preselect Standard/Normal (1). SelectDifficulty writes _selectedDifficulty
+            // and updates all indicator GameObjects — single source of truth.
+            SelectDifficulty(1);
 
-            if (popupRoot != null) popupRoot.SetActive(true);
+            AnimatePopup(show: true);
             _state = SelectState.Popup;
         }
 
@@ -475,6 +939,34 @@ namespace KrumbleHut.Drummi.UI
             var songs = _expandedAlbum.Definition?.Songs;
             if (songs == null || _previewingSlot >= songs.Count) return null;
             return songs[_previewingSlot];
+        }
+
+        /// <summary>
+        /// Kills and clears all tracked vinyl fan-out tweens (position, scale, and the
+        /// sibling-restoration callback). Pending <c>OnComplete</c> callbacks are suppressed,
+        /// so a mid-fan collapse cannot trigger a stale sibling restore.
+        /// </summary>
+        private void KillVinylTweens()
+        {
+            foreach (var t in _vinylTweens)
+                t?.Kill();
+            _vinylTweens.Clear();
+        }
+
+        /// <summary>
+        /// Restores all vinyl sibling indices to their original authored positions (3 + i).
+        /// Iterates from the highest index down so that each <c>SetSiblingIndex</c> call
+        /// does not cascade-shift vinyls at lower indices that haven't been restored yet.
+        /// Called by a <see cref="DOVirtual.DelayedCall"/> at the end of the fan-out so all
+        /// three vinyls are placed in a single synchronised batch.
+        /// </summary>
+        private void RestoreVinylSiblingOrder()
+        {
+            for (int i = vinyls.Length - 1; i >= 0; i--)
+            {
+                if (vinyls[i] != null)
+                    vinyls[i].transform.SetSiblingIndex(3 + i);
+            }
         }
     }
 }

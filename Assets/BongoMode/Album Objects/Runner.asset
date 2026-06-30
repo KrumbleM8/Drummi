@@ -10,13 +10,13 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 6b8c7930c7ac3e94581a3280d537359a, type: 3}
-  m_Name: Glitchy
+  m_Name: Runner
   m_EditorClassIdentifier: 
-  albumName: Glitchy
-  cover: {fileID: 3546401865723222911, guid: 2b7fb1dceddf98c41b316d552b851aba, type: 3}
+  albumName: Runner
+  cover: {fileID: -51032091974306843, guid: fad180b2e32c0934d8109bcc1cd605aa, type: 3}
   bpm: 0
   bestScore: 0
   songs:
   - {fileID: 11400000, guid: fba698d4a92659e4fbffe0d6c0502a05, type: 2}
-  - {fileID: 11400000, guid: fba698d4a92659e4fbffe0d6c0502a05, type: 2}
-  - {fileID: 11400000, guid: fba698d4a92659e4fbffe0d6c0502a05, type: 2}
+  - {fileID: 11400000, guid: ca0bc9c7bfb66af40885854b11a3cb33, type: 2}
+  - {fileID: 11400000, guid: 5cfee813f4446f34e8ce8d9eceee0f70, type: 2}

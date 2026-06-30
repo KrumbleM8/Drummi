@@ -2589,8 +2589,9 @@ MonoBehaviour:
   - {fileID: 8720150012928156049}
   musicTracks:
   - {fileID: 8300000, guid: 18417d6443a7fb04bb4105ec5eff712b, type: 3}
+  - {fileID: 8300000, guid: 6b9fe42ac5ec6f349a791c279dcdc980, type: 3}
+  - {fileID: 8300000, guid: f8c1351ddc3921148a17a8e5274f2635, type: 3}
   - {fileID: 8300000, guid: 83a7a8a481b489244ac4a683264864bd, type: 3}
-  - {fileID: 8300000, guid: ad6c2bd22d173a24b82fad7fe2d09c35, type: 3}
   - {fileID: 8300000, guid: 5b5082cf1c179d648ac3149ceeca2a5a, type: 3}
   bongoSounds:
   - {fileID: 8300000, guid: 3e52228fda3fad64aabad0a85443b431, type: 3}

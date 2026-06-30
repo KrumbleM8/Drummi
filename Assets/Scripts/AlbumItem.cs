@@ -1,5 +1,6 @@
 using System;
 using UnityEngine;
+using UnityEngine.UI;
 
 namespace KrumbleHut.Drummi.UI
 {
@@ -12,6 +13,21 @@ namespace KrumbleHut.Drummi.UI
     public class AlbumItem : MonoBehaviour
     {
         [SerializeField] private AlbumDefinition definition;
+
+        /// <summary>The Image on this card that displays the album cover art.</summary>
+        [SerializeField] private Image coverImage;
+
+        /// <summary>The play-button icon shown below the album cover while browsing.
+        /// Hidden when this album is expanded; restored when the carousel returns.</summary>
+        [SerializeField] private GameObject startIcon;
+
+        // ── Lifecycle ─────────────────────────────────────────────────────────
+
+        private void Awake()
+        {
+            if (coverImage != null && definition != null && definition.Cover != null)
+                coverImage.sprite = definition.Cover;
+        }
 
         // ── Event ─────────────────────────────────────────────────────────────
 
@@ -26,6 +42,12 @@ namespace KrumbleHut.Drummi.UI
 
         /// <summary>The album data asset assigned to this carousel card.</summary>
         public AlbumDefinition Definition => definition;
+
+        // ── Public API ────────────────────────────────────────────────────────
+
+        /// <summary>Shows or hides the start icon. Called by <see cref="SongSelectController"/>
+        /// when this album is expanded (false) or the carousel returns (true).</summary>
+        public void SetStartIconVisible(bool visible) => startIcon?.SetActive(visible);
 
         // ── Inspector entry point ──────────────────────────────────────────────
 
