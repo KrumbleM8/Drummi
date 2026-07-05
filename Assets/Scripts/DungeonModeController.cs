@@ -1,3 +1,4 @@
+using System;
 using UnityEngine;
 
 /// <summary>
@@ -29,6 +30,14 @@ public class DungeonModeController : ModeController
     public override int    Score                 => evaluator != null ? evaluator.Score : 0;
     public override int    TotalPerfectHits      => evaluator != null ? evaluator.TotalPerfectHits : 0;
     public override bool   IsNewHighScore        => evaluator != null && evaluator.IsNewHighScore;
+
+    /// <summary>
+    /// Virtual time (GameClock.GameTime) of the session's first beat — the origin of the
+    /// session beat grid. Set once on first-room start and held constant for the run.
+    /// Used by CallAndResponseController to snap phrase starts onto real session beats.
+    /// Zero until the first room starts.
+    /// </summary>
+    public double SessionStartVirtualTime => _sessionStartVirtualTime;
     #endregion
 
     // Stashed by StartRoom(); consumed and cleared on the next StartMode() call.
@@ -48,6 +57,18 @@ public class DungeonModeController : ModeController
     // When true, StartMode passes skipGracePeriod=true to BeatManager.Initialize() once.
     // Set by StartRoom() for all rooms after the first.
     private bool _skipGracePeriod;
+
+    // When true, StartMode skips BeatManager initialisation and StartGameplay entirely once (reset immediately after).
+    // Set by StartRoomAudioVisual() for room types that manage their own gameplay loop (e.g. CallAndResponse).
+    private bool _suppressBeatManager;
+
+    /// <summary>
+    /// Virtual start time of the most recently started room (the seam time passed to StartMode).
+    /// Set by StartRoom() for both first and subsequent rooms.
+    /// Read by CallAndResponseController to snap its encounter onto the exact same beat boundary.
+    /// Zero until the first room starts.
+    /// </summary>
+    public double LastRoomSeamVirtualTime { get; private set; }
 
     #region ModeController — Lifecycle
     public override int CalculateTotalBeats(int bpm)
@@ -78,15 +99,21 @@ public class DungeonModeController : ModeController
         // Reset is done once at run/session start: DungeonRunner.StartRun() for the
         // roguelike path, GameManager.StartGameSequence() for standalone play.
 
+        // Snapshot and immediately clear the suppress flag so it only applies to this one call.
+        bool suppressBeatMgr = _suppressBeatManager;
+        _suppressBeatManager = false;
+
         // Initialize BeatManager first (sets metronome.bpm).
+        // Skipped when called via StartRoomAudioVisual() — C&R rooms manage their own loop.
         // _pendingPatternDurations is non-null when called via StartRoom(); null otherwise (uses defaults).
-        if (beatManager    != null)
+        if (beatManager != null && !suppressBeatMgr)
         {
             beatManager.enabled = true;
             beatManager.Initialize(bpm, _pendingPatternDurations, _skipGracePeriod);
-            _pendingPatternDurations = null;
-            _skipGracePeriod         = false;
         }
+        // Always clear pending values — they're consumed (or intentionally skipped) for this call.
+        _pendingPatternDurations = null;
+        _skipGracePeriod         = false;
 
         // Initialize visuals after BPM is set (reads metronome.bpm)
         // Re-enable in case CleanupAndDisable() left it disabled from a previous round.
@@ -101,7 +128,7 @@ public class DungeonModeController : ModeController
             ScheduleMusic(realDspStartTime);
         _suppressMusicSchedule = false;
 
-        if (beatManager != null) beatManager.StartGameplay(virtualStartTime);
+        if (beatManager != null && !suppressBeatMgr) beatManager.StartGameplay(virtualStartTime);
 
         Debug.Log("[DungeonModeController] Dungeon mode active");
     }
@@ -190,6 +217,7 @@ public class DungeonModeController : ModeController
                 : baseStartTime;
 
             _sessionStartVirtualTime = virtualStartTime;
+            LastRoomSeamVirtualTime  = virtualStartTime;
 
             if (beatManager?.metronome != null)
             {
@@ -215,7 +243,10 @@ public class DungeonModeController : ModeController
 
             double currentVirtual = GameClock.Instance != null ? GameClock.Instance.GameTime : 0.0;
             double elapsed        = currentVirtual - _sessionStartVirtualTime;
-            int    barsElapsed    = Mathf.FloorToInt((float)(elapsed / barDuration));
+            // Use Math.Floor (double precision) — the (float) cast can round a value like
+            // 3.9999999… up to 4.0f, causing FloorToInt to return 4 instead of 3 and
+            // pushing the seam one full bar too far on second+ C&R rooms.
+            int    barsElapsed    = (int)Math.Floor(elapsed / barDuration);
             double seamVirtual    = _sessionStartVirtualTime + (barsElapsed + 1) * barDuration;
 
             // Safety: if the transition animation has eaten into the next bar,
@@ -252,6 +283,8 @@ public class DungeonModeController : ModeController
                 : CalculateTotalBeats(bpm);
             TimingCoordinator.Instance?.Initialize(seamVirtual, bpm, totalBeats, BarsBeforeEndForFinalBar);
 
+            LastRoomSeamVirtualTime = seamVirtual;
+
             // Tell StartMode not to call ScheduleMusic — the audio is already handled above.
             // Also skip the grace period so enemies appear immediately.
             _suppressMusicSchedule = true;
@@ -260,6 +293,19 @@ public class DungeonModeController : ModeController
 
             Debug.Log($"[DungeonModeController] StartRoom (continuing) — Room: '{def.RoomName}', seam virtual: {seamVirtual:F4}, override: {def.OverrideBgm}");
         }
+    }
+
+    /// <summary>
+    /// Starts a room with full music, visual, and timing initialisation but WITHOUT
+    /// engaging DungeonBeatManager. Use for room types that drive their own gameplay
+    /// loop (e.g. RoomType.CallAndResponse).
+    /// After this call, read <see cref="LastRoomSeamVirtualTime"/> to get the
+    /// beat-boundary start time for the room's own encounter controller.
+    /// </summary>
+    public void StartRoomAudioVisual(RoomDefinition def)
+    {
+        _suppressBeatManager = true;
+        StartRoom(def);
     }
 
     /// <summary>
@@ -288,7 +334,9 @@ public class DungeonModeController : ModeController
         _isFirstRoom             = true;
         _suppressMusicSchedule   = false;
         _skipGracePeriod         = false;
+        _suppressBeatManager     = false;
         _sessionStartVirtualTime = 0.0;
+        LastRoomSeamVirtualTime  = 0.0;
         Debug.Log("[DungeonModeController] Reset to initial state");
     }
 

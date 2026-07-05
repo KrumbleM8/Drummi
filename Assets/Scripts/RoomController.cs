@@ -1,4 +1,5 @@
 using System;
+using KrumbleHut.Drummi.Dungeons;
 using UnityEngine;
 
 /// <summary>
@@ -20,8 +21,9 @@ public class RoomController : MonoBehaviour
 {
     private enum RoomState { Entering, Playing, Evaluating, Exiting, Complete }
 
-    [SerializeField] private DungeonModeController modeController;
-    [SerializeField] private ScreenTransition       screenTransition;
+    [SerializeField] private DungeonModeController          modeController;
+    [SerializeField] private CallAndResponseController       callAndResponseController;
+    [SerializeField] private ScreenTransition                screenTransition;
     [SerializeField] private DungeonZoomTransition  dungeonTransition;
     [SerializeField] private DungeonHealth         playerHealth;
     [SerializeField] private SpriteRenderer        backgroundRenderer;
@@ -132,9 +134,31 @@ public class RoomController : MonoBehaviour
                     // Direction-choice rooms: just show the door buttons, no combat.
                     if (doorsUI != null) doorsUI.SetActive(true);
                 }
+                else if (_currentDef != null && _currentDef.RoomType == RoomType.CallAndResponse)
+                {
+                    // Call-and-response room: same full setup as standard combat (music scheduling,
+                    // visual init, timing/metronome) but with DungeonBeatManager suppressed so
+                    // standard enemies don't spawn. C&R drives its own encounter loop.
+                    if (doorsUI != null) doorsUI.SetActive(false);
+                    modeController.StartRoomAudioVisual(_currentDef);
+                    if (callAndResponseController != null)
+                    {
+                        // Pass the seam time that StartRoomAudioVisual computed so the C&R
+                        // encounter begins on the exact same beat boundary as standard combat would.
+                        // StartEncounter's beat-snap is a no-op: the seam is already on the grid.
+                        callAndResponseController.OnEncounterComplete += HandleCarEncounterComplete;
+                        callAndResponseController.StartEncounter(
+                            modeController.LastRoomSeamVirtualTime,
+                            _currentDef.PhraseLengths);
+                    }
+                    else
+                    {
+                        Debug.LogError("[RoomController] CallAndResponseController not assigned — C&R room cannot start.");
+                    }
+                }
                 else
                 {
-                    // Combat encounter: hide doors, wire events, start the mode.
+                    // Standard combat encounter: hide doors, wire events, start the mode.
                     if (doorsUI != null) doorsUI.SetActive(false);
                     SubscribeEvents();
                     modeController.StartRoom(_currentDef);
@@ -185,6 +209,16 @@ public class RoomController : MonoBehaviour
         // transition before revealing the score page.
         _state = RoomState.Complete;
         OnRoomComplete?.Invoke(_result);
+    }
+
+    private void HandleCarEncounterComplete()
+    {
+        if (callAndResponseController != null)
+            callAndResponseController.OnEncounterComplete -= HandleCarEncounterComplete;
+        if (_state != RoomState.Playing) return;
+        _state = RoomState.Evaluating;
+        BuildResult(survived: true);
+        SetState(RoomState.Exiting);
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────

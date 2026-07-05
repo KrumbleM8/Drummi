@@ -35,7 +35,47 @@ public class DungeonPatternGenerator
         return pattern;
     }
 
+    /// <summary>
+    /// Generates a phrase that fills exactly <paramref name="phraseLengthBeats"/> beats,
+    /// using the same duration weights and consecutive-type rules as GeneratePattern().
+    /// GeneratePattern() and the PATTERN_MEASURE_LENGTH constant are not touched.
+    /// </summary>
+    /// <param name="phraseLengthBeats">
+    /// Target length in beats (e.g. 2, 4, 6, 8 for call-and-response rounds).
+    /// Beats are added until no allowed duration fits within the remaining length.
+    /// </param>
+    public List<DungeonBeat> GeneratePhrase(float phraseLengthBeats)
+    {
+        var   pattern  = new List<DungeonBeat>();
+        float timeSlot = 0f;
+
+        while (timeSlot < phraseLengthBeats)
+        {
+            float duration = SelectValidDurationForPhrase(timeSlot, phraseLengthBeats);
+            if (duration == 0f) break;
+
+            DungeonEnemyType type = DetermineEnemyType(pattern);
+            pattern.Add(new DungeonBeat(duration, timeSlot, type));
+            timeSlot += duration;
+        }
+
+        return pattern;
+    }
+
     // ── Private ───────────────────────────────────────────────────────────
+
+    // Used by GeneratePhrase only — mirrors SelectValidDuration but against
+    // an arbitrary measure length instead of PATTERN_MEASURE_LENGTH.
+    private float SelectValidDurationForPhrase(float currentTime, float phraseLengthBeats)
+    {
+        var valid = new List<float>();
+        foreach (float d in allowedDurations)
+        {
+            if (currentTime + d <= phraseLengthBeats)
+                valid.Add(d);
+        }
+        return valid.Count > 0 ? valid[Random.Range(0, valid.Count)] : 0f;
+    }
 
     private float SelectValidDuration(float currentTime)
     {

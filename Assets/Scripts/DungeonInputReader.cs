@@ -53,6 +53,14 @@ public class DungeonInputReader : MonoBehaviour
     /// </summary>
     public bool EncounterActive { get; set; } = false;
 
+    /// <summary>
+    /// When true, SpawnInputMarker calls are suppressed.
+    /// Set by CallAndResponseController during C&R response windows — the standard bar
+    /// slider is BarTiming-coupled and would place markers at wrong positions.
+    /// Default false; standard combat is unaffected.
+    /// </summary>
+    public bool SuppressSpawnMarkers { get; set; }
+
     public List<DungeonInput> playerInputData = new();
 
     // Set by DungeonBeatManager each bar so single-input evaluation works
@@ -159,7 +167,7 @@ public class DungeonInputReader : MonoBehaviour
             bool isHit                 = quality == InputMatch.MatchQuality.Perfect
                                       || quality == InputMatch.MatchQuality.Good;
 
-            visualController?.SpawnInputMarker(type, quality);
+            if (!SuppressSpawnMarkers) visualController?.SpawnInputMarker(type, quality);
             if (isHit)
             {
                 visualController?.NotifyEnemyHit(matchedBeat);

@@ -30,8 +30,14 @@ public class RoomDefinition : ScriptableObject
     [SerializeField] private string artOverrideKey;
 
     [Header("Room Type")]
-    [Tooltip("CombatEncounter — normal enemy fight. DirectionChoice — player picks a door, no combat.")]
+    [Tooltip("CombatEncounter — normal enemy fight. DirectionChoice — player picks a door, no combat. CallAndResponse — enemy presents a phrase, player echoes it.")]
     [SerializeField] private RoomType roomType = RoomType.CombatEncounter;
+
+    [Header("Call-and-Response Config")]
+    [Tooltip("Ordered phrase lengths in beats for each C&R round (e.g. {2,4,6} = three escalating rounds). " +
+             "Only meaningful when RoomType == CallAndResponse. " +
+             "Leave empty to use CallAndResponseController Inspector defaults.")]
+    [SerializeField] private int[] callResponsePhraseLengths = { 2, 4, 6 };
 
     [Header("BGM Override")]
     [Tooltip("If true, this room switches to BgmTrackIndex when entered. If false, the current music continues uninterrupted.")]
@@ -69,6 +75,15 @@ public class RoomDefinition : ScriptableObject
     public RoomType RoomType => roomType;
 
     /// <summary>
+    /// Ordered phrase lengths (in beats) for each Call-and-Response round.
+    /// Returns null when the array is empty — caller falls back to CallAndResponseController Inspector defaults.
+    /// Only meaningful when <see cref="RoomType"/> is <see cref="RoomType.CallAndResponse"/>.
+    /// </summary>
+    public int[] PhraseLengths => (callResponsePhraseLengths != null && callResponsePhraseLengths.Length > 0)
+        ? callResponsePhraseLengths
+        : null;
+
+    /// <summary>
     /// When true, this room overrides the current BGM track with <see cref="BgmTrackIndex"/>
     /// at the next bar boundary. When false, the current music plays through uninterrupted.
     /// </summary>
@@ -98,4 +113,7 @@ public enum RoomType
 
     /// <summary>No combat — player chooses a door (left/right) to advance.</summary>
     DirectionChoice,
+
+    /// <summary>Rhythm call-and-response encounter: enemy presents a beat phrase, player echoes it.</summary>
+    CallAndResponse,
 }
