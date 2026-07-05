@@ -103,6 +103,16 @@ public class UIBubbleFloat : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// Updates the rest scale used by the float animation.
+    /// Call this whenever the bubble's base scale changes (e.g. locked/unlocked state),
+    /// so the breathe animation oscillates around the new target instead of fighting it.
+    /// </summary>
+    public void SetRestScale(Vector3 scale)
+    {
+        _restScale = scale;
+    }
+
     private void OnDisable()
     {
         if (_rt == null) return;
