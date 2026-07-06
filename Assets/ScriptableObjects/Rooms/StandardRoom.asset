@@ -20,6 +20,7 @@ MonoBehaviour:
   bgmTrackIndex: 0
   backgroundSprite: {fileID: 0}
   artOverrideKey: 
-  roomType: 0
+  roomType: 2
+  callResponsePhraseLengths: 0400000004000000020000000200000004000000
   overrideBgm: 0
-  roomLengthBars: 4
+  roomLengthBars: 0

@@ -18,6 +18,6 @@ MonoBehaviour:
   rooms:
   - {fileID: 11400000, guid: 5ea77e9fc5953ba4198537a941df212e, type: 2}
   - {fileID: 11400000, guid: 5ea77e9fc5953ba4198537a941df212e, type: 2}
-  - {fileID: 11400000, guid: ddeee36c0a483ee44b7a2fcc6d78b2a6, type: 2}
-  - {fileID: 11400000, guid: ddeee36c0a483ee44b7a2fcc6d78b2a6, type: 2}
+  - {fileID: 11400000, guid: 5ea77e9fc5953ba4198537a941df212e, type: 2}
+  - {fileID: 11400000, guid: 5ea77e9fc5953ba4198537a941df212e, type: 2}
   - {fileID: 11400000, guid: b24f40d4bbcefaf4293c1986f1b13831, type: 2}

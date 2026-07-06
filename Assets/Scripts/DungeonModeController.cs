@@ -306,16 +306,30 @@ public class DungeonModeController : ModeController
     {
         _suppressBeatManager = true;
         StartRoom(def);
+        // Initialize() resets both flags to false; set them here after that returns
+        // so neither the bar slider nor the response fill activates during C&R rooms.
+        if (visualController != null)
+        {
+            visualController.SuppressResponseFill = true;
+            visualController.SuppressBarSlider    = true;
+        }
     }
 
     /// <summary>
     /// Clears all visual state (enemies, indicators, slider) immediately without
     /// touching audio, score, or health. Call before the next room's reveal begins
     /// so old visuals are gone while the screen is still covered.
+    /// Pass suppressBarVisuals=true for C&R rooms so the bar slider and response fill
+    /// are disabled before Initialize() runs — preventing a flash during the reveal.
     /// </summary>
-    public void ClearVisuals()
+    public void ClearVisuals(bool suppressBarVisuals = false)
     {
-        if (visualController != null) visualController.Initialize();
+        if (visualController != null)
+        {
+            visualController.SuppressResponseFill = suppressBarVisuals;
+            visualController.SuppressBarSlider    = suppressBarVisuals;
+            visualController.Initialize();
+        }
     }
 
     public override void Cleanup()

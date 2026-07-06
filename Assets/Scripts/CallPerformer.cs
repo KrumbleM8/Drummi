@@ -42,18 +42,31 @@ namespace KrumbleHut.Drummi.Dungeons
         [Tooltip("Distinct audio cue played when the call ends and the response window opens.")]
         [SerializeField] private AudioClip handoffCueClip;
 
+        [Header("Sprite Frames")]
+        [Tooltip("Sprite shown briefly on each strike. Leave empty to skip the frame swap.")]
+        [SerializeField] private Sprite attackSprite;
+
         [Header("Bounce")]
         [Tooltip("World-unit distance of the directional punch.")]
         [SerializeField] private float bounceDistance = 0.5f;
 
         [Tooltip("Duration of the full punch-return cycle in seconds.")]
         [SerializeField] private float bounceDuration = 0.15f;
+
+        [Header("Jump-In")]
+        [Tooltip("World units above rest position where the performer starts its entrance.")]
+        [SerializeField] private float jumpInDistance = 3f;
+
+        [Tooltip("Duration of the entrance slide-and-fade in seconds.")]
+        [SerializeField] private float jumpInDuration = 0.4f;
         #endregion
 
         #region Private State
         private Vector3 _restPosition;
         private Color   _restColor;
+        private Sprite  _restSprite;
         private Tween   _activeTween;
+        private Tween   _spriteTween;
 
         // Tracked for cleanup on interrupt/pause — mirrors DungeonBeatManager._scheduledAudio.
         private readonly List<ScheduledStrikeVoice> _scheduledVoices = new();
@@ -70,7 +83,11 @@ namespace KrumbleHut.Drummi.Dungeons
             if (performerTransform != null)
                 _restPosition = performerTransform.localPosition;
 
-            _restColor = performerRenderer != null ? performerRenderer.color : Color.white;
+            _restColor  = performerRenderer != null ? performerRenderer.color  : Color.white;
+            _restSprite = performerRenderer != null ? performerRenderer.sprite : null;
+
+            // Start hidden so the performer is invisible before its encounter begins.
+            HideImmediate();
         }
 
         private void OnDisable() => StopAndReset();
@@ -146,6 +163,15 @@ namespace KrumbleHut.Drummi.Dungeons
                 .DOPunchPosition(dir * bounceDistance, bounceDuration, vibrato: 0, elasticity: 0.5f)
                 .SetLink(gameObject);
 
+            // Swap to attack frame and restore after the bounce completes.
+            if (attackSprite != null && performerRenderer != null)
+            {
+                _spriteTween?.Kill(complete: false);
+                performerRenderer.sprite = attackSprite;
+                _spriteTween = DOVirtual.DelayedCall(bounceDuration, RestoreSprite)
+                    .SetLink(gameObject);
+            }
+
             Debug.Log($"[CallPerformer] Strike {type} | dir={dir} dist={bounceDistance}");
         }
 
@@ -157,6 +183,8 @@ namespace KrumbleHut.Drummi.Dungeons
         public void ShowHandoffCue()
         {
             _activeTween?.Kill(complete: true);
+            _spriteTween?.Kill(complete: false);
+            RestoreSprite();
 
             if (performerTransform != null)
                 performerTransform.localPosition = _restPosition;
@@ -227,34 +255,87 @@ namespace KrumbleHut.Drummi.Dungeons
         {
             _activeTween?.Kill(complete: true);
             _activeTween = null;
+            _spriteTween?.Kill(complete: false);
+            _spriteTween = null;
 
             if (performerTransform != null)
                 performerTransform.localPosition = _restPosition;
 
             if (performerRenderer != null)
-                performerRenderer.color = _restColor;
+            {
+                performerRenderer.color  = _restColor;
+                RestoreSprite();
+            }
         }
 
         /// <summary>
-        /// Kills all tweens, stops all scheduled audio voices, and returns the performer
-        /// to rest. Safe to call from OnDisable/OnDestroy and on encounter interrupt.
+        /// Entrance animation: performer slides down from above the rest position and fades in.
+        /// Call once when the first call phrase fires to introduce the performer.
+        /// For subsequent rounds use ResetToActiveState() instead.
+        /// </summary>
+        public void JumpIn()
+        {
+            _activeTween?.Kill(complete: false);
+            _activeTween = null;
+            _spriteTween?.Kill(complete: false);
+            _spriteTween = null;
+
+            if (performerTransform == null) return;
+
+            // Place above rest position, fully transparent.
+            performerTransform.localPosition = _restPosition + Vector3.up * jumpInDistance;
+            if (performerRenderer != null)
+            {
+                Color hidden = _restColor;
+                hidden.a = 0f;
+                performerRenderer.color = hidden;
+                RestoreSprite();
+            }
+
+            // Slide to rest with overshoot; fade completes at 60% of the slide duration.
+            var seq = DOTween.Sequence().SetLink(gameObject);
+            seq.Append(performerTransform.DOLocalMove(_restPosition, jumpInDuration).SetEase(Ease.OutBack));
+            if (performerRenderer != null)
+                seq.Join(performerRenderer.DOColor(_restColor, jumpInDuration * 0.6f));
+            _activeTween = seq;
+        }
+
+        /// <summary>
+        /// Kills all tweens, stops all scheduled audio voices, and hides the performer.
+        /// Safe to call from OnDisable/OnDestroy and on encounter interrupt.
         /// </summary>
         public void StopAndReset()
         {
-            _activeTween?.Kill(complete: true);
+            _activeTween?.Kill(complete: false);
             _activeTween = null;
-
-            if (performerTransform != null)
-                performerTransform.localPosition = _restPosition;
-
-            if (performerRenderer != null)
-                performerRenderer.color = _restColor;
+            _spriteTween?.Kill(complete: false);
+            _spriteTween = null;
 
             CancelScheduledVoices();
+            HideImmediate();
         }
         #endregion
 
         #region Private
+        private void HideImmediate()
+        {
+            if (performerTransform != null)
+                performerTransform.localPosition = _restPosition + Vector3.up * jumpInDistance;
+            if (performerRenderer != null)
+            {
+                Color c = _restColor;
+                c.a = 0f;
+                performerRenderer.color = c;
+            }
+            RestoreSprite();
+        }
+
+        private void RestoreSprite()
+        {
+            if (performerRenderer != null && _restSprite != null)
+                performerRenderer.sprite = _restSprite;
+        }
+
         private void CancelScheduledVoices()
         {
             foreach (var v in _scheduledVoices)

@@ -61,6 +61,14 @@ public class DungeonInputReader : MonoBehaviour
     /// </summary>
     public bool SuppressSpawnMarkers { get; set; }
 
+    /// <summary>
+    /// When set, replaces TimingCoordinator.CurrentBar.InputWindowStart for the coyote buffer.
+    /// Inputs arriving within barStartInputBufferSeconds before this time are buffered and
+    /// replayed when allowInput opens; all other early inputs are silently ignored (no penalty).
+    /// Set by CallAndResponseController for the duration of each C&R call window; null otherwise.
+    /// </summary>
+    public double? CoyoteWindowStartOverride { get; set; }
+
     public List<DungeonInput> playerInputData = new();
 
     // Set by DungeonBeatManager each bar so single-input evaluation works
@@ -136,6 +144,17 @@ public class DungeonInputReader : MonoBehaviour
 
         if (!allowInput)
         {
+            // C&R call window: use the response-start override set by CallAndResponseController.
+            // Buffer if within the coyote window; silently ignore all other early inputs (no penalty).
+            if (CoyoteWindowStartOverride.HasValue)
+            {
+                double now             = GameClock.Instance.GameTime;
+                double timeUntilWindow = CoyoteWindowStartOverride.Value - now;
+                if (timeUntilWindow >= 0 && timeUntilWindow <= barStartInputBufferSeconds)
+                    _bufferedInput = new BufferedInput { type = type, virtualTime = now };
+                return;
+            }
+
             var coordinator = TimingCoordinator.Instance;
             if (coordinator == null || GameClock.Instance.GameTime < coordinator.CurrentBar.InputWindowStart)
             {

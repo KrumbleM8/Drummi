@@ -199,19 +199,27 @@ namespace KrumbleHut.Drummi.Dungeons
                 _currentCallPhrase = BuildCallPhrase(_current);
                 LogCallPhrase(_roundIndex, _current, _currentCallPhrase);
 
-                // Reset the performer to active state, then schedule its audio.
-                // The handoff cue fires 0.5 beats before the response boundary — matching the
-                // Drummi mode turn signal offset (TurnSignalTime = InputWindowStart - 0.5 beats).
-                // Only the audio is shifted early; ShowHandoffCue() visual and allowInput gate
-                // remain on ResponseStartTime.
-                performer?.ResetToActiveState();
+                // First call: jump the performer in. Subsequent rounds: restore from the
+                // dimmed handoff state. The handoff cue fires 0.5 beats before the response
+                // boundary (TurnSignalTime offset); only audio is shifted early.
+                if (_roundIndex == 0)
+                    performer?.JumpIn();
+                else
+                    performer?.ResetToActiveState();
                 performer?.PrepareCallPhrase(_currentCallPhrase, _current.ResponseStartTime - 0.5 * _beatInterval);
 
                 // Queue beats for per-beat strike polling during the call window.
                 _pendingCallBeats = new List<DungeonScheduledBeat>(_currentCallPhrase);
 
-                // allowInput stays false — controller owns this, no BarTiming dependency.
-                if (inputReader != null) inputReader.allowInput = false;
+                // Arm the coyote buffer so near-boundary early inputs carry into the echo window.
+                // EncounterActive=true lets TriggerInput reach the coyote path; allowInput stays
+                // false so actual recording is blocked until the response boundary.
+                if (inputReader != null)
+                {
+                    inputReader.allowInput                = false;
+                    inputReader.EncounterActive           = true;
+                    inputReader.CoyoteWindowStartOverride = _current.ResponseStartTime;
+                }
 
                 double delta = now - _current.CallStartTime;
                 Debug.Log($"[C&R] OnCallStart     | round={_roundIndex} N={n:D2} " +
@@ -330,9 +338,11 @@ namespace KrumbleHut.Drummi.Dungeons
             // slider is BarTiming-coupled and would place markers at wrong positions.
             if (inputReader != null)
             {
-                inputReader.allowInput           = false;
-                inputReader.SuppressSpawnMarkers = true;
-                inputReader.OnHit               += EchoHitCallback;
+                inputReader.allowInput                = false;
+                inputReader.EncounterActive           = false;
+                inputReader.CoyoteWindowStartOverride = null;
+                inputReader.SuppressSpawnMarkers      = true;
+                inputReader.OnHit                    += EchoHitCallback;
             }
 
             // ── Beat-grid snap ────────────────────────────────────────────────
@@ -375,9 +385,10 @@ namespace KrumbleHut.Drummi.Dungeons
                 _pendingCallBeats.Clear();
                 if (inputReader != null)
                 {
-                    inputReader.allowInput           = false;
-                    inputReader.SuppressSpawnMarkers = false;
-                    inputReader.OnHit               -= EchoHitCallback;
+                    inputReader.allowInput                = false;
+                    inputReader.SuppressSpawnMarkers      = false;
+                    inputReader.OnHit                    -= EchoHitCallback;
+                    inputReader.CoyoteWindowStartOverride = null;
                 }
                 performer?.StopAndReset();
                 Debug.Log("[C&R] === ENCOUNTER COMPLETE ===");
@@ -409,8 +420,9 @@ namespace KrumbleHut.Drummi.Dungeons
             inputReader.ResetInputs();
             inputReader.SetScheduledBeats(_currentCallPhrase);
             inputReader.SetTimeOffset(n * _beatInterval);
-            inputReader.EncounterActive = true;
-            inputReader.allowInput      = true;
+            inputReader.CoyoteWindowStartOverride = null;  // clear before opening so replay goes through normally
+            inputReader.EncounterActive           = true;
+            inputReader.allowInput                = true;
         }
 
         /// <summary>
@@ -420,8 +432,9 @@ namespace KrumbleHut.Drummi.Dungeons
         private void CloseEchoWindow()
         {
             if (inputReader == null) return;
-            inputReader.allowInput      = false;
-            inputReader.EncounterActive = false;
+            inputReader.allowInput                = false;
+            inputReader.EncounterActive           = false;
+            inputReader.CoyoteWindowStartOverride = null;
         }
 
         /// <summary>
@@ -434,9 +447,10 @@ namespace KrumbleHut.Drummi.Dungeons
             CloseEchoWindow();
             if (inputReader != null)
             {
-                inputReader.SuppressSpawnMarkers = false;
+                inputReader.SuppressSpawnMarkers      = false;
                 inputReader.ResetInputs();
-                inputReader.OnHit               -= EchoHitCallback;
+                inputReader.OnHit                    -= EchoHitCallback;
+                inputReader.CoyoteWindowStartOverride = null;
             }
             performer?.StopAndReset();
         }

@@ -121,7 +121,7 @@ public class RoomController : MonoBehaviour
         switch (next)
         {
             case RoomState.Entering:
-                modeController.ClearVisuals();
+                modeController.ClearVisuals(_currentDef != null && _currentDef.RoomType == RoomType.CallAndResponse);
                 ApplyBackground();
                 screenTransition.StartReveal();
                 dungeonTransition.StartReveal();
@@ -155,6 +155,8 @@ public class RoomController : MonoBehaviour
                     {
                         Debug.LogError("[RoomController] CallAndResponseController not assigned — C&R room cannot start.");
                     }
+                    // Health depletion during C&R must route through the same failure path as combat.
+                    playerHealth.OnHealthDepleted += HandleHealthDepleted;
                 }
                 else
                 {
@@ -182,8 +184,10 @@ public class RoomController : MonoBehaviour
 
     private void UnsubscribeEvents()
     {
-        modeController.OnModeComplete  -= HandleModeComplete;
-        playerHealth.OnHealthDepleted  -= HandleHealthDepleted;
+        modeController.OnModeComplete                          -= HandleModeComplete;
+        playerHealth.OnHealthDepleted                          -= HandleHealthDepleted;
+        if (callAndResponseController != null)
+            callAndResponseController.OnEncounterComplete      -= HandleCarEncounterComplete;
     }
 
     private void HandleModeComplete()
@@ -200,6 +204,8 @@ public class RoomController : MonoBehaviour
         if (_state != RoomState.Playing) return;
         _state = RoomState.Evaluating;
         UnsubscribeEvents();
+        // Stop a running C&R encounter so it cannot fire OnEncounterComplete after death.
+        callAndResponseController?.StopEncounter();
         // Stop the beat manager immediately so it cannot fire OnSongComplete later and
         // trigger a second ShowResultsSequence after the run has already handled routing.
         modeController.Cleanup();

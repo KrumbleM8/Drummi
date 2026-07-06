@@ -79,6 +79,28 @@ public class DungeonVisualController : MonoBehaviour
     private bool   isFrozen;
     private bool   _visualIndicatorActive = true;
 
+    /// <summary>
+    /// When true, the response fill is never activated.
+    /// Set by DungeonModeController for C&R rooms; cleared by Initialize() for combat rooms.
+    /// </summary>
+    public bool SuppressResponseFill { get; set; }
+
+    /// <summary>
+    /// When true, the bar slider GameObject is hidden and its value is not driven.
+    /// Setting this also immediately activates/deactivates the slider GameObject.
+    /// Set by DungeonModeController for C&R rooms; cleared by Initialize() for combat rooms.
+    /// </summary>
+    private bool _suppressBarSlider;
+    public bool SuppressBarSlider
+    {
+        get => _suppressBarSlider;
+        set
+        {
+            _suppressBarSlider = value;
+            if (barSlider != null) barSlider.gameObject.SetActive(!value);
+        }
+    }
+
     private Sprite _defaultEnemySprite;
 
     // Pool
@@ -123,6 +145,9 @@ public class DungeonVisualController : MonoBehaviour
 
         phaseDuration = 4 * (60.0 / metronome.bpm);
         isFrozen      = false;
+        // SuppressBarSlider and SuppressResponseFill are NOT reset here.
+        // DungeonModeController.ClearVisuals() sets them before calling Initialize()
+        // so the correct state is in place from the very start of the room reveal.
 
         if (barSlider != null) barSlider.value = 0f;
         SetResponseFillActive(false);
@@ -147,19 +172,22 @@ public class DungeonVisualController : MonoBehaviour
         bool inSpawnPhase    = now >= bar.BarStartTime     && now < bar.InputWindowStart;
         bool inResponsePhase = now >= bar.InputWindowStart && now < bar.EvaluationTime;
 
-        if (inSpawnPhase)
+        if (!SuppressBarSlider)
         {
-            double elapsed = now - bar.BarStartTime;
-            barSlider.value = Mathf.Clamp01((float)(elapsed / phaseDuration));
-            SetResponseFillActive(false);
-        }
-        else if (inResponsePhase)
-        {
-            double elapsed = now - bar.InputWindowStart;
-            barSlider.value = Mathf.Clamp01((float)(elapsed / phaseDuration));
-            SetResponseFillActive(true);
-            if (responseFill != null)
-                responseFill.fillAmount = barSlider.value;
+            if (inSpawnPhase)
+            {
+                double elapsed = now - bar.BarStartTime;
+                barSlider.value = Mathf.Clamp01((float)(elapsed / phaseDuration));
+                SetResponseFillActive(false);
+            }
+            else if (inResponsePhase)
+            {
+                double elapsed = now - bar.InputWindowStart;
+                barSlider.value = Mathf.Clamp01((float)(elapsed / phaseDuration));
+                SetResponseFillActive(true);
+                if (responseFill != null)
+                    responseFill.fillAmount = barSlider.value;
+            }
         }
 
         // Trigger any pending spawn markers whose time has arrived
@@ -486,6 +514,7 @@ public class DungeonVisualController : MonoBehaviour
     private void SetResponseFillActive(bool active)
     {
         if (responseFill == null) return;
+        if (active && SuppressResponseFill) return;
         responseFill.gameObject.SetActive(active);
         if (!active) responseFill.fillAmount = 0f;
     }
