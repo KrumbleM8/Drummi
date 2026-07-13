@@ -49,7 +49,22 @@ public class DrumPadTouch : MonoBehaviour
 
     private readonly HashSet<int> _processedFingers = new HashSet<int>();
 
+    private RectTransform _defaultLeftPad;
+    private RectTransform _defaultRightPad;
+
+    /// <summary>
+    /// When false, center pad touch and the center keyboard key are both ignored.
+    /// Set by DungeonInputLayoutController when switching to a layout with no center pad.
+    /// </summary>
+    public bool CenterPadEnabled { get; set; } = true;
+
     // ── Unity ─────────────────────────────────────────────────────────────
+
+    private void Awake()
+    {
+        _defaultLeftPad  = leftPad;
+        _defaultRightPad = rightPad;
+    }
 
     private void OnEnable()
     {
@@ -96,7 +111,7 @@ public class DrumPadTouch : MonoBehaviour
                 continue;
             }
 
-            if (centerPad != null && RectTransformUtility.RectangleContainsScreenPoint(centerPad, screenPos))
+            if (CenterPadEnabled && centerPad != null && RectTransformUtility.RectangleContainsScreenPoint(centerPad, screenPos))
             {
                 OnCenterHit?.Invoke();
                 Debug.Log("[DrumPadTouch] Center hit");
@@ -115,9 +130,9 @@ public class DrumPadTouch : MonoBehaviour
         Keyboard kb = Keyboard.current;
         if (kb == null) return;
 
-        if (kb[leftKey].wasPressedThisFrame)   FireHit(false);
-        if (kb[centerKey].wasPressedThisFrame) OnCenterHit?.Invoke();
-        if (kb[rightKey].wasPressedThisFrame)  FireHit(true);
+        if (kb[leftKey].wasPressedThisFrame)                        FireHit(false);
+        if (CenterPadEnabled && kb[centerKey].wasPressedThisFrame) OnCenterHit?.Invoke();
+        if (kb[rightKey].wasPressedThisFrame)                       FireHit(true);
     }
 
     private void FireHit(bool isRight)
@@ -128,5 +143,24 @@ public class DrumPadTouch : MonoBehaviour
             OnLeftHit?.Invoke();
 
         Debug.Log($"[DrumPadTouch] {(isRight ? "Right" : "Left")} hit");
+    }
+
+    // ── Pad Override (called by DungeonInputLayoutController for TwoPad layout) ──
+
+    /// <summary>
+    /// Replaces the active left/right pad zones at runtime.
+    /// Call when switching to a layout whose hit zones differ from the Inspector-assigned pads.
+    /// </summary>
+    public void OverridePads(RectTransform left, RectTransform right)
+    {
+        leftPad  = left;
+        rightPad = right;
+    }
+
+    /// <summary>Restores the left/right pad zones to their Inspector-assigned values.</summary>
+    public void RestorePads()
+    {
+        leftPad  = _defaultLeftPad;
+        rightPad = _defaultRightPad;
     }
 }

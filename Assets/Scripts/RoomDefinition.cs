@@ -43,6 +43,10 @@ public class RoomDefinition : ScriptableObject
              "SingleDrum: any pad counts, grading is timing-only.")]
     [SerializeField] private CallResponseInputMode callResponseInputMode = CallResponseInputMode.Directional;
 
+    [Header("Input Layout")]
+    [Tooltip("Pad rig shown during this room. ThreePad = standard combat (L/C/R buttons). SingleDrum = one wide drum (C&R encounters).")]
+    [SerializeField] private InputLayoutType inputLayout = InputLayoutType.ThreePad;
+
     [Header("BGM Override")]
     [Tooltip("If true, this room switches to BgmTrackIndex when entered. If false, the current music continues uninterrupted.")]
     [SerializeField] private bool overrideBgm;
@@ -105,6 +109,12 @@ public class RoomDefinition : ScriptableObject
     /// restart the music (OverrideBgm = false) so the room ends at the right time.
     /// </summary>
     public int RoomLengthBars => roomLengthBars;
+
+    /// <summary>
+    /// Which input rig is displayed during this room.
+    /// Passed to DungeonInputLayoutController.SwitchLayout() when the room starts.
+    /// </summary>
+    public InputLayoutType InputLayout => inputLayout;
 }
 
 /// <summary>Enemy difficulty tier for a dungeon room.</summary>
@@ -127,6 +137,19 @@ public enum CallResponseInputMode
     SingleDrum,
 }
 
+/// <summary>Which pad rig is displayed during a dungeon room.</summary>
+public enum InputLayoutType
+{
+    /// <summary>Three separate pad buttons (Left / Center / Right). Default for combat rooms.</summary>
+    ThreePad,
+
+    /// <summary>One wide single drum. Default for C&R rooms — direction-collapsed via SingleDrumEchoConstant.</summary>
+    SingleDrum,
+
+    /// <summary>Bongo-style two-pad rig (Left / Right only). Used for CombatTwoPad rooms.</summary>
+    TwoPad,
+}
+
 /// <summary>Room archetype — determines the gameplay flow inside the room.</summary>
 public enum RoomType
 {
@@ -138,4 +161,10 @@ public enum RoomType
 
     /// <summary>Rhythm call-and-response encounter: enemy presents a beat phrase, player echoes it.</summary>
     CallAndResponse,
+
+    /// <summary>
+    /// Two-pad combat encounter: identical flow to CombatEncounter but patterns contain only
+    /// Left and Right — no Center. Uses the Bongo-style two-pad input rig.
+    /// </summary>
+    CombatTwoPad,
 }

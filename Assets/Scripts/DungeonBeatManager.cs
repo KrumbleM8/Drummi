@@ -101,7 +101,7 @@ public class DungeonBeatManager : MonoBehaviour
     /// immediately on <see cref="StartGameplay"/>. Pass true for all rooms after
     /// the first so the player sees enemies straight away.
     /// </param>
-    public void Initialize(int bpm, float[] patternDurations = null, bool skipGracePeriod = false, int leadInBars = 0)
+    public void Initialize(int bpm, float[] patternDurations = null, bool skipGracePeriod = false, int leadInBars = 0, DungeonEnemyType[] allowedEnemyTypes = null)
     {
         metronome.bpm  = bpm;
         beatInterval   = 60.0 / bpm;
@@ -109,7 +109,7 @@ public class DungeonBeatManager : MonoBehaviour
         float[] durations = (patternDurations != null && patternDurations.Length > 0)
             ? patternDurations
             : new float[] { 1f, 0.5f };
-        patternGenerator = new DungeonPatternGenerator(durations);
+        patternGenerator = new DungeonPatternGenerator(durations, allowedTypes: allowedEnemyTypes);
 
         currentState             = GameState.WaitingForFirstBar;
         hasScheduledFirstPattern = false;

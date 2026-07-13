@@ -4,17 +4,29 @@ using UnityEngine;
 /// <summary>
 /// Generates randomised Dungeon beat patterns.
 /// Parallel to PatternGenerator.cs — same measure-length logic, but assigns
-/// DungeonEnemyType (3 options) instead of a binary bongo side.
+/// DungeonEnemyType (3 options by default) instead of a binary bongo side.
+/// Pass <paramref name="allowedTypes"/> to restrict the type vocabulary —
+/// e.g. <c>{ Left, Right }</c> for CombatTwoPad rooms.
 /// </summary>
 public class DungeonPatternGenerator
 {
-    private readonly float[] allowedDurations;
-    private readonly int maxConsecutiveSameType;
+    private static readonly DungeonEnemyType[] AllTypes =
+        { DungeonEnemyType.Left, DungeonEnemyType.Center, DungeonEnemyType.Right };
 
-    public DungeonPatternGenerator(float[] durations, int maxConsecutiveSameType = 2)
+    private readonly float[]            allowedDurations;
+    private readonly int                maxConsecutiveSameType;
+    private readonly DungeonEnemyType[] _allowedTypes;
+
+    public DungeonPatternGenerator(
+        float[]            durations,
+        int                maxConsecutiveSameType = 2,
+        DungeonEnemyType[] allowedTypes           = null)
     {
-        allowedDurations           = durations;
+        allowedDurations            = durations;
         this.maxConsecutiveSameType = maxConsecutiveSameType;
+        _allowedTypes               = (allowedTypes != null && allowedTypes.Length > 0)
+                                      ? allowedTypes
+                                      : AllTypes;
     }
 
     public List<DungeonBeat> GeneratePattern()
@@ -105,7 +117,7 @@ public class DungeonPatternGenerator
     private DungeonEnemyType DetermineEnemyType(List<DungeonBeat> existing)
     {
         if (existing.Count < maxConsecutiveSameType)
-            return (DungeonEnemyType)Random.Range(0, 3);
+            return _allowedTypes[Random.Range(0, _allowedTypes.Length)];
 
         // Prevent more than maxConsecutiveSameType in a row
         DungeonEnemyType lastType = existing[^1].enemyType;
@@ -119,11 +131,11 @@ public class DungeonPatternGenerator
         if (allSame)
         {
             DungeonEnemyType next;
-            do { next = (DungeonEnemyType)Random.Range(0, 3); }
+            do { next = _allowedTypes[Random.Range(0, _allowedTypes.Length)]; }
             while (next == lastType);
             return next;
         }
 
-        return (DungeonEnemyType)Random.Range(0, 3);
+        return _allowedTypes[Random.Range(0, _allowedTypes.Length)];
     }
 }

@@ -2,6 +2,7 @@ using System;
 using KrumbleHut.Drummi.Dungeons;
 using UnityEngine;
 
+
 /// <summary>
 /// Orchestrates a single dungeon room encounter.
 /// Drives the screen transition, starts the mode via DungeonModeController.StartRoom(),
@@ -22,6 +23,7 @@ public class RoomController : MonoBehaviour
     private enum RoomState { Entering, IntroDelay, Playing, Evaluating, Exiting, Complete }
 
     [SerializeField] private DungeonModeController          modeController;
+    [SerializeField] private DungeonInputLayoutController   inputLayoutController;
     [SerializeField] private CallAndResponseController       callAndResponseController;
     [SerializeField] private ScreenTransition                screenTransition;
     [SerializeField] private DungeonZoomTransition  dungeonTransition;
@@ -140,6 +142,8 @@ public class RoomController : MonoBehaviour
 
             case RoomState.Playing:
                 _roomStartTime = Time.realtimeSinceStartup;
+                inputLayoutController?.SwitchLayout(
+                    _currentDef != null ? _currentDef.InputLayout : InputLayoutType.ThreePad);
                 if (_currentDef != null && _currentDef.RoomType == RoomType.DirectionChoice)
                 {
                     // Direction-choice rooms: just show the door buttons, no combat.

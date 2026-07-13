@@ -13,6 +13,12 @@ public class BongoAnimator : MonoBehaviour
 
     public float rangeMultiplier = 1.133f;
 
+    [Header("Auto-Subscribe (optional)")]
+    [Tooltip("Assign in scenes where BongoAnimator should subscribe to DrumPadTouch events " +
+             "directly (e.g. Dungeon BongoRig). Leave null in Bongo scene — BongoModeInputReader " +
+             "calls PlayBongoAnimation() externally instead.")]
+    [SerializeField] private DrumPadTouch drumPadTouch;
+
     private RectTransform rectTransform;
     private Coroutine animationRoutine;
 
@@ -25,6 +31,33 @@ public class BongoAnimator : MonoBehaviour
         rectTransform = GetComponent<RectTransform>();
         ResetToNeutral();
     }
+
+    private void OnEnable()
+    {
+        if (drumPadTouch != null)
+        {
+            drumPadTouch.OnLeftHit  += OnLeftHit;
+            drumPadTouch.OnRightHit += OnRightHit;
+        }
+    }
+
+    private void OnDisable()
+    {
+        if (drumPadTouch != null)
+        {
+            drumPadTouch.OnLeftHit  -= OnLeftHit;
+            drumPadTouch.OnRightHit -= OnRightHit;
+        }
+        if (animationRoutine != null)
+        {
+            StopCoroutine(animationRoutine);
+            animationRoutine = null;
+            ResetToNeutral();
+        }
+    }
+
+    private void OnLeftHit()  => PlayBongoAnimation(isLeftSide: true);
+    private void OnRightHit() => PlayBongoAnimation(isLeftSide: false);
 
     /// <summary>
     /// Play the bongo animation. True = left bongo, false = right bongo.

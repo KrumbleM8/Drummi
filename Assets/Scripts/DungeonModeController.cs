@@ -47,7 +47,8 @@ public class DungeonModeController : ModeController
     #endregion
 
     // Stashed by StartRoom(); consumed and cleared on the next StartMode() call.
-    private float[] _pendingPatternDurations;
+    private float[]            _pendingPatternDurations;
+    private DungeonEnemyType[] _pendingAllowedTypes;
 
     // True until the first StartRoom() call in a run. Set back to true by ResetToInitialState().
     private bool _isFirstRoom = true;
@@ -135,10 +136,11 @@ public class DungeonModeController : ModeController
         if (beatManager != null && !suppressBeatMgr)
         {
             beatManager.enabled = true;
-            beatManager.Initialize(bpm, _pendingPatternDurations, _skipGracePeriod, _pendingLeadInBars);
+            beatManager.Initialize(bpm, _pendingPatternDurations, _skipGracePeriod, _pendingLeadInBars, _pendingAllowedTypes);
         }
         // Always clear pending values — they're consumed (or intentionally skipped) for this call.
         _pendingPatternDurations = null;
+        _pendingAllowedTypes     = null;
         _skipGracePeriod         = false;
         _pendingLeadInBars       = 0;
 
@@ -238,6 +240,9 @@ public class DungeonModeController : ModeController
 
         int bpm = (beatManager?.metronome != null) ? (int)beatManager.metronome.bpm : 120;
         _pendingPatternDurations = def.PatternDurations;
+        _pendingAllowedTypes     = def.RoomType == RoomType.CombatTwoPad
+            ? new[] { DungeonEnemyType.Left, DungeonEnemyType.Right }
+            : null;
 
         if (_isFirstRoom)
         {
@@ -400,6 +405,7 @@ public class DungeonModeController : ModeController
         _skipGracePeriod          = false;
         _suppressBeatManager      = false;
         _pendingLeadInBars        = 0;
+        _pendingAllowedTypes      = null;
         _sessionStartVirtualTime  = 0.0;
         LastRoomSeamVirtualTime   = 0.0;
         EncounterStartVirtualTime = 0.0;
