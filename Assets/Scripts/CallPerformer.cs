@@ -74,6 +74,8 @@ namespace KrumbleHut.Drummi.Dungeons
         private class ScheduledStrikeVoice
         {
             public AudioSource source;
+            public double      virtualTime; // retained for rescheduling after resume
+            public AudioClip   clip;
         }
         #endregion
 
@@ -90,11 +92,57 @@ namespace KrumbleHut.Drummi.Dungeons
             HideImmediate();
         }
 
-        private void OnDisable() => StopAndReset();
+        private void OnEnable()
+        {
+            AudioManager.OnAudioPaused  += HandleAudioPaused;
+            AudioManager.OnAudioResumed += HandleAudioResumed;
+        }
+
+        private void OnDisable()
+        {
+            AudioManager.OnAudioPaused  -= HandleAudioPaused;
+            AudioManager.OnAudioResumed -= HandleAudioResumed;
+            StopAndReset();
+        }
+
         private void OnDestroy() => StopAndReset();
         #endregion
 
         #region Public API
+        /// <summary>
+        /// World-space rest position of the performer transform — invariant for the
+        /// lifetime of this component. Use this as the indicator spawn anchor instead
+        /// of reading performerTransform.position directly, which varies during the
+        /// JumpIn animation and would give the wrong launch point for the first phrase.
+        /// </summary>
+        public Vector3 RestWorldPosition
+        {
+            get
+            {
+                if (performerTransform == null) return Vector3.zero;
+                return performerTransform.parent != null
+                    ? performerTransform.parent.TransformPoint(_restPosition)
+                    : _restPosition;
+            }
+        }
+
+        /// <summary>
+        /// Ensures all strike and handoff clips are loaded into memory so that the
+        /// first PlayScheduled call on each clip does not pay a decode-load cost.
+        /// Call once at encounter start, before PrepareCallPhrase.
+        /// </summary>
+        public void PreloadClips()
+        {
+            if (strikeClips != null)
+            {
+                foreach (var clip in strikeClips)
+                    if (clip != null && clip.loadState != AudioDataLoadState.Loaded)
+                        clip.LoadAudioData();
+            }
+            if (handoffCueClip != null && handoffCueClip.loadState != AudioDataLoadState.Loaded)
+                handoffCueClip.LoadAudioData();
+        }
+
         /// <summary>
         /// Pre-schedules beat-accurate audio for every strike in this round and for
         /// the handoff cue at the response boundary. Call once at OnCallStart, before
@@ -122,7 +170,8 @@ namespace KrumbleHut.Drummi.Dungeons
                 double realDsp = GameClock.Instance.VirtualToRealDsp(beat.scheduledTime);
                 var src = CreateVoice(clip, realDsp);
                 if (src != null)
-                    _scheduledVoices.Add(new ScheduledStrikeVoice { source = src });
+                    _scheduledVoices.Add(new ScheduledStrikeVoice
+                        { source = src, virtualTime = beat.scheduledTime, clip = clip });
             }
 
             // Handoff cue — scheduled at the response boundary
@@ -131,7 +180,8 @@ namespace KrumbleHut.Drummi.Dungeons
                 double realDsp = GameClock.Instance.VirtualToRealDsp(responseStartVirtual);
                 var src = CreateVoice(handoffCueClip, realDsp);
                 if (src != null)
-                    _scheduledVoices.Add(new ScheduledStrikeVoice { source = src });
+                    _scheduledVoices.Add(new ScheduledStrikeVoice
+                        { source = src, virtualTime = responseStartVirtual, clip = handoffCueClip });
             }
 
             Debug.Log($"[CallPerformer] Audio scheduled — {phrase.Count} strike(s) + handoff cue");
@@ -334,6 +384,31 @@ namespace KrumbleHut.Drummi.Dungeons
         {
             if (performerRenderer != null && _restSprite != null)
                 performerRenderer.sprite = _restSprite;
+        }
+
+        // ── Pause / Resume ─────────────────────────────────────────────────────
+        // Mirrors DungeonBeatManager.OnPause/OnResume: stop voices on pause,
+        // re-issue PlayScheduled with the updated real-DSP mapping on resume.
+        // Subscribed to AudioManager static events rather than routed through
+        // DungeonModeController so CallPerformer is self-contained.
+
+        private void HandleAudioPaused()
+        {
+            foreach (var v in _scheduledVoices)
+                if (v.source != null) v.source.Stop();
+        }
+
+        private void HandleAudioResumed()
+        {
+            if (GameClock.Instance == null) return;
+            double now = GameClock.Instance.GameTime;
+            foreach (var v in _scheduledVoices)
+            {
+                if (v.source != null && v.virtualTime > now)
+                    v.source.PlayScheduled(GameClock.Instance.VirtualToRealDsp(v.virtualTime));
+            }
+            // Prune entries whose beat has already passed — they won't be needed again.
+            _scheduledVoices.RemoveAll(v => v.virtualTime <= now);
         }
 
         private void CancelScheduledVoices()

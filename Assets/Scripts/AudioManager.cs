@@ -1,3 +1,4 @@
+using System;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
@@ -22,6 +23,11 @@ public class AudioManager : MonoBehaviour
     // The DSP time at which the music should start playing.
     // This is usually set from elsewhere (e.g., by the rhythm system).
     public double scheduledStartTime;
+
+    // Fired when all audio is paused/resumed — StemPlayer subscribes to stay in sync
+    // without being added to speakers[].
+    public static event Action OnAudioPaused;
+    public static event Action OnAudioResumed;
 
     // Pause tracking variables.
     private bool isPaused = false;
@@ -171,6 +177,7 @@ public class AudioManager : MonoBehaviour
             {
                 src.Pause();
             }
+            OnAudioPaused?.Invoke();
         }
     }
 
@@ -188,6 +195,7 @@ public class AudioManager : MonoBehaviour
             {
                 src.UnPause();
             }
+            OnAudioResumed?.Invoke();
         }
     }
 

@@ -97,6 +97,13 @@ namespace KrumbleHut.Drummi.Dungeons
         private PhraseTiming _current;
         private bool         _callFired;
         private bool         _responseFired;
+        private bool         _audioPrepared;
+
+        // Minimum real-DSP lead time enforced for the first PlayScheduled call of each
+        // call phrase. 0.15 s gives comfortable margin over the largest common mobile audio
+        // buffer (~4096 samples @ 44100 Hz ≈ 0.093 s). Must not exceed the shortest
+        // possible phrase window (1 beat at max BPM); at 240 BPM that's 0.25 s — fine.
+        private const double CALL_AUDIO_HEADROOM_SECS = 0.15;
 
         // Snapshotted at StartEncounter — held constant for the full encounter.
         // Assumption: BPM does not change mid-encounter.
@@ -113,6 +120,12 @@ namespace KrumbleHut.Drummi.Dungeons
 
         // Resolved at encounter start: room-authored overrides Inspector default.
         private int[] _activePhraseLengths;
+
+        // Resolved at encounter start from RoomDefinition or overload default.
+        private CallResponseInputMode _activeMode;
+
+        // Constant enemy type forced on all call beats and echo inputs in SingleDrum mode.
+        private const DungeonEnemyType SingleDrumConstantType = DungeonEnemyType.Center;
         #endregion
 
         #region Public Properties
@@ -136,10 +149,17 @@ namespace KrumbleHut.Drummi.Dungeons
         /// Snapped forward to the next session beat before use.
         /// </param>
         public void StartEncounter(double startVirtualTime)
-            => StartEncounterCore(startVirtualTime, null);
+            => StartEncounterCore(startVirtualTime, null, CallResponseInputMode.Directional);
 
         /// <summary>
-        /// Starts a full encounter using the room's authored phrase configuration.
+        /// Starts a full encounter using the room's authored phrase configuration, Directional mode.
+        /// Falls back to Inspector defaults if <paramref name="roomPhraseLengths"/> is null or empty.
+        /// </summary>
+        public void StartEncounter(double startVirtualTime, int[] roomPhraseLengths)
+            => StartEncounterCore(startVirtualTime, roomPhraseLengths, CallResponseInputMode.Directional);
+
+        /// <summary>
+        /// Starts a full encounter using the room's authored phrase configuration and input mode.
         /// Called by RoomController when a RoomType.CallAndResponse room begins.
         /// Falls back to Inspector defaults if <paramref name="roomPhraseLengths"/> is null or empty.
         /// </summary>
@@ -151,8 +171,12 @@ namespace KrumbleHut.Drummi.Dungeons
         /// Authored phrase lengths from RoomDefinition.PhraseLengths. Takes priority over
         /// the Inspector phraseLengths field for this encounter.
         /// </param>
-        public void StartEncounter(double startVirtualTime, int[] roomPhraseLengths)
-            => StartEncounterCore(startVirtualTime, roomPhraseLengths);
+        /// <param name="mode">
+        /// Directional (default): player echoes L/C/R direction. SingleDrum: any pad counts,
+        /// grading is timing-only.
+        /// </param>
+        public void StartEncounter(double startVirtualTime, int[] roomPhraseLengths, CallResponseInputMode mode)
+            => StartEncounterCore(startVirtualTime, roomPhraseLengths, mode);
 
         /// <summary>
         /// Stops the encounter immediately. OnEncounterComplete is NOT fired.
@@ -189,24 +213,40 @@ namespace KrumbleHut.Drummi.Dungeons
             double now = GameClock.Instance.GameTime;
             int    n   = _current.PhraseLength;
 
+            // ── Pre-schedule call audio ──────────────────────────────────────
+            // Build the phrase and schedule all strike audio CALL_AUDIO_HEADROOM_SECS
+            // before callStartTime so beat-0's PlayScheduled has ≥0.15 s of real DSP lead
+            // on every round — including rounds whose callStart immediately follows the
+            // previous evaluation, where the frame-late OnCallStart path yields ~0 lead.
+            if (!_callFired && !_audioPrepared && now >= _current.CallStartTime - CALL_AUDIO_HEADROOM_SECS)
+            {
+                _currentCallPhrase = BuildCallPhrase(_current);
+                performer?.PrepareCallPhrase(_currentCallPhrase, _current.ResponseStartTime - 0.5 * _beatInterval);
+                _audioPrepared = true;
+            }
+
             // ── OnCallStart ───────────────────────────────────────────────────
             if (!_callFired && now >= _current.CallStartTime)
             {
                 _callFired = true;
 
-                // Generate and store the call phrase BEFORE firing the event
-                // so subscribers and performer can read CurrentCallPhrase immediately.
-                _currentCallPhrase = BuildCallPhrase(_current);
+                // Phrase and audio were pre-built/scheduled by the headroom block above.
+                // Safety-net: if callStartTime was already in the past when the encounter
+                // started (e.g. T-key debug path, or very short lead-in), build and schedule
+                // here instead. This path has ~0 DSP lead — acceptable for editor/desktop.
+                if (_currentCallPhrase == null)
+                {
+                    _currentCallPhrase = BuildCallPhrase(_current);
+                    performer?.PrepareCallPhrase(_currentCallPhrase, _current.ResponseStartTime - 0.5 * _beatInterval);
+                }
                 LogCallPhrase(_roundIndex, _current, _currentCallPhrase);
 
                 // First call: jump the performer in. Subsequent rounds: restore from the
-                // dimmed handoff state. The handoff cue fires 0.5 beats before the response
-                // boundary (TurnSignalTime offset); only audio is shifted early.
+                // dimmed handoff state. Audio was pre-scheduled above — no PrepareCallPhrase here.
                 if (_roundIndex == 0)
                     performer?.JumpIn();
                 else
                     performer?.ResetToActiveState();
-                performer?.PrepareCallPhrase(_currentCallPhrase, _current.ResponseStartTime - 0.5 * _beatInterval);
 
                 // Queue beats for per-beat strike polling during the call window.
                 _pendingCallBeats = new List<DungeonScheduledBeat>(_currentCallPhrase);
@@ -302,12 +342,14 @@ namespace KrumbleHut.Drummi.Dungeons
         #endregion
 
         #region Private — Encounter Start
-        private void StartEncounterCore(double startVirtualTime, int[] overridePhraseLengths)
+        private void StartEncounterCore(double startVirtualTime, int[] overridePhraseLengths, CallResponseInputMode mode)
         {
             // Resolve active phrase lengths: room-authored takes priority over Inspector defaults.
             _activePhraseLengths = (overridePhraseLengths != null && overridePhraseLengths.Length > 0)
                 ? overridePhraseLengths
                 : phraseLengths;
+
+            _activeMode = mode;
 
             if (metronome == null)
             {
@@ -325,12 +367,15 @@ namespace KrumbleHut.Drummi.Dungeons
 
             _beatInterval    = 60.0 / metronome.bpm;
             _phraseGenerator = new DungeonPatternGenerator(patternDurations);
-            _roundIndex      = 0;
-            _running         = true;
-            _callFired       = false;
-            _responseFired   = false;
+            _roundIndex        = 0;
+            _running           = true;
+            _callFired         = false;
+            _responseFired     = false;
+            _audioPrepared     = false;
             _currentCallPhrase = null;
             _pendingCallBeats.Clear();
+
+            performer?.PreloadClips();
 
             // Gate input off for the call window. allowInput is managed per-phase;
             // the controller owns this and does not rely on TimingCoordinator.CurrentBar.
@@ -399,9 +444,11 @@ namespace KrumbleHut.Drummi.Dungeons
             // Chain: next phrase starts exactly where this one ended — no gap, no drift.
             double nextStart = _current.NextPhraseStart;
             int    nextN     = _activePhraseLengths[_roundIndex];
-            _current       = PhraseTiming.Compute(_roundIndex, nextN, nextStart, _beatInterval);
-            _callFired     = false;
-            _responseFired = false;
+            _current           = PhraseTiming.Compute(_roundIndex, nextN, nextStart, _beatInterval);
+            _callFired         = false;
+            _responseFired     = false;
+            _audioPrepared     = false;
+            _currentCallPhrase = null;
             _pendingCallBeats.Clear();
 
             Debug.Log($"[C&R]   {_current}");
@@ -421,8 +468,13 @@ namespace KrumbleHut.Drummi.Dungeons
             inputReader.SetScheduledBeats(_currentCallPhrase);
             inputReader.SetTimeOffset(n * _beatInterval);
             inputReader.CoyoteWindowStartOverride = null;  // clear before opening so replay goes through normally
-            inputReader.EncounterActive           = true;
-            inputReader.allowInput                = true;
+            // SingleDrum: arm the type override so any pad tap is tagged to the constant type.
+            // Directional: leave null so pad identity is preserved as today.
+            inputReader.SingleDrumEchoConstant = _activeMode == CallResponseInputMode.SingleDrum
+                ? SingleDrumConstantType
+                : (DungeonEnemyType?)null;
+            inputReader.EncounterActive = true;
+            inputReader.allowInput      = true;
         }
 
         /// <summary>
@@ -435,6 +487,7 @@ namespace KrumbleHut.Drummi.Dungeons
             inputReader.allowInput                = false;
             inputReader.EncounterActive           = false;
             inputReader.CoyoteWindowStartOverride = null;
+            inputReader.SingleDrumEchoConstant    = null;
         }
 
         /// <summary>
@@ -444,6 +497,7 @@ namespace KrumbleHut.Drummi.Dungeons
         /// </summary>
         private void TerminateEncounter()
         {
+            _audioPrepared = false;
             CloseEchoWindow();
             if (inputReader != null)
             {
@@ -486,7 +540,9 @@ namespace KrumbleHut.Drummi.Dungeons
         #region Private — Phrase Generation
         private List<DungeonScheduledBeat> BuildCallPhrase(PhraseTiming timing)
         {
-            var beats  = _phraseGenerator.GeneratePhrase(timing.PhraseLength);
+            var beats = _activeMode == CallResponseInputMode.SingleDrum
+                ? _phraseGenerator.GeneratePhraseWithConstantType(timing.PhraseLength, SingleDrumConstantType)
+                : _phraseGenerator.GeneratePhrase(timing.PhraseLength);
             var result = new List<DungeonScheduledBeat>(beats.Count);
 
             foreach (var b in beats)

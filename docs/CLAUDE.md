@@ -46,6 +46,14 @@ Platforms: iOS, Android (primary), PC (later port).
 Working on Drummi Dungeons roguelike layer.
 Standard combat is complete. Building room/floor/progression systems.
 
+## File organisation
+- Scripts → `Assets/Scripts/`
+- Scenes → `Assets/Scenes/`
+- Images/sprites → `Assets/Images/`
+- ScriptableObjects → `Assets/ScriptableObjects/`
+- **Never place files directly in the root `Assets/` folder.**
+- **Never duplicate an existing scene.** Modify the scene in place; do not create a copy and change only one of them.
+
 ## Naming conventions
 - Namespace: KrumbleHut.Drummi.[System] (e.g. KrumbleHut.Drummi.UI, KrumbleHut.Drummi.Dungeons)
 - ScriptableObjects: suffix Definition (e.g. RoomDefinition, BossPhaseDefinition)

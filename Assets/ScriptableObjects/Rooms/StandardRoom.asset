@@ -22,5 +22,6 @@ MonoBehaviour:
   artOverrideKey: 
   roomType: 2
   callResponsePhraseLengths: 0400000004000000020000000200000004000000
+  callResponseInputMode: 1
   overrideBgm: 0
   roomLengthBars: 0

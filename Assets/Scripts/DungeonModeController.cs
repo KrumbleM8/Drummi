@@ -22,6 +22,12 @@ public class DungeonModeController : ModeController
 
     [Header("Song Progression")]
     [SerializeField] private int barsBeforeEndForFinalBar = 1;
+
+    [Header("Musical Lead-In")]
+    [Tooltip("Bars of music before the first encounter starts. 0 = immediate. Default 2.\n" +
+             "Applies to the first room of a run. For floor transitions, call PrepareLeadIn()\n" +
+             "from DungeonRunner before LoadRoom() on the first room of each new floor.")]
+    [SerializeField] private int leadInBars = 2;
     #endregion
 
     #region ModeController — Identity & Properties
@@ -62,6 +68,10 @@ public class DungeonModeController : ModeController
     // Set by StartRoomAudioVisual() for room types that manage their own gameplay loop (e.g. CallAndResponse).
     private bool _suppressBeatManager;
 
+    // Lead-in bar count for the next StartMode() call. Set by StartRoom() for first rooms;
+    // consumed and cleared after being passed to beatManager.Initialize().
+    private int _pendingLeadInBars;
+
     /// <summary>
     /// Virtual start time of the most recently started room (the seam time passed to StartMode).
     /// Set by StartRoom() for both first and subsequent rooms.
@@ -69,6 +79,22 @@ public class DungeonModeController : ModeController
     /// Zero until the first room starts.
     /// </summary>
     public double LastRoomSeamVirtualTime { get; private set; }
+
+    /// <summary>
+    /// True until the first room's StartRoom() runs in a run — reset by ResetToInitialState().
+    /// RoomController reads this to gate the intro delay: the delay applies only when this is true.
+    /// </summary>
+    public bool IsFirstRoom => _isFirstRoom;
+
+    /// <summary>
+    /// Virtual time at which encounter logic should start for the current room.
+    /// First room: <c>_sessionStartVirtualTime + leadInBars × barDuration</c> so music
+    /// plays for the lead-in period before enemies or call phrases appear.
+    /// Subsequent rooms: equals <see cref="LastRoomSeamVirtualTime"/> (no lead-in).
+    /// Pass this to <see cref="CallAndResponseController.StartEncounter"/> instead of
+    /// <see cref="LastRoomSeamVirtualTime"/> so C&amp;R rooms respect the musical lead-in.
+    /// </summary>
+    public double EncounterStartVirtualTime { get; private set; }
 
     #region ModeController — Lifecycle
     public override int CalculateTotalBeats(int bpm)
@@ -109,11 +135,12 @@ public class DungeonModeController : ModeController
         if (beatManager != null && !suppressBeatMgr)
         {
             beatManager.enabled = true;
-            beatManager.Initialize(bpm, _pendingPatternDurations, _skipGracePeriod);
+            beatManager.Initialize(bpm, _pendingPatternDurations, _skipGracePeriod, _pendingLeadInBars);
         }
         // Always clear pending values — they're consumed (or intentionally skipped) for this call.
         _pendingPatternDurations = null;
         _skipGracePeriod         = false;
+        _pendingLeadInBars       = 0;
 
         // Initialize visuals after BPM is set (reads metronome.bpm)
         // Re-enable in case CleanupAndDisable() left it disabled from a previous round.
@@ -180,6 +207,19 @@ public class DungeonModeController : ModeController
     }
 
     /// <summary>
+    /// Re-arms the musical lead-in so the first room of a new floor also gets the
+    /// lead-in, not just the first room of the whole run.
+    /// Call from DungeonRunner BEFORE roomController.LoadRoom() when advancing to a new floor
+    /// (i.e. when _currentFloorIndex increments and _currentRoomIndex resets to 0).
+    /// The lead-in only fires if the room takes the subsequent-room path in StartRoom(); floor
+    /// transitions need this override because _isFirstRoom is false by that point.
+    /// </summary>
+    public void PrepareLeadIn()
+    {
+        _pendingLeadInBars = leadInBars;
+    }
+
+    /// <summary>
     /// High-level entry point called by RoomController instead of GameManager.StartGame().
     /// On the first room of a run this behaves identically to the old implementation:
     /// it resets timing systems and schedules the music from scratch.
@@ -218,6 +258,10 @@ public class DungeonModeController : ModeController
 
             _sessionStartVirtualTime = virtualStartTime;
             LastRoomSeamVirtualTime  = virtualStartTime;
+
+            double leadInBarDuration  = GameConstants.BEATS_PER_LOOP * (60.0 / bpm);
+            EncounterStartVirtualTime = _sessionStartVirtualTime + leadInBars * leadInBarDuration;
+            _pendingLeadInBars        = leadInBars;
 
             if (beatManager?.metronome != null)
             {
@@ -285,6 +329,12 @@ public class DungeonModeController : ModeController
 
             LastRoomSeamVirtualTime = seamVirtual;
 
+            // Use _pendingLeadInBars if PrepareLeadIn() was called (floor transition),
+            // otherwise 0 (standard subsequent room — no lead-in).
+            double encBarDuration     = GameConstants.BEATS_PER_LOOP * (60.0 / bpm);
+            EncounterStartVirtualTime = seamVirtual + _pendingLeadInBars * encBarDuration;
+            // _pendingLeadInBars is left as-is here; StartMode() clears it after passing it to Initialize().
+
             // Tell StartMode not to call ScheduleMusic — the audio is already handled above.
             // Also skip the grace period so enemies appear immediately.
             _suppressMusicSchedule = true;
@@ -345,12 +395,14 @@ public class DungeonModeController : ModeController
         if (visualController != null) visualController.ResetVisuals();
         if (evaluator        != null) evaluator.ResetScore();
         if (health           != null) health.ResetHealth();
-        _isFirstRoom             = true;
-        _suppressMusicSchedule   = false;
-        _skipGracePeriod         = false;
-        _suppressBeatManager     = false;
-        _sessionStartVirtualTime = 0.0;
-        LastRoomSeamVirtualTime  = 0.0;
+        _isFirstRoom              = true;
+        _suppressMusicSchedule    = false;
+        _skipGracePeriod          = false;
+        _suppressBeatManager      = false;
+        _pendingLeadInBars        = 0;
+        _sessionStartVirtualTime  = 0.0;
+        LastRoomSeamVirtualTime   = 0.0;
+        EncounterStartVirtualTime = 0.0;
         Debug.Log("[DungeonModeController] Reset to initial state");
     }
 

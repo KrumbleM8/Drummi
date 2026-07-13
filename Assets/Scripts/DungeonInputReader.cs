@@ -69,6 +69,15 @@ public class DungeonInputReader : MonoBehaviour
     /// </summary>
     public double? CoyoteWindowStartOverride { get; set; }
 
+    /// <summary>
+    /// When non-null, every tap recorded during an open echo window is retagged to this type
+    /// before being stored or evaluated. This collapses direction matching to timing-only grading
+    /// (SingleDrum C&amp;R mode). Null in all other contexts — standard combat, Directional C&amp;R,
+    /// and outside the echo window. Set and cleared exclusively by
+    /// CallAndResponseController.OpenEchoWindow / CloseEchoWindow.
+    /// </summary>
+    public DungeonEnemyType? SingleDrumEchoConstant { get; set; }
+
     public List<DungeonInput> playerInputData = new();
 
     // Set by DungeonBeatManager each bar so single-input evaluation works
@@ -174,6 +183,11 @@ public class DungeonInputReader : MonoBehaviour
             health?.TakeOutOfWindowPenalty();
             return;
         }
+
+        // SingleDrum C&R mode: retag every echo tap to the constant type so all beats
+        // match on type and EvaluateBar grades on timing alone. Null in all other contexts.
+        if (SingleDrumEchoConstant.HasValue)
+            type = SingleDrumEchoConstant.Value;
 
         var input = new DungeonInput(GameClock.Instance.GameTime, type);
         playerInputData.Add(input);

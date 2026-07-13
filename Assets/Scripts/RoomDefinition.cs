@@ -39,6 +39,10 @@ public class RoomDefinition : ScriptableObject
              "Leave empty to use CallAndResponseController Inspector defaults.")]
     [SerializeField] private int[] callResponsePhraseLengths = { 2, 4, 6 };
 
+    [Tooltip("Directional: player echoes Left/Center/Right — both rhythm and direction must match. " +
+             "SingleDrum: any pad counts, grading is timing-only.")]
+    [SerializeField] private CallResponseInputMode callResponseInputMode = CallResponseInputMode.Directional;
+
     [Header("BGM Override")]
     [Tooltip("If true, this room switches to BgmTrackIndex when entered. If false, the current music continues uninterrupted.")]
     [SerializeField] private bool overrideBgm;
@@ -84,6 +88,12 @@ public class RoomDefinition : ScriptableObject
         : null;
 
     /// <summary>
+    /// Whether the player must echo direction (Left/Center/Right) or any pad counts (timing-only).
+    /// Only meaningful when <see cref="RoomType"/> is <see cref="RoomType.CallAndResponse"/>.
+    /// </summary>
+    public CallResponseInputMode CallResponseMode => callResponseInputMode;
+
+    /// <summary>
     /// When true, this room overrides the current BGM track with <see cref="BgmTrackIndex"/>
     /// at the next bar boundary. When false, the current music plays through uninterrupted.
     /// </summary>
@@ -103,6 +113,18 @@ public enum EnemyTier
     Standard,
     Elite,
     Boss,
+}
+
+/// <summary>
+/// Input mode for Call-and-Response encounters.
+/// </summary>
+public enum CallResponseInputMode
+{
+    /// <summary>Player must echo both rhythm and direction (Left/Center/Right). Default.</summary>
+    Directional,
+
+    /// <summary>Any pad counts — grading is timing-only, direction is ignored.</summary>
+    SingleDrum,
 }
 
 /// <summary>Room archetype — determines the gameplay flow inside the room.</summary>

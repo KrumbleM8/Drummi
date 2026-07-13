@@ -62,6 +62,20 @@ public class DungeonPatternGenerator
         return pattern;
     }
 
+    /// <summary>
+    /// Like <see cref="GeneratePhrase"/> but forces every beat's enemyType to
+    /// <paramref name="constantType"/>. Rhythm generation (durations, timeslots) is
+    /// identical; only the type field is overwritten. Used by SingleDrum C&amp;R mode so
+    /// the performer bounces neutrally and EvaluateBar grades on timing alone.
+    /// </summary>
+    public List<DungeonBeat> GeneratePhraseWithConstantType(float phraseLengthBeats, DungeonEnemyType constantType)
+    {
+        var beats = GeneratePhrase(phraseLengthBeats);
+        for (int i = 0; i < beats.Count; i++)
+            beats[i].enemyType = constantType;
+        return beats;
+    }
+
     // ── Private ───────────────────────────────────────────────────────────
 
     // Used by GeneratePhrase only — mirrors SelectValidDuration but against

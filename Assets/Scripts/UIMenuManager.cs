@@ -39,6 +39,13 @@ public class UIMenuManager : MonoBehaviour
     [Tooltip("Include left/right safe-area gutters (notch/rounded corners) in the margin calculation.")]
     [SerializeField] private bool includeSafeAreaGutter = true;
 
+    /// <summary>
+    /// Fired whenever a page becomes the active visible page.
+    /// Argument is the page's <see cref="MenuPage.pageName"/>.
+    /// Fires at the moment the page's root is activated — before any slide animation completes.
+    /// </summary>
+    public event System.Action<string> OnPageShown;
+
     public MenuPage currentPage;
     private Coroutine activeTransition;
     private Dictionary<string, MenuPage> pageDict;
@@ -201,6 +208,7 @@ public class UIMenuManager : MonoBehaviour
 
         currentPage.pageTransform.anchoredPosition = currentPage.onScreenPosition;
         currentPage.pageTransform.gameObject.SetActive(true);
+        OnPageShown?.Invoke(pageName);
     }
 
     private IEnumerator TransitionToPage(MenuPage targetPage, bool swipeLeft)
@@ -216,6 +224,7 @@ public class UIMenuManager : MonoBehaviour
 
         targetPage.pageTransform.anchoredPosition = targetStartPos;
         targetPage.pageTransform.gameObject.SetActive(true);
+        OnPageShown?.Invoke(targetPage.pageName);
 
         float elapsed = 0f;
 

@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.Events;
+using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
 namespace KrumbleHut.Drummi.UI
@@ -13,11 +14,11 @@ namespace KrumbleHut.Drummi.UI
     /// SCENE SETUP:
     ///   1. Add this component alongside UIBubbleFloat on the bubble root.
     ///   2. Assign sprites and configure unlockKey / startUnlocked in the Inspector.
-    ///   3. Wire your EventTrigger PointerClick → BubbleButton.OnButtonTapped().
-    ///   4. Wire onPress to whatever previously fired (e.g. UIMenuManager.GoToBongoScene).
+    ///   3. Wire onPress to the desired navigation (e.g. UIMenuManager.GoToBongoScene).
+    ///   Note: no EventTrigger needed — IPointerClickHandler handles both touch and mouse.
     /// </summary>
     [RequireComponent(typeof(UIBubbleFloat))]
-    public class BubbleButton : MonoBehaviour
+    public class BubbleButton : MonoBehaviour, IPointerClickHandler
     {
         [Header("Unlock")]
         [Tooltip("PlayerPrefs key used to persist unlock state. Leave empty to treat as always unlocked.")]
@@ -80,13 +81,10 @@ namespace KrumbleHut.Drummi.UI
             ApplyState(locked: !unlocked);
         }
 
-        // ── Public API ────────────────────────────────────────────────────────
+        // ── IPointerClickHandler ──────────────────────────────────────────────
 
-        /// <summary>
-        /// Wire this to your EventTrigger PointerClick (or Button OnClick).
-        /// Blocks the press when locked; fires <see cref="onPress"/> when unlocked.
-        /// </summary>
-        public void OnButtonTapped()
+        /// <inheritdoc/>
+        public void OnPointerClick(PointerEventData eventData)
         {
             if (_isLocked)
             {
@@ -94,6 +92,17 @@ namespace KrumbleHut.Drummi.UI
                 return;
             }
 
+            onPress?.Invoke();
+        }
+
+        // ── Public API ────────────────────────────────────────────────────────
+
+        /// <summary>
+        /// Programmatic press — fires <see cref="onPress"/> when unlocked.
+        /// </summary>
+        public void OnButtonTapped()
+        {
+            if (_isLocked) return;
             onPress?.Invoke();
         }
 

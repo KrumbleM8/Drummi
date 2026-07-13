@@ -1141,7 +1141,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   unlockKey: 
-  startUnlocked: 0
+  startUnlocked: 1
   iconImage: {fileID: 1569808050}
   unlockedSprite: {fileID: 6155404094896708703, guid: 202221692273f5a4d96c78dc3c77f618, type: 3}
   lockedSprite: {fileID: 2840336364714655594, guid: 22abb374e79f4e646a9a62de4fe19f0f, type: 3}
@@ -3297,13 +3297,13 @@ MonoBehaviour:
   - pageName: Intro
     pageTransform: {fileID: 661258233}
     onScreenPosition: {x: 0, y: 0}
-    offScreenLeftPosition: {x: -1136, y: 0}
-    offScreenRightPosition: {x: 1136, y: 0}
+    offScreenLeftPosition: {x: -652.08, y: 0}
+    offScreenRightPosition: {x: 652.08, y: 0}
   - pageName: Main
     pageTransform: {fileID: 1184427824}
     onScreenPosition: {x: 0, y: 0}
-    offScreenLeftPosition: {x: -1136, y: 0}
-    offScreenRightPosition: {x: 1136, y: 0}
+    offScreenLeftPosition: {x: -652.08, y: 0}
+    offScreenRightPosition: {x: 652.08, y: 0}
   startingPageName: Intro
   transitionDuration: 0.5
   transitionCurve:

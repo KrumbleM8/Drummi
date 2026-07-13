@@ -19,7 +19,7 @@ using UnityEngine;
 /// </summary>
 public class RoomController : MonoBehaviour
 {
-    private enum RoomState { Entering, Playing, Evaluating, Exiting, Complete }
+    private enum RoomState { Entering, IntroDelay, Playing, Evaluating, Exiting, Complete }
 
     [SerializeField] private DungeonModeController          modeController;
     [SerializeField] private CallAndResponseController       callAndResponseController;
@@ -30,6 +30,12 @@ public class RoomController : MonoBehaviour
     [SerializeField] private SpriteRenderer        backgroundZoomerRenderer;
     [SerializeField] private Sprite                titleBackgroundSprite;
     [SerializeField] private GameObject            doorsUI;
+
+    [Header("Intro Delay (First Room Only)")]
+    [Tooltip("Real-time seconds between reveal-complete and gameplay start, first room only. " +
+             "Default 0 = no delay (current behaviour). The body of IntroDelayRoutine " +
+             "is the hook a future intro animation sequence will replace.")]
+    [SerializeField] private float introDuration = 0.0f;
 
     /// <summary>Fired when the room is fully exited, carrying the outcome.</summary>
     public event Action<RoomResult> OnRoomComplete;
@@ -99,7 +105,12 @@ public class RoomController : MonoBehaviour
             // screen is still animating (which would start spawn audio during the wipe).
             case RoomState.Entering:
                 if (!screenTransition.IsScreenCovered && !screenTransition.IsTransitioning)
-                    SetState(RoomState.Playing);
+                    BeginIntroOrPlay();
+                break;
+
+            // Coroutine-driven hold before gameplay. SetState(Playing) fires on completion.
+            // Update does nothing here; all logic lives in IntroDelayRoutine().
+            case RoomState.IntroDelay:
                 break;
 
             case RoomState.Exiting:
@@ -148,8 +159,9 @@ public class RoomController : MonoBehaviour
                         // StartEncounter's beat-snap is a no-op: the seam is already on the grid.
                         callAndResponseController.OnEncounterComplete += HandleCarEncounterComplete;
                         callAndResponseController.StartEncounter(
-                            modeController.LastRoomSeamVirtualTime,
-                            _currentDef.PhraseLengths);
+                            modeController.EncounterStartVirtualTime,
+                            _currentDef.PhraseLengths,
+                            _currentDef.CallResponseMode);
                     }
                     else
                     {
@@ -172,6 +184,47 @@ public class RoomController : MonoBehaviour
                 dungeonTransition.StartCover();
                 break;
         }
+    }
+
+    // ── Intro Delay ───────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Called when the reveal animation completes. Applies the intro delay on the first room
+    /// only (determined by <see cref="DungeonModeController.IsFirstRoom"/>, which is still
+    /// true at this point — StartRoom() sets it to false later, inside SetState(Playing)).
+    /// With introDuration == 0 or on subsequent rooms, advances directly to Playing
+    /// (identical to previous behaviour). Either path ends in SetState(RoomState.Playing).
+    /// </summary>
+    private void BeginIntroOrPlay()
+    {
+        bool applyDelay = modeController != null
+                       && modeController.IsFirstRoom
+                       && introDuration > 0f;
+        if (applyDelay)
+        {
+            _state = RoomState.IntroDelay;
+            StartCoroutine(IntroDelayRoutine());
+        }
+        else
+        {
+            SetState(RoomState.Playing);
+        }
+    }
+
+    /// <summary>
+    /// Real-time hold between room reveal and gameplay start, first room only.
+    /// Uses WaitForSecondsRealtime — this wait is entirely BEFORE GameClock.Reset()
+    /// (which runs inside SetState(Playing) → StartRoom), so it does not affect
+    /// the DSP time-zero or beat alignment. Music and beats start sample-aligned to
+    /// gameplay; they simply begin later.
+    ///
+    /// FUTURE HOOK: replace the yield body with an intro animation sequence.
+    /// When the animation finishes, call SetState(RoomState.Playing) to hand off.
+    /// </summary>
+    private System.Collections.IEnumerator IntroDelayRoutine()
+    {
+        yield return new WaitForSecondsRealtime(introDuration);
+        SetState(RoomState.Playing);
     }
 
     // ── Event Handlers ────────────────────────────────────────────────────────

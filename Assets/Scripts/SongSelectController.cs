@@ -249,6 +249,12 @@ namespace KrumbleHut.Drummi.UI
                     _vinylRestPos[i] = vinyls[i].GetComponent<RectTransform>().anchoredPosition;
             }
 
+            // Listen for page-shown events so we can reset when the Song page is re-entered
+            // from any path (e.g. returning from the results screen). SongSelectController
+            // lives on a root-level object that is never deactivated, so OnEnable alone
+            // is not sufficient — this subscription covers all navigation paths.
+            if (menuManager != null) menuManager.OnPageShown += HandlePageShown;
+
             // Subscribe to every AlbumItem that is a direct carousel child.
             for (int i = 0; i < carousel.transform.childCount; i++)
             {
@@ -332,6 +338,8 @@ namespace KrumbleHut.Drummi.UI
 
         private void OnDestroy()
         {
+            if (menuManager != null) menuManager.OnPageShown -= HandlePageShown;
+
             _activeSequence?.Kill();
             KillVinylTweens();
             TearDownPreview();
@@ -344,6 +352,16 @@ namespace KrumbleHut.Drummi.UI
                 var album = carousel.transform.GetChild(i).GetComponent<AlbumItem>();
                 if (album != null) album.Tapped -= OnAlbumTapped;
             }
+        }
+
+        /// <summary>
+        /// Received from <see cref="UIMenuManager.OnPageShown"/> whenever any page activates.
+        /// Resets to Browsing when the Song page is shown so stale popup/vinyl state from a
+        /// prior session is never visible on re-entry.
+        /// </summary>
+        private void HandlePageShown(string pageName)
+        {
+            if (pageName == "Song") ResetToDefault();
         }
 
         private void LateUpdate()
@@ -715,6 +733,9 @@ namespace KrumbleHut.Drummi.UI
             if (_previewingSlot >= 0 && _previewingSlot < vinyls.Length && vinyls[_previewingSlot] != null)
                 vinyls[_previewingSlot].Select();
 
+            // Restart the audio preview for the still-previewing slot.
+            StartPreview(_previewingSlot);
+
             _state = SelectState.Previewing;
         }
 
@@ -911,6 +932,9 @@ namespace KrumbleHut.Drummi.UI
         {
             if (tapCatcher != null) tapCatcher.gameObject.SetActive(false);
             if (startIcon != null) startIcon.gameObject.SetActive(false);
+
+            // Stop audio preview while the popup is open.
+            StopPreview();
 
             // Settle the selected vinyl — popup covers it, and we don't want it
             // spinning/scaled when the popup reopens or if the popup is dismissed.

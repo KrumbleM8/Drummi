@@ -4714,8 +4714,8 @@ MonoBehaviour:
   - {fileID: 610860821}
   difficultyIndex: 2
   maxSameSideHits: 2
-  barsBeforeEndForFinalBar: 1
-  delayBeforeResults: 2
+  barsBeforeEndForFinalBar: 4
+  delayBeforeResults: 4.5
   adaptiveDifficulty: {fileID: 891851654}
   enableAdaptiveDifficulty: 1
 --- !u!114 &891851645

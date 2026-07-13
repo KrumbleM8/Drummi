@@ -55,6 +55,7 @@ public class DungeonBeatManager : MonoBehaviour
     private bool   isFinalBar               = false;
     private int    _barsPlayed              = 0;
     private bool   _skipGracePeriod         = false;
+    private int    _leadInBars             = 0;
 
     // Minimum audio lookahead (seconds) used when scheduling the first bar for
     // skip-grace rooms. Must be large enough to survive initialization overhead
@@ -100,7 +101,7 @@ public class DungeonBeatManager : MonoBehaviour
     /// immediately on <see cref="StartGameplay"/>. Pass true for all rooms after
     /// the first so the player sees enemies straight away.
     /// </param>
-    public void Initialize(int bpm, float[] patternDurations = null, bool skipGracePeriod = false)
+    public void Initialize(int bpm, float[] patternDurations = null, bool skipGracePeriod = false, int leadInBars = 0)
     {
         metronome.bpm  = bpm;
         beatInterval   = 60.0 / bpm;
@@ -115,16 +116,25 @@ public class DungeonBeatManager : MonoBehaviour
         isFinalBar               = false;
         _barsPlayed              = 0;
         _skipGracePeriod         = skipGracePeriod;
+        _leadInBars              = leadInBars;
 
         Debug.Log($"[DungeonBeatManager] Initialized — BPM: {bpm}, beat: {beatInterval:F4}s, " +
-                  $"durations: [{string.Join(", ", durations)}], skipGrace: {skipGracePeriod}");
+                  $"durations: [{string.Join(", ", durations)}], skipGrace: {skipGracePeriod}, leadIn: {leadInBars}");
     }
 
     public void StartGameplay(double startTimeVirtual)
     {
         ClearState();
         currentState = GameState.WaitingForFirstBar;
-        if (inputReader != null) inputReader.EncounterActive = true;
+
+        // EncounterActive gates input penalties. Enable immediately when there is no lead-in
+        // so the existing behaviour (room 2+ and leadInBars == 0) is unchanged.
+        // For first-room lead-ins it is deferred until the first pattern fires so taps
+        // during the musical intro bars are silently ignored, not penalised.
+        if (_skipGracePeriod || _leadInBars == 0)
+        {
+            if (inputReader != null) inputReader.EncounterActive = true;
+        }
 
         if (_skipGracePeriod)
         {
@@ -136,15 +146,16 @@ public class DungeonBeatManager : MonoBehaviour
             // calls on mobile. Update() handles it cleanly once we are close.
             Debug.Log($"[DungeonBeatManager] Grace period skipped — awaiting seam (Virtual: {startTimeVirtual:F4})");
         }
+        else if (_leadInBars > 0)
+        {
+            // Musical lead-in: bars 0..(leadInBars-1) are silent (music only, no enemies).
+            // No turn signal is scheduled here — the first pattern's own turn signal fires
+            // when ScheduleNewPattern() runs at the end of the lead-in.
+            Debug.Log($"[DungeonBeatManager] Musical lead-in: {_leadInBars} bar(s) before first encounter (Virtual: {startTimeVirtual:F4})");
+        }
         else
         {
-            // Bar 0 grace period: schedule the turn signal cue so the player
-            // knows the first pattern is coming, then wait for bar 1.
-            double graceTurnSignal = TimingCoordinator.Instance.CurrentBar.TurnSignalTime;
-            if (graceTurnSignal > GameClock.Instance.GameTime)
-                ScheduleTurnSignal(graceTurnSignal, 0);
-
-            Debug.Log($"[DungeonBeatManager] Gameplay started with grace period (Virtual: {startTimeVirtual:F4})");
+            Debug.Log($"[DungeonBeatManager] Gameplay started — no lead-in (Virtual: {startTimeVirtual:F4})");
         }
     }
     #endregion
@@ -177,24 +188,25 @@ public class DungeonBeatManager : MonoBehaviour
                               $"lookahead: {coordinator.CurrentBar.PatternStartTime - now:F3}s)");
                 }
             }
-            else if (coordinator.GetCurrentBarIndex() == 0)
+            else if (coordinator.GetCurrentBarIndex() < _leadInBars)
             {
+                // Lead-in bar: music plays but encounter logic is dormant.
+                // Advance the bar index at each boundary so the encounter lands
+                // on bar _leadInBars without any scheduling or enemy spawning.
                 double timeUntilNextBar = coordinator.NextBar.BarStartTime - now;
                 if (timeUntilNextBar <= 0.1)
-                {
                     coordinator.AdvanceToNextBar();
-                    ScheduleNewPattern(coordinator.CurrentBar);
-                    hasScheduledFirstPattern = true;
-                    currentState = GameState.Playing;
-                    Debug.Log("[DungeonBeatManager] Grace period done — gameplay begins at bar 1");
-                }
             }
             else
             {
-                // Fallback: past bar 0, schedule immediately
+                // Lead-in complete (or leadInBars == 0): schedule the first encounter bar.
                 ScheduleNewPattern(coordinator.CurrentBar);
                 hasScheduledFirstPattern = true;
                 currentState = GameState.Playing;
+                // Arm encounter input now — was deferred from StartGameplay() for lead-in rooms.
+                if (inputReader != null && !inputReader.EncounterActive)
+                    inputReader.EncounterActive = true;
+                Debug.Log($"[DungeonBeatManager] Lead-in complete — first pattern at bar {coordinator.GetCurrentBarIndex()}");
             }
         }
 
@@ -469,6 +481,7 @@ public class DungeonBeatManager : MonoBehaviour
     public void ResetToInitialState()
     {
         ClearState();
+        _leadInBars  = 0;
         currentState = GameState.Uninitialized;
         Debug.Log("[DungeonBeatManager] Reset");
     }
