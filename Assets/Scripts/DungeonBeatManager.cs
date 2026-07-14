@@ -469,12 +469,15 @@ public class DungeonBeatManager : MonoBehaviour
         hasScheduledFirstPattern = false;
         isFinalBar               = false;
 
-        // Ensure the input reader is gated off — covers cleanup paths that bypass
-        // HandleGameComplete (e.g. direct Cleanup() call on health depletion).
+        // Ensure the input reader is gated off and its input list is cleared.
+        // ResetInputs() must be here (not only in EvaluateCurrentBar) to cover
+        // room transitions and health-depletion early exits where EvaluateCurrentBar
+        // does not run to completion, leaving stale inputs that corrupt the next bar.
         if (inputReader != null)
         {
             inputReader.EncounterActive = false;
             inputReader.allowInput      = false;
+            inputReader.ResetInputs();
         }
     }
 
