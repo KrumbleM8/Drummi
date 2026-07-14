@@ -688,6 +688,16 @@ public class BeatGenerator : MonoBehaviour
         {
             adaptiveDifficulty.Reset();
         }
+
+        // Gate input off and clear any accumulated inputs. allowInput defaults to true
+        // on BongoModeInputReader, so without this, taps during the grace period (bar 0)
+        // accumulate in playerInputData and are evaluated as stale hits in bar 1.
+        // CheckAndTriggerListeningAnimation() re-enables allowInput at the right time.
+        if (playerInputReader != null)
+        {
+            playerInputReader.allowInput = false;
+            playerInputReader.ResetInputs();
+        }
     }
     #endregion
 
