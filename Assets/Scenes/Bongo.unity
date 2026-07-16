@@ -4773,7 +4773,7 @@ MonoBehaviour:
   custardAnimator: {fileID: 1762856858}
   scoreText: {fileID: 463733841}
   perfectFraction: 0.07
-  goodFraction: 0.232
+  goodFraction: 0.2
   perfectReward: 200
   goodReward: 100
   passableReward: 50
@@ -6259,6 +6259,7 @@ MonoBehaviour:
   rotationAmount: 10.5
   rotationDuration: 0.04
   rangeMultiplier: 1.14
+  drumPadTouch: {fileID: 0}
 --- !u!114 &1196828592
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -9735,28 +9736,28 @@ MonoBehaviour:
   - pageName: Main
     pageTransform: {fileID: 686828141}
     onScreenPosition: {x: 0, y: 0}
-    offScreenLeftPosition: {x: -655.76, y: 0}
-    offScreenRightPosition: {x: 655.76, y: 0}
+    offScreenLeftPosition: {x: -1136, y: 0}
+    offScreenRightPosition: {x: 1136, y: 0}
   - pageName: Song
     pageTransform: {fileID: 498961237}
     onScreenPosition: {x: 0, y: 0}
-    offScreenLeftPosition: {x: -655.76, y: 0}
-    offScreenRightPosition: {x: 655.76, y: 0}
+    offScreenLeftPosition: {x: -1136, y: 0}
+    offScreenRightPosition: {x: 1136, y: 0}
   - pageName: Difficulty
     pageTransform: {fileID: 1373578963}
     onScreenPosition: {x: 0, y: 0}
-    offScreenLeftPosition: {x: -655.76, y: 0}
-    offScreenRightPosition: {x: 655.76, y: 0}
+    offScreenLeftPosition: {x: -1136, y: 0}
+    offScreenRightPosition: {x: 1136, y: 0}
   - pageName: Customize
     pageTransform: {fileID: 1030085468}
     onScreenPosition: {x: 0, y: 0}
-    offScreenLeftPosition: {x: -655.76, y: 0}
-    offScreenRightPosition: {x: 655.76, y: 0}
+    offScreenLeftPosition: {x: -1136, y: 0}
+    offScreenRightPosition: {x: 1136, y: 0}
   - pageName: Score
     pageTransform: {fileID: 373518197}
     onScreenPosition: {x: 0, y: 0}
-    offScreenLeftPosition: {x: -655.76, y: 0}
-    offScreenRightPosition: {x: 655.76, y: 0}
+    offScreenLeftPosition: {x: -1136, y: 0}
+    offScreenRightPosition: {x: 1136, y: 0}
   startingPageName: Main
   transitionDuration: 0.5
   transitionCurve:

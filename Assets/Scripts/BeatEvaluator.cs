@@ -45,6 +45,14 @@ public class BeatEvaluator : MonoBehaviour
 
     private int _previousHighScore;
 
+    // Beats already matched by a successful (Perfect/Good) input this bar.
+    // EvaluateSingleInput skips these so spamming can't earn multiple success
+    // visuals off one beat indicator — mirroring EvaluateBar's two-pointer
+    // matching, where each beat is consumed by at most one input.
+    // ScheduledBeat instances are recreated every bar (SchedulePattern), so
+    // stale references can never collide; cleared each EvaluateBar anyway.
+    private readonly HashSet<ScheduledBeat> _claimedBeats = new HashSet<ScheduledBeat>();
+
     #region Lifecycle
     private void Start()
     {
@@ -72,6 +80,9 @@ public class BeatEvaluator : MonoBehaviour
             Debug.LogWarning("[BeatEvaluator] No beats to evaluate");
             return null;
         }
+
+        // Bar is over — release claimed beats for the next pattern.
+        _claimedBeats.Clear();
 
         // Perform matching
         var matches = MatchInputsToBeats(playerInputs, scheduledBeats);
@@ -354,12 +365,17 @@ public class BeatEvaluator : MonoBehaviour
 
         double timeOffset = beatGenerator.InputStartTime - beatGenerator.PatternStartTime;
 
-        // Find the closest scheduled beat to the input time
+        // Find the closest UNCLAIMED scheduled beat to the input time.
+        // Claimed beats are skipped so a spammed input can't re-match a beat
+        // that already produced a success visual this bar.
         ScheduledBeat closestBeat = null;
         double smallestDelta = double.MaxValue;
 
         foreach (var beat in scheduledBeats)
         {
+            if (_claimedBeats.Contains(beat))
+                continue;
+
             double adjustedBeatTime = beat.scheduledTime + timeOffset;
             double delta = Math.Abs(input.inputTime - adjustedBeatTime);
 
@@ -369,6 +385,11 @@ public class BeatEvaluator : MonoBehaviour
                 closestBeat = beat;
             }
         }
+
+        // Every beat this bar has already been claimed — the extra input can't
+        // be a success.
+        if (closestBeat == null)
+            return InputMatch.MatchQuality.Miss;
 
         // Evaluate against the closest beat
         double adjustedClosestBeatTime = closestBeat.scheduledTime + timeOffset;
@@ -383,6 +404,9 @@ public class BeatEvaluator : MonoBehaviour
         // Within timing window — check side
         if (closestBeat.isRightBongo != input.isRightBongo)
             return InputMatch.MatchQuality.WrongSide;
+
+        // Success — claim the beat so no further input can match it this bar.
+        _claimedBeats.Add(closestBeat);
 
         if (Mathf.Abs((float)timingError) <= PerfectThreshold)
             return InputMatch.MatchQuality.Perfect;
@@ -414,6 +438,7 @@ public class BeatEvaluator : MonoBehaviour
     public void ResetScore()
     {
         _previousHighScore = PlayerPrefs.GetInt(HIGH_SCORE_KEY, 0);
+        _claimedBeats.Clear();
         Score = 0;
         PerfectHits = 0;
         TotalPerfectHits = 0;
