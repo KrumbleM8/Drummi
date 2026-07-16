@@ -13,9 +13,15 @@ namespace KrumbleHut.Drummi.Dungeons
     ///
     /// Touch detection: DrumPadTouch uses RectTransformUtility.RectangleContainsScreenPoint
     /// (bypasses the event system), so CanvasGroup.blocksRaycasts has no effect on touch
-    /// detection. The ThreePad zones remain active even when alpha=0 (invisible).
-    /// SingleDrumPad is purely visual (raycastTarget=false).
-    /// TwoPad (BongoRig) swaps DrumPadTouch's active pad refs via OverridePads/RestorePads.
+    /// detection — but a rig collapsed to scaleY=0 has zero-area zones, so hidden rigs
+    /// cannot receive touches. Each layout must therefore route its own hit zones into
+    /// DrumPadTouch:
+    ///   ThreePad   — Inspector-assigned L/C/R zones (the defaults).
+    ///   TwoPad     — swaps L/R refs via OverridePads/RestorePads, disables the center pad.
+    ///   SingleDrum — routes SingleDrumRig/HitZone into the center pad via
+    ///                OverrideCenterPad/RestoreCenterPad (C&R retags all input anyway).
+    ///                SingleDrumPad itself stays purely visual — its BounceOnBeat scale
+    ///                animation would make the touch area pulse; HitZone is a static sibling.
     ///
     /// INSPECTOR SETUP:
     ///   threePadRig       — CanvasGroup on OverlayCanvas/ThreePadRig
@@ -23,6 +29,7 @@ namespace KrumbleHut.Drummi.Dungeons
     ///   bongoRig          — CanvasGroup on OverlayCanvas/BongoRig
     ///   bongoLeftPad      — RectTransform of BongoRig/L (transparent hit zone)
     ///   bongoRightPad     — RectTransform of BongoRig/R (transparent hit zone)
+    ///   singleDrumPad     — RectTransform of SingleDrumRig/HitZone (static hit zone)
     ///   bongoAnimator     — BongoAnimator on BongoRig (enabled/disabled on layout switch)
     ///   drumPadTouch      — DrumPadTouch in the scene (for OverridePads/CenterPadEnabled)
     ///   transitionDuration — seconds for the scale-Y + fade animation (default 0.2)
@@ -49,6 +56,10 @@ namespace KrumbleHut.Drummi.Dungeons
         [Tooltip("BongoAnimator on BongoRig — enabled when TwoPad is active so it subscribes to DrumPadTouch hits.")]
         [SerializeField] private BongoAnimator bongoAnimator;
 
+        [Header("Single Drum Rig")]
+        [Tooltip("Static transparent hit zone inside SingleDrumRig (RectTransform). Routed to DrumPadTouch's center pad while the SingleDrum layout is active.")]
+        [SerializeField] private RectTransform singleDrumPad;
+
         [Tooltip("DrumPadTouch in the scene — receives OverridePads/RestorePads and CenterPadEnabled changes.")]
         [SerializeField] private DrumPadTouch drumPadTouch;
 
@@ -62,10 +73,10 @@ namespace KrumbleHut.Drummi.Dungeons
 
         private void Awake()
         {
-            // Initialise to ThreePad visible; first LoadRoom corrects this if needed.
-            ApplyInstant(threePadRig,   visible: true);
+            // Initialise to BongoRig visible; first LoadRoom corrects this immediately.
+            ApplyInstant(bongoRig,      visible: true);
+            ApplyInstant(threePadRig,   visible: false);
             ApplyInstant(singleDrumRig, visible: false);
-            ApplyInstant(bongoRig,      visible: false);
             if (bongoAnimator != null) bongoAnimator.enabled = false;
         }
 
@@ -89,6 +100,10 @@ namespace KrumbleHut.Drummi.Dungeons
                 if (drumPadTouch != null) drumPadTouch.CenterPadEnabled = true;
                 if (bongoAnimator != null) bongoAnimator.enabled = false;
             }
+            else if (_current == InputLayoutType.SingleDrum)
+            {
+                drumPadTouch?.RestoreCenterPad();
+            }
 
             CanvasGroup outRig = GetRig(_current);
             CanvasGroup inRig  = GetRig(target);
@@ -100,6 +115,14 @@ namespace KrumbleHut.Drummi.Dungeons
                 drumPadTouch?.OverridePads(bongoLeftPad, bongoRightPad);
                 if (drumPadTouch != null) drumPadTouch.CenterPadEnabled = false;
                 if (bongoAnimator != null) bongoAnimator.enabled = true;
+            }
+            else if (target == InputLayoutType.SingleDrum)
+            {
+                // Route the single drum's static hit zone into the center pad so touch
+                // registers while the three-pad zones are collapsed. Center is the
+                // semantically correct event: SingleDrum C&R forces all input to Center
+                // via DungeonInputReader.SingleDrumEchoConstant.
+                drumPadTouch?.OverrideCenterPad(singleDrumPad);
             }
 
             _outTween?.Kill();

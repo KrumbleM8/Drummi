@@ -23,5 +23,6 @@ MonoBehaviour:
   roomType: 2
   callResponsePhraseLengths: 0200000002000000020000000200000002000000
   callResponseInputMode: 1
+  inputLayout: 1
   overrideBgm: 0
   roomLengthBars: 0

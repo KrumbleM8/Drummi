@@ -17,7 +17,8 @@
       "Bash(grep -n '^--- !u!1 &__TRACKED_VAR__$\\\\|^  m_Name:' 'D:/UnityProjects/Unity Projects/Drummi 2/Assets/Scenes/Bongo.unity')",
       "Bash(grep:*)",
       "mcp__coplay-mcp__parent_game_object",
-      "mcp__coplay-mcp__set_property"
+      "mcp__coplay-mcp__set_property",
+      "mcp__coplay-mcp__set_unity_project_root"
     ]
   }
 }

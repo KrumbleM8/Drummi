@@ -33,7 +33,6 @@ using UnityEngine.UI;
 /// INSPECTOR SETUP:
 ///   barSlider           — the shared Slider
 ///   indicatorParent     — RectTransform child of the slider; markers are instantiated here
-///   responseFill        — a separate Image (Type=Filled, Horizontal) overlaid during response phase
 ///   spawnIndicatorPrefab / inputIndicatorPrefab — small Image prefabs
 ///   enemyContainer      — optional Transform to parent pool objects; auto-created if null
 ///   enemySprite         — optional square sprite; a 4×4 white texture is generated if null
@@ -46,7 +45,6 @@ public class DungeonVisualController : MonoBehaviour
     [Header("UI References")]
     [SerializeField] private Slider         barSlider;
     [SerializeField] private RectTransform  indicatorParent;
-    [SerializeField] private Image          responseFill;
 
     [Header("Prefabs")]
     [SerializeField] private GameObject spawnIndicatorPrefab;
@@ -78,12 +76,6 @@ public class DungeonVisualController : MonoBehaviour
     private double phaseDuration; // 4 beats — each phase (spawn or response) lasts 4 beats
     private bool   isFrozen;
     private bool   _visualIndicatorActive = true;
-
-    /// <summary>
-    /// When true, the response fill is never activated.
-    /// Set by DungeonModeController for C&R rooms; cleared by Initialize() for combat rooms.
-    /// </summary>
-    public bool SuppressResponseFill { get; set; }
 
     /// <summary>
     /// When true, the bar slider GameObject is hidden and its value is not driven.
@@ -145,12 +137,11 @@ public class DungeonVisualController : MonoBehaviour
 
         phaseDuration = 4 * (60.0 / metronome.bpm);
         isFrozen      = false;
-        // SuppressBarSlider and SuppressResponseFill are NOT reset here.
-        // DungeonModeController.ClearVisuals() sets them before calling Initialize()
+        // SuppressBarSlider is NOT reset here.
+        // DungeonModeController.ClearVisuals() sets it before calling Initialize()
         // so the correct state is in place from the very start of the room reveal.
 
         if (barSlider != null) barSlider.value = 0f;
-        SetResponseFillActive(false);
 
         PrewarmPool();
 
@@ -178,15 +169,11 @@ public class DungeonVisualController : MonoBehaviour
             {
                 double elapsed = now - bar.BarStartTime;
                 barSlider.value = Mathf.Clamp01((float)(elapsed / phaseDuration));
-                SetResponseFillActive(false);
             }
             else if (inResponsePhase)
             {
                 double elapsed = now - bar.InputWindowStart;
                 barSlider.value = Mathf.Clamp01((float)(elapsed / phaseDuration));
-                SetResponseFillActive(true);
-                if (responseFill != null)
-                    responseFill.fillAmount = barSlider.value;
             }
         }
 
@@ -306,7 +293,6 @@ public class DungeonVisualController : MonoBehaviour
         _barSpawnIndex = 0;
 
         if (barSlider != null) barSlider.value = 0f;
-        SetResponseFillActive(false);
 
         if (indicatorParent != null)
             for (int i = indicatorParent.childCount - 1; i >= 0; i--)
@@ -511,11 +497,4 @@ public class DungeonVisualController : MonoBehaviour
         _                       => Color.white
     };
 
-    private void SetResponseFillActive(bool active)
-    {
-        if (responseFill == null) return;
-        if (active && SuppressResponseFill) return;
-        responseFill.gameObject.SetActive(active);
-        if (!active) responseFill.fillAmount = 0f;
-    }
 }

@@ -16,7 +16,21 @@
       "Bash(find Assets -name \"*.cs\" -exec grep -l \"^public class ModeController\" {} \\\\;)",
       "Bash(find Assets/Scripts -name \"*.cs\" -exec grep -l \"abstract.*ModeController\\\\|class ModeController\" {} \\\\;)",
       "Bash(grep -n \"CompletMode\\\\|OnModeComplete\" Assets/Scripts/*.cs)",
-      "mcp__coplay-mcp__check_compile_errors"
+      "mcp__coplay-mcp__check_compile_errors",
+      "Bash(grep -E \"\\\\.cs$\")",
+      "mcp__coplay-mcp__open_scene",
+      "mcp__coplay-mcp__get_game_object_info",
+      "mcp__coplay-mcp__create_ui_element",
+      "mcp__coplay-mcp__set_property",
+      "mcp__coplay-mcp__parent_game_object",
+      "mcp__coplay-mcp__set_rect_transform",
+      "mcp__coplay-mcp__execute_script",
+      "mcp__coplay-mcp__set_layer",
+      "mcp__coplay-mcp__save_scene",
+      "mcp__coplay-mcp__get_unity_logs",
+      "Bash(git -C \"D:/UnityProjects/Unity Projects/Drummi 2\" status --short)",
+      "Bash(git -C \"D:/UnityProjects/Unity Projects/Drummi 2\" log --oneline -8)",
+      "Bash(git:*)"
     ]
   }
 }

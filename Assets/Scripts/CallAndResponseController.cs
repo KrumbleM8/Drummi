@@ -464,7 +464,9 @@ namespace KrumbleHut.Drummi.Dungeons
         private void OpenEchoWindow(int n)
         {
             if (inputReader == null) return;
-            inputReader.ResetInputs();
+            // ClearRecordedInputs (not ResetInputs): a coyote-buffered early tap for the
+            // first echo beat must survive window-open so ReplayBuffer can fire it.
+            inputReader.ClearRecordedInputs();
             inputReader.SetScheduledBeats(_currentCallPhrase);
             inputReader.SetTimeOffset(n * _beatInterval);
             inputReader.CoyoteWindowStartOverride = null;  // clear before opening so replay goes through normally

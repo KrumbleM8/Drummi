@@ -51,6 +51,7 @@ public class DrumPadTouch : MonoBehaviour
 
     private RectTransform _defaultLeftPad;
     private RectTransform _defaultRightPad;
+    private RectTransform _defaultCenterPad;
 
     /// <summary>
     /// When false, center pad touch and the center keyboard key are both ignored.
@@ -62,8 +63,9 @@ public class DrumPadTouch : MonoBehaviour
 
     private void Awake()
     {
-        _defaultLeftPad  = leftPad;
-        _defaultRightPad = rightPad;
+        _defaultLeftPad   = leftPad;
+        _defaultRightPad  = rightPad;
+        _defaultCenterPad = centerPad;
     }
 
     private void OnEnable()
@@ -162,5 +164,22 @@ public class DrumPadTouch : MonoBehaviour
     {
         leftPad  = _defaultLeftPad;
         rightPad = _defaultRightPad;
+    }
+
+    /// <summary>
+    /// Replaces the active center pad zone at runtime.
+    /// Called by DungeonInputLayoutController when switching to the SingleDrum layout —
+    /// the three-pad zones are collapsed (scaleY = 0) while that layout is active, so the
+    /// single drum's hit zone must be routed to the center pad for touch to register.
+    /// </summary>
+    public void OverrideCenterPad(RectTransform center)
+    {
+        centerPad = center;
+    }
+
+    /// <summary>Restores the center pad zone to its Inspector-assigned value.</summary>
+    public void RestoreCenterPad()
+    {
+        centerPad = _defaultCenterPad;
     }
 }

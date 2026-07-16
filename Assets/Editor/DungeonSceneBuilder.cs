@@ -9,7 +9,7 @@ using UnityEngine.InputSystem.UI;
 ///   - Creates a proper Slider (with full sub-hierarchy) inside Canvas/GameplayUI
 ///   - Creates the IndicatorParent RectTransform inside the slider
 ///   - Lays out InputPads (LeftPad, CenterPad, RightPad) across the screen
-///   - Lays out GameplayUI and ResponseFill relative to the slider
+///   - Lays out GameplayUI relative to the slider
 ///   - Positions the StartButton in the centre of the screen
 ///   - Creates SpawnIndicator and InputIndicator prefabs in Assets/Prefabs/Dungeon/
 ///   - Adds DrumPadTouch to a dedicated DrumPadTouch GameObject
@@ -43,32 +43,7 @@ public class DungeonSceneBuilder
         ipRT.offsetMin = new Vector2(10f, -15f);
         ipRT.offsetMax = new Vector2(-10f, 15f);
 
-        // ── 4. ResponseFill — semi-transparent overlay on the slider ──────
-        var responseFill = GameObject.Find("Canvas/GameplayUI/ResponseFill");
-        if (responseFill != null)
-        {
-            var rfRT = responseFill.GetComponent<RectTransform>();
-            rfRT.anchorMin = new Vector2(0f, 0.5f);
-            rfRT.anchorMax = new Vector2(0f, 0.5f);
-            rfRT.pivot     = new Vector2(0f, 0.5f);
-            rfRT.anchoredPosition = new Vector2(10f, 0f);
-            rfRT.sizeDelta = new Vector2(0f, 20f); // width driven by fillAmount * slider width
-
-            var rfImg = responseFill.GetComponent<Image>();
-            if (rfImg != null)
-            {
-                rfImg.type      = Image.Type.Filled;
-                rfImg.fillMethod = Image.FillMethod.Horizontal;
-                rfImg.fillAmount = 0f;
-                rfImg.color      = new Color(1f, 1f, 1f, 0.35f);
-            }
-            responseFill.SetActive(false);
-
-            // Position ResponseFill to match the slider
-            CopySliderPosition(rfRT, sliderRoot.GetComponent<RectTransform>());
-        }
-
-        // ── 5. ScoreText ──────────────────────────────────────────────────
+        // ── 4. ScoreText ──────────────────────────────────────────────────
         var scoreText = GameObject.Find("Canvas/GameplayUI/ScoreText");
         if (scoreText != null)
         {
@@ -89,19 +64,19 @@ public class DungeonSceneBuilder
             }
         }
 
-        // ── 6. InputPads — three equal columns covering the full screen ───
+        // ── 5. InputPads — three equal columns covering the full screen ───
         LayoutInputPads();
 
-        // ── 7. StartButton — centre of screen ─────────────────────────────
+        // ── 6. StartButton — centre of screen ─────────────────────────────
         LayoutStartButton();
 
-        // ── 8. DrumPadTouch GameObject ────────────────────────────────────
+        // ── 7. DrumPadTouch GameObject ────────────────────────────────────
         CreateDrumPadTouchGO();
 
-        // ── 9. Indicator prefabs ──────────────────────────────────────────
+        // ── 8. Indicator prefabs ──────────────────────────────────────────
         CreateIndicatorPrefabs();
 
-        // ── 10. Save ──────────────────────────────────────────────────────
+        // ── 9. Save ──────────────────────────────────────────────────────
         UnityEditor.SceneManagement.EditorSceneManager.MarkSceneDirty(
             UnityEngine.SceneManagement.SceneManager.GetActiveScene());
 
@@ -156,17 +131,6 @@ public class DungeonSceneBuilder
         rt.anchorMax  = Vector2.one;
         rt.offsetMin  = Vector2.zero;
         rt.offsetMax  = Vector2.zero;
-    }
-
-    private static void CopySliderPosition(RectTransform target, RectTransform source)
-    {
-        target.anchorMin        = source.anchorMin;
-        target.anchorMax        = source.anchorMax;
-        target.offsetMin        = source.offsetMin;
-        target.offsetMax        = source.offsetMax;
-        target.pivot            = source.pivot;
-        target.anchoredPosition = source.anchoredPosition;
-        target.sizeDelta        = source.sizeDelta;
     }
 
     private static void LayoutInputPads()

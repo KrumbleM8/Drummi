@@ -217,6 +217,13 @@ public class DungeonInputReader : MonoBehaviour
         _bufferedInput = null; // discard any stale coyote input from the previous bar
     }
 
+    /// <summary>
+    /// Clears recorded taps but preserves the coyote buffer. Used by
+    /// CallAndResponseController.OpenEchoWindow — a buffered early tap for the
+    /// first echo beat must survive the window-open reset so ReplayBuffer can fire it.
+    /// </summary>
+    public void ClearRecordedInputs() => playerInputData.Clear();
+
     // ── Private ───────────────────────────────────────────────────────────
 
     private void ReplayBuffer()

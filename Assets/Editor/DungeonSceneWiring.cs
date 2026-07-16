@@ -21,7 +21,6 @@ public class DungeonSceneWiring
         var dungeonModeGO     = GameObject.Find("DungeonMode");
         var drumPadTouchGO    = GameObject.Find("DrumPadTouch");
         var barSliderGO       = GameObject.Find("Canvas/GameplayUI/BarSlider");
-        var responseFillGO    = GameObject.Find("Canvas/GameplayUI/ResponseFill");
         var scoreTextGO       = GameObject.Find("Canvas/GameplayUI/ScoreText");
         var leftPadGO         = GameObject.Find("Canvas/InputPads/LeftPad");
         var centerPadGO       = GameObject.Find("Canvas/InputPads/CenterPad");
@@ -170,10 +169,6 @@ public class DungeonSceneWiring
                 dvcSO.FindProperty("indicatorParent").objectReferenceValue =
                     ipTransform.GetComponent<RectTransform>();
         }
-
-        if (responseFillGO != null)
-            dvcSO.FindProperty("responseFill").objectReferenceValue =
-                responseFillGO.GetComponent<Image>();
 
         dvcSO.FindProperty("metronome").objectReferenceValue =
             metronomeGO.GetComponent<Metronome>();

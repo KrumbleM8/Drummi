@@ -23,13 +23,16 @@ public class Metronome : MonoBehaviour
     public void InitializeWithStartTime(double futureStartTime)
     {
         timePerTick = 60.0 / bpm;
-        startTick = futureStartTime;
-        nextTick = startTick + timePerTick;
+        double realDspStart = GameClock.Instance != null
+            ? GameClock.Instance.VirtualToRealDsp(futureStartTime)
+            : futureStartTime;
+        startTick = realDspStart;
+        nextTick  = startTick + timePerTick;
         beatCount = 0;
         ticked = false;
 
         Debug.Log($"[Metronome] Initialized for visual feedback");
-        Debug.Log($"  Start time: {futureStartTime:F4}");
+        Debug.Log($"  Start time (virtual): {futureStartTime:F4}  DSP: {startTick:F4}");
         Debug.Log($"  BPM: {bpm}");
         Debug.Log($"  First tick at: {nextTick:F4}");
     }
