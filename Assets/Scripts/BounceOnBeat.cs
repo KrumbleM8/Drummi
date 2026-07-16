@@ -84,6 +84,23 @@ public class BounceOnBeat : MonoBehaviour
         if (metronome == null || GameClock.Instance == null || GameClock.Instance.IsPaused)
             return;
 
+        // Only bounce while a session is live. Both GameManager (Bongo) and
+        // DungeonModeController enable the metronome at session start, and
+        // CleanupSharedSystems() disables it when the song/run ends. We can't
+        // rely on startTick alone: Metronome.ResetToInitialState() sets
+        // startTick to the current dspTime, which looks like a valid grid and
+        // would keep the bounce running forever after the song finishes.
+        // The metronome stays enabled across dungeon room transitions, so the
+        // deferred beat-grid handoff below is unaffected.
+        if (!metronome.enabled)
+        {
+            // Drop the stale grid so the next session starts like a first init.
+            _activeStartTick  = double.MinValue;
+            _pendingStartTick = 0.0;
+            _lastBeatIndex    = -1;
+            return;
+        }
+
         if (metronome.startTick <= 0 || metronome.bpm <= 0)
             return;
 
