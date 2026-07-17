@@ -91,6 +91,10 @@ public class Metronome : MonoBehaviour
     public void OnResume()
     {
         if (GameClock.Instance == null) return;
+        // Never initialized (e.g., pause/resume in the menu before a session
+        // starts). Shifting startTick from 0 by the pause duration would make
+        // it look like a valid beat grid and start bounce animations in the menu.
+        if (timePerTick <= 0) return;
         // GameClock.Resume() is always called before this, so IsPaused is already false.
         // Use GetLastPauseDuration() which was recorded by GameClock.Resume().
         double pauseDuration = GameClock.Instance.GetLastPauseDuration();

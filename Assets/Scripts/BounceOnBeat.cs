@@ -54,6 +54,12 @@ public class BounceOnBeat : MonoBehaviour
     {
         DetectBeat();
 
+        // Skip the damping/scale step while time is frozen (paused, timeScale = 0).
+        // Unity's Mathf.SmoothDamp divides by deltaTime in its overshoot clamp,
+        // which produces a NaN velocity when deltaTime is 0 and current == target,
+        // corrupting the scale with NaN on subsequent frames.
+        if (Time.deltaTime <= 0f) return;
+
         bounceTimer += Time.deltaTime;
 
         if (useCurve)
