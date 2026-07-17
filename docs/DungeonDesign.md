@@ -36,9 +36,9 @@ Drummi Dungeons is a **rhythm dungeon-crawler roguelike** — one gamemode withi
 - Room transitions are **phase-locked to bar seams**: music continues seamlessly, encounters swap at the bar boundary. `[Built]`
 - The first room of each floor uses the **3-phase start flow**: intro animation → time-zero music start → musical lead-in bars before the encounter begins. `[Built — leadInBars]`
 
-### Winning `[Planned]`
-- Reaching the end of the final floor (defeating its boss) **wins the run**.
-- Winning grants **exclusive unlocks unavailable anywhere else in the game**: cosmetics (future cosmetic system), content for other gamemodes (songs, instruments, skins), and potentially additional dungeon content.
+### Winning `[Built — basic flow]`
+- Reaching the end of the final floor (defeating its boss) **wins the run**. `[Built — completing the final room ends the run via GameManager.TriggerRunComplete(); placeholder "Run Complete!" title on the shared results screen. A dedicated victory screen is planned; the `_runWon` branch in GameManager.ShowResultsUI is the single swap point.]`
+- Winning grants **exclusive unlocks unavailable anywhere else in the game**: cosmetics (future cosmetic system), content for other gamemodes (songs, instruments, skins), and potentially additional dungeon content. `[Planned]`
 
 ### Losing `[Built — basic flow]`
 - HP reaching 0 ends the run immediately (death → results screen with score + floor reached).
@@ -66,30 +66,36 @@ Drummi Dungeons is a **rhythm dungeon-crawler roguelike** — one gamemode withi
 
 ---
 
-## 4. Effect System `[Planned — not implemented, no stubs]`
+## 4. Effect System `[Built — framework + first pool of 3]`
 
 The signature roguelike mechanic. "Upgrades" in the loose sense — most are **not beneficial**.
 
-### Pick flow
-- After every **~2 rooms** (cadence tunable), the player is presented with **3 effects** and **must pick exactly one**. No skipping.
-- The pick moment should be musical/diegetic where possible (occurs at a bar seam, presented in the world rather than a menu, TBD).
+### Pick flow `[Built — placeholder presentation]`
+- After every **2 rooms** (serialized cadence on DungeonRunner, global across floors), the player is presented with **3 effects** and **must pick exactly one**. No skipping.
+- Implementation: the pick defers the next room load between rooms — the encounter is already disarmed there, the floor BGM loops on untouched, and the next room starts at the first bar seam after the pick via the normal room-start path.
+- Offers are random from the pool, **excluding currently-active effects** (re-eligible after expiry). If the whole pool is active the pick is skipped.
+- Current presentation is a **placeholder card overlay**; the pick moment should eventually be musical/diegetic (presented in the world rather than a menu, TBD — see §10).
 
 ### Effect categories
 Primary categories for the initial pool:
 
 | Category | Examples (not final) |
 |---|---|
-| **Timing / difficulty** | Tighter hit windows · faster patterns · denser notes · no lead-in bars · shorter response windows in C&R |
-| **Visual sabotage** | Remove the slider and beat indicators · shrink/hide hit zones · periodic visual distractions · obscured telegraphs |
+| **Timing / difficulty** | Tighter hit windows `[Built]` · faster patterns · denser notes *(rejected — no clean density parameter; density is emergent from designer-set pattern durations)* · no lead-in bars *(rejected for the initial pool)* · shorter response windows in C&R *(covered — window multipliers apply to C&R echo grading automatically)* |
+| **Visual sabotage** | Hidden slider spawn markers `[Built]` · remove beat indicators · shrink/hide hit zones · periodic visual distractions · obscured telegraphs |
+
+**Current pool** (`ScriptableObjects/Effects/`): **Tight Timing** (run, windows ×0.75) · **Precision Freak** (3 rooms, windows ×0.6) · **Blind Slider** (3 rooms, slider spawn markers hidden). Window multipliers stack multiplicatively across active effects.
+
+**Architecture:** `EffectDefinition` SO (name/description/duration + modifier list) + `DungeonEffectsController` (run-scoped scene singleton). Systems **query the aggregate at point of use** (multipliers multiply, bools OR) — effects never write into other systems' state. Read-sites: DungeonEvaluator timing windows, DungeonVisualController spawn markers.
 
 Other categories (audio sabotage, run-structure manipulation like room-type frequency shifts) are candidates for later pool expansion — see §10.
 
-### Durations
+### Durations `[Built]`
 - **Mix of durations** is part of effect design:
   - Most effects are **permanent for the run**.
   - Some are **floor-scoped** (expire on floor transition).
-  - Some are **timed** (e.g. "for the next 3 rooms").
-- Duration is displayed on the pick card so the choice is informed.
+  - Some are **timed** ("for the next N rooms" — active for exactly N rooms starting with the next; ticked at room starts).
+- Duration is displayed on the pick card so the choice is informed. `[Built]`
 
 ### Effects and music stems
 - **Some effects carry a music stem**: picking them adds a new instrument/layer to the floor's looping track. Stems are a *flavor* of effect, not a universal rule.
@@ -119,6 +125,7 @@ Elite variant of combat exists as data (`EliteRoom`, `EnemyTier.Elite`) — hard
 
 ### Looping floor tracks `[Built — single track per floor]`
 - Each floor owns **one infinitely looping track** at a fixed BPM (`DungeonFloorDefinition.BgmTrackIndex` / `.Bpm`).
+- Looping relies on Unity's sample-accurate AudioSource loop — **clips must be exported bar-exact** (whole number of 4/4 bars at the floor BPM) or the loop drifts out of phase with the beat grid. Delve Bit (34 bars) and ComputerBoy (62 bars) are exact; **Boppy_110 is 41.25 bars and needs re-export**.
 - Rooms may override track/BPM via `-1` sentinel fields (`RoomDefinition.BgmTrackOverride` / `.BpmOverride`), swapped at the next bar seam. Override precedence: room → floor → current state. `[Built]`
 - Music starts at time-zero on floor entry and is never delayed; encounter logic is what waits (lead-in bars). `[Built]`
 
@@ -142,7 +149,7 @@ Two stacked curves:
    - Deeper floors = higher BPM, denser/more complex patterns, harder enemy tiers, harsher room distributions.
    - Baked into each floor's track and room list — predictable and learnable.
 
-2. **Effect-driven (emergent)** `[Planned]`
+2. **Effect-driven (emergent)** `[Built — first pool live]`
    - Mandatory effect picks accumulate, making each run harder in a player-influenced way.
    - By the final floor, the player is playing the hardest music **and** carrying a run's worth of debuffs.
 
@@ -170,20 +177,22 @@ Persistence system (save data for unlocks) does not exist yet.
 
 ## 9. Current Implementation State
 
-As of 2026-07-17 (verified against code, commit `0b36d6c`).
+As of 2026-07-17 (verified against code, commit `f800e03`).
 
 ### Scripts (Assets/Scripts/)
 | Script | Responsibility |
 |---|---|
-| `DungeonRunner` | Sequences the run (floors → rooms), aggregates score, routes win/loss |
+| `DungeonRunner` | Sequences the run (floors → rooms), aggregates score, routes win/loss, defers room loads for effect picks (`pickCadence`), drives effect lifecycle hooks |
+| `DungeonEffectsController` | Run-scoped active-effect holder; aggregate queries (window multiplier, marker hiding), NRooms/Floor expiry, pick offers |
+| `EffectPickOverlayController` | Placeholder 1-of-3 pick overlay (cards, no skip) under TransitionOverlayCanvas |
 | `DungeonModeController` | ModeController subclass; audio/timing across rooms, bar-seam continuity, BGM/BPM precedence, musical lead-in (`leadInBars`, `EncounterStartVirtualTime`, `PrepareLeadIn()` stub for floor transitions) |
 | `RoomController` | Per-room state machine (Entering → Playing → Evaluating → Exiting), routes C&R vs combat vs DirectionChoice, `introDuration` pre-clock intro |
 | `DungeonBeatManager` | 8-beat bar cycle, pattern generation, spawn audio scheduling, input-window gating, `EncounterActive` gating during lead-in |
-| `DungeonEvaluator` | Timing-window grading (Perfect/Good/Passable/Failed), scoring 200/100/50, two-strike score wipe, damage calc |
+| `DungeonEvaluator` | Timing-window grading (Perfect/Good/Passable/Failed), scoring 200/100/50, two-strike score wipe, damage calc; windows scaled by active effects |
 | `DungeonHealth` | Run-wide HP, `damagePerMiss` + `outOfWindowPenalty`, unimplemented `Regenerate()` stub |
 | `CallAndResponseController` / `CallPerformer` | C&R phrase clock, beat-snapped rounds, directional bounce visuals, pre-scheduled audio |
 | `DungeonInputReader` | Tap input, bar-start coyote buffer, EncounterActive gating |
-| `DungeonVisualController` | Enemy spawning, slider markers, hit/miss visuals |
+| `DungeonVisualController` | Enemy spawning, slider markers (suppressible by effects), hit/miss visuals |
 | `DungeonInputLayoutController` | ThreePad / TwoPad / SingleDrum rig switching |
 | `DungeonGameOverHandler` | Defers to DungeonRunner mid-run; otherwise GameManager.TriggerGameOver() |
 
@@ -191,12 +200,14 @@ As of 2026-07-17 (verified against code, commit `0b36d6c`).
 - `DungeonFloorDefinition`: BgmTrackIndex, Bpm, BackgroundSprite, ordered Rooms list
 - `RoomDefinition`: RoomType enum (CombatEncounter, DirectionChoice, CallAndResponse, CombatTwoPad), EnemyTier (Standard/Elite/Boss), BgmTrackOverride/BpmOverride (-1 sentinel), RoomLengthBars
 - Assets: `StandardRoom`, `EliteRoom`, `BossRoom`, `BongoRoom`; `Floor1`–`Floor3`
+- `EffectDefinition`: DisplayName, Description, Duration (Run/Floor/NRooms) + RoomCount, modifier list (TimingWindowMultiplier, HideSliderMarkers). Assets: `TightTiming`, `PrecisionFreak`, `BlindSlider`
 
 ### Not built yet
-- Effect/modifier system (no stubs exist)
-- Dynamic music stems
+- Dynamic music stems (incl. effect-linked stems)
+- Diegetic effect-pick presentation (placeholder card overlay exists)
 - Rest, event, empty/secret, and rhythm-puzzle room types
 - Boss encounters (asset/tier exist; no boss mechanics)
+- Dedicated victory screen (win reuses the results screen with a placeholder title)
 - Meta progression / unlock persistence
 - Cosmetic system
 - HP pickups / rest-room healing
@@ -206,7 +217,7 @@ As of 2026-07-17 (verified against code, commit `0b36d6c`).
 
 ## 10. Open Questions
 
-1. **Run length numbers** — exact floor count (3–5+?) and rooms per floor; effect-pick cadence (every 2 rooms is the working assumption).
+1. **Run length numbers** — exact floor count (3–5+?) and rooms per floor; effect-pick cadence (implemented as every 2 rooms, serialized and tunable).
 2. **Boss music** — full-stem climax of the floor loop vs. authored boss section vs. separate boss track at a bar seam.
 3. **Buff design** — the pool is mostly negative; what do positive/hybrid effects look like without violating the "skill is the only power" pillar within a run?
 4. **Additional effect categories** — audio sabotage, run-structure manipulation (room-type frequency, floor length) as pool expansions.
