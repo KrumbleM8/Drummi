@@ -227,10 +227,12 @@ public class DungeonModeController : ModeController
     /// it resets timing systems and schedules the music from scratch.
     /// On subsequent rooms the music continues uninterrupted and the new BeatManager
     /// session is aligned to the next bar boundary so patterns stay phase-locked.
-    /// If <see cref="RoomDefinition.OverrideBgm"/> is true the music is swapped at
-    /// the same seam point via <see cref="AudioManager.ScheduleTrackSwap"/>.
+    /// The track to play comes from <see cref="DungeonFloorDefinition.BgmTrackIndex"/>,
+    /// unless the room overrides it via <see cref="RoomDefinition.BgmTrackOverride"/>.
+    /// When the effective track differs from the one currently playing it is swapped
+    /// at the seam point via <see cref="AudioManager.ScheduleTrackSwap"/>.
     /// </summary>
-    public void StartRoom(RoomDefinition def)
+    public void StartRoom(RoomDefinition def, DungeonFloorDefinition floor)
     {
         if (def == null)
         {
@@ -238,7 +240,20 @@ public class DungeonModeController : ModeController
             return;
         }
 
-        int bpm = (beatManager?.metronome != null) ? (int)beatManager.metronome.bpm : 120;
+        // Room override wins when set (>= 0); otherwise the floor's BGM. Null floor
+        // (direct RoomController.LoadRoom call) keeps whatever is currently selected.
+        int effectiveTrack = def.HasBgmOverride
+            ? def.BgmTrackOverride
+            : (floor != null ? floor.BgmTrackIndex
+                             : (AudioManager.instance != null ? AudioManager.instance.selectedSongIndex : 0));
+
+        // BPM mirrors the track resolution: room override, else floor, else whatever
+        // the metronome is already running at. The grid must run at the playing
+        // track's tempo or gameplay drifts steadily out of sync with the music.
+        int currentBpm = (beatManager?.metronome != null) ? (int)beatManager.metronome.bpm : 120;
+        int effectiveBpm = def.HasBpmOverride
+            ? def.BpmOverride
+            : (floor != null && floor.Bpm > 0 ? floor.Bpm : currentBpm);
         _pendingPatternDurations = def.PatternDurations;
         _pendingAllowedTypes     = def.RoomType == RoomType.CombatTwoPad
             ? new[] { DungeonEnemyType.Left, DungeonEnemyType.Right }
@@ -250,7 +265,7 @@ public class DungeonModeController : ModeController
 
             // ── First room: full reset, schedule music fresh ─────────────────
             if (AudioManager.instance != null)
-                AudioManager.instance.selectedSongIndex = def.BgmTrackIndex;
+                AudioManager.instance.selectedSongIndex = effectiveTrack;
 
             GameClock.Instance?.Reset();
             AudioManager.instance?.ResetState();
@@ -264,30 +279,33 @@ public class DungeonModeController : ModeController
             _sessionStartVirtualTime = virtualStartTime;
             LastRoomSeamVirtualTime  = virtualStartTime;
 
-            double leadInBarDuration  = GameConstants.BEATS_PER_LOOP * (60.0 / bpm);
+            double leadInBarDuration  = GameConstants.BEATS_PER_LOOP * (60.0 / effectiveBpm);
             EncounterStartVirtualTime = _sessionStartVirtualTime + leadInBars * leadInBarDuration;
             _pendingLeadInBars        = leadInBars;
 
             if (beatManager?.metronome != null)
             {
+                // Set BPM before InitializeWithStartTime — it recomputes timePerTick from bpm.
+                beatManager.metronome.bpm = effectiveBpm;
                 beatManager.metronome.InitializeWithStartTime(virtualStartTime);
                 beatManager.metronome.enabled = true;
             }
 
-            int totalBeats = CalculateTotalBeats(bpm);
-            TimingCoordinator.Instance?.Initialize(virtualStartTime, bpm, totalBeats, BarsBeforeEndForFinalBar);
+            int totalBeats = CalculateTotalBeats(effectiveBpm);
+            TimingCoordinator.Instance?.Initialize(virtualStartTime, effectiveBpm, totalBeats, BarsBeforeEndForFinalBar);
 
             // StartMode will call ScheduleMusic normally (flag is false).
-            StartMode(bpm, virtualStartTime, baseStartTime);
+            StartMode(effectiveBpm, virtualStartTime, baseStartTime);
 
-            Debug.Log($"[DungeonModeController] StartRoom (first) — Room: '{def.RoomName}', BPM: {bpm}");
+            Debug.Log($"[DungeonModeController] StartRoom (first) — Room: '{def.RoomName}', BPM: {effectiveBpm}");
         }
         else
         {
             // ── Subsequent room: keep GameClock + music running ───────────────
             // Find the next bar boundary in virtual time so patterns stay
-            // phase-aligned to the already-playing music.
-            double beatDuration = 60.0 / bpm;
+            // phase-aligned to the already-playing music. The seam is computed on
+            // the CURRENT grid (currentBpm) — the new BPM only applies from the seam.
+            double beatDuration = 60.0 / currentBpm;
             double barDuration  = GameConstants.BEATS_PER_LOOP * beatDuration;
 
             double currentVirtual = GameClock.Instance != null ? GameClock.Instance.GameTime : 0.0;
@@ -312,15 +330,24 @@ public class DungeonModeController : ModeController
                 ? GameClock.Instance.VirtualToRealDsp(seamVirtual)
                 : AudioSettings.dspTime + barDuration;
 
-            if (def.OverrideBgm)
+            // Swap when the effective track (room override, else floor BGM) differs
+            // from what's currently playing — covers both room overrides and floor
+            // transitions. Same track = music plays through uninterrupted.
+            if (AudioManager.instance != null && effectiveTrack != AudioManager.instance.selectedSongIndex)
             {
-                // Swap to a different track right on the bar boundary.
-                AudioManager.instance?.ScheduleTrackSwap(def.BgmTrackIndex, seamDsp);
+                AudioManager.instance.ScheduleTrackSwap(effectiveTrack, seamDsp);
             }
-            // else: music plays through — no audio changes needed.
+
+            // Tempo change: the bar grid before the seam ran at currentBpm; from the
+            // seam onward it runs at effectiveBpm. Re-anchor the session start to the
+            // seam so future bar-boundary math uses the new grid.
+            if (effectiveBpm != currentBpm)
+                _sessionStartVirtualTime = seamVirtual;
 
             if (beatManager?.metronome != null)
             {
+                // Set BPM before InitializeWithStartTime — it recomputes timePerTick from bpm.
+                beatManager.metronome.bpm = effectiveBpm;
                 beatManager.metronome.InitializeWithStartTime(seamVirtual);
                 beatManager.metronome.enabled = true;
             }
@@ -329,14 +356,14 @@ public class DungeonModeController : ModeController
             // override rooms (where the new clip's duration is meaningful).
             int totalBeats = def.RoomLengthBars > 0
                 ? def.RoomLengthBars * GameConstants.BEATS_PER_LOOP
-                : CalculateTotalBeats(bpm);
-            TimingCoordinator.Instance?.Initialize(seamVirtual, bpm, totalBeats, BarsBeforeEndForFinalBar);
+                : CalculateTotalBeats(effectiveBpm);
+            TimingCoordinator.Instance?.Initialize(seamVirtual, effectiveBpm, totalBeats, BarsBeforeEndForFinalBar);
 
             LastRoomSeamVirtualTime = seamVirtual;
 
             // Use _pendingLeadInBars if PrepareLeadIn() was called (floor transition),
             // otherwise 0 (standard subsequent room — no lead-in).
-            double encBarDuration     = GameConstants.BEATS_PER_LOOP * (60.0 / bpm);
+            double encBarDuration     = GameConstants.BEATS_PER_LOOP * (60.0 / effectiveBpm);
             EncounterStartVirtualTime = seamVirtual + _pendingLeadInBars * encBarDuration;
             // _pendingLeadInBars is left as-is here; StartMode() clears it after passing it to Initialize().
 
@@ -344,9 +371,9 @@ public class DungeonModeController : ModeController
             // Also skip the grace period so enemies appear immediately.
             _suppressMusicSchedule = true;
             _skipGracePeriod       = true;
-            StartMode(bpm, seamVirtual, seamDsp);
+            StartMode(effectiveBpm, seamVirtual, seamDsp);
 
-            Debug.Log($"[DungeonModeController] StartRoom (continuing) — Room: '{def.RoomName}', seam virtual: {seamVirtual:F4}, override: {def.OverrideBgm}");
+            Debug.Log($"[DungeonModeController] StartRoom (continuing) — Room: '{def.RoomName}', seam virtual: {seamVirtual:F4}, track: {effectiveTrack}, BPM: {effectiveBpm}");
         }
     }
 
@@ -357,10 +384,10 @@ public class DungeonModeController : ModeController
     /// After this call, read <see cref="LastRoomSeamVirtualTime"/> to get the
     /// beat-boundary start time for the room's own encounter controller.
     /// </summary>
-    public void StartRoomAudioVisual(RoomDefinition def)
+    public void StartRoomAudioVisual(RoomDefinition def, DungeonFloorDefinition floor)
     {
         _suppressBeatManager = true;
-        StartRoom(def);
+        StartRoom(def, floor);
         // Initialize() resets SuppressBarSlider to false; set it here after that returns
         // so the bar slider does not activate during C&R rooms.
         if (visualController != null)

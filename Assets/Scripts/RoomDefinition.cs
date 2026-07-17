@@ -19,9 +19,6 @@ public class RoomDefinition : ScriptableObject
     [Tooltip("Pattern durations passed to DungeonBeatManager — overrides the default { 1f, 0.5f }. Leave empty to use defaults.")]
     [SerializeField] private float[] patternDurations;
 
-    [Tooltip("Index into AudioManager.musicTracks to play for this room.")]
-    [SerializeField] private int bgmTrackIndex;
-
     [Header("Visuals")]
     [Tooltip("Background sprite swapped in when this room is entered.")]
     [SerializeField] private Sprite backgroundSprite;
@@ -48,8 +45,11 @@ public class RoomDefinition : ScriptableObject
     [SerializeField] private InputLayoutType inputLayout = InputLayoutType.ThreePad;
 
     [Header("BGM Override")]
-    [Tooltip("If true, this room switches to BgmTrackIndex when entered. If false, the current music continues uninterrupted.")]
-    [SerializeField] private bool overrideBgm;
+    [Tooltip("Index into AudioManager.musicTracks. -1 = no override (the floor's BGM plays). >= 0 swaps to this track when the room is entered.")]
+    [SerializeField] private int bgmTrackOverride = -1;
+
+    [Tooltip("Tempo of the override track. -1 = no override (the floor's BPM applies). Set alongside BgmTrackOverride when the override track's tempo differs from the floor's, otherwise the beat grid desyncs from the music.")]
+    [SerializeField] private int bpmOverride = -1;
 
     [Tooltip("Room length in bars. Used when music is continuous so the room ends at the right time rather than relying on clip length. 0 = derive from clip length (first room or override rooms).")]
     [SerializeField] private int roomLengthBars;
@@ -69,9 +69,6 @@ public class RoomDefinition : ScriptableObject
     public float[] PatternDurations => (patternDurations != null && patternDurations.Length > 0)
         ? patternDurations
         : null;
-
-    /// <summary>AudioManager.musicTracks index for this room's BGM.</summary>
-    public int BgmTrackIndex => bgmTrackIndex;
 
     /// <summary>Background sprite to display while this room is active. May be null.</summary>
     public Sprite BackgroundSprite => backgroundSprite;
@@ -97,16 +94,25 @@ public class RoomDefinition : ScriptableObject
     /// </summary>
     public CallResponseInputMode CallResponseMode => callResponseInputMode;
 
+    /// <summary>Track index this room overrides the floor BGM with, or -1 for no override.</summary>
+    public int BgmTrackOverride => bgmTrackOverride;
+
     /// <summary>
-    /// When true, this room overrides the current BGM track with <see cref="BgmTrackIndex"/>
-    /// at the next bar boundary. When false, the current music plays through uninterrupted.
+    /// True when this room overrides the floor BGM with <see cref="BgmTrackOverride"/>
+    /// at the next bar boundary. False = the floor's BGM plays.
     /// </summary>
-    public bool OverrideBgm => overrideBgm;
+    public bool HasBgmOverride => bgmTrackOverride >= 0;
+
+    /// <summary>Tempo the beat grid runs at while this room's override track plays, or -1 for no override.</summary>
+    public int BpmOverride => bpmOverride;
+
+    /// <summary>True when this room overrides the floor BPM with <see cref="BpmOverride"/>.</summary>
+    public bool HasBpmOverride => bpmOverride > 0;
 
     /// <summary>
     /// Room length in bars. When non-zero, used instead of clip length to determine
     /// how many beats the combat encounter lasts. Required for rooms that do not
-    /// restart the music (OverrideBgm = false) so the room ends at the right time.
+    /// restart the music (no BGM override) so the room ends at the right time.
     /// </summary>
     public int RoomLengthBars => roomLengthBars;
 

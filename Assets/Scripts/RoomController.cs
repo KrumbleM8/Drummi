@@ -155,7 +155,7 @@ public class RoomController : MonoBehaviour
                     // visual init, timing/metronome) but with DungeonBeatManager suppressed so
                     // standard enemies don't spawn. C&R drives its own encounter loop.
                     if (doorsUI != null) doorsUI.SetActive(false);
-                    modeController.StartRoomAudioVisual(_currentDef);
+                    modeController.StartRoomAudioVisual(_currentDef, _currentFloor);
                     if (callAndResponseController != null)
                     {
                         // Pass the seam time that StartRoomAudioVisual computed so the C&R
@@ -179,7 +179,7 @@ public class RoomController : MonoBehaviour
                     // Standard combat encounter: hide doors, wire events, start the mode.
                     if (doorsUI != null) doorsUI.SetActive(false);
                     SubscribeEvents();
-                    modeController.StartRoom(_currentDef);
+                    modeController.StartRoom(_currentDef, _currentFloor);
                 }
                 break;
 

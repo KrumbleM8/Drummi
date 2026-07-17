@@ -16,6 +16,13 @@ public class DungeonFloorDefinition : ScriptableObject
     [Tooltip("Zero-based index used by DungeonRunner to order floors.")]
     [SerializeField] private int floorIndex;
 
+    [Header("Music")]
+    [Tooltip("Index into AudioManager.musicTracks played for this floor. Rooms may override via RoomDefinition.BgmTrackOverride.")]
+    [SerializeField] private int bgmTrackIndex;
+
+    [Tooltip("Tempo of this floor's BGM track. The dungeon beat grid runs at this BPM while the floor's track plays. 0 = keep the metronome's current BPM.")]
+    [SerializeField] private int bpm;
+
     [Header("Visuals")]
     [Tooltip("Default background sprite used for all rooms on this floor. Overridden per-room by RoomDefinition.BackgroundSprite when non-null.")]
     [SerializeField] private Sprite backgroundSprite;
@@ -31,6 +38,12 @@ public class DungeonFloorDefinition : ScriptableObject
 
     /// <summary>Zero-based floor index used by DungeonRunner.</summary>
     public int FloorIndex => floorIndex;
+
+    /// <summary>AudioManager.musicTracks index played for this floor unless a room overrides it.</summary>
+    public int BgmTrackIndex => bgmTrackIndex;
+
+    /// <summary>Tempo of this floor's BGM track. 0 = keep the metronome's current BPM.</summary>
+    public int Bpm => bpm;
 
     /// <summary>Default background sprite for this floor. Individual rooms may override this.</summary>
     public Sprite BackgroundSprite => backgroundSprite;
