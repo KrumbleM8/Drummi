@@ -4,6 +4,10 @@ using UnityEngine.UI;
 
 public class ScoreScreen : MonoBehaviour
 {
+    [Header("Result Title")]
+    [Tooltip("Optional. Shown when a dungeon run is won ('Run Complete!'), hidden otherwise. Placeholder until a dedicated victory screen exists.")]
+    public TMP_Text titleText;
+
     [Header("Score Display")]
     public TMP_Text finalScoreText;
     public TMP_Text perfectHitsText;
@@ -79,6 +83,18 @@ public class ScoreScreen : MonoBehaviour
         UpdateGradeDisplay(score);
 
         Debug.Log($"[ScoreScreen] Displaying - Score: {score}, Perfect Hits: {perfectHits}, Rooms Cleared: {roomsCleared}, New High Score: {isNewHighScore}");
+    }
+
+    /// <summary>
+    /// Shows <paramref name="title"/> above the results, or hides the title when
+    /// null/empty. Called by GameManager with "Run Complete!" on a dungeon win.
+    /// </summary>
+    public void SetResultTitle(string title)
+    {
+        if (titleText == null) return;
+        bool show = !string.IsNullOrEmpty(title);
+        titleText.gameObject.SetActive(show);
+        if (show) titleText.text = title;
     }
 
     private void SetScoreImmediate()

@@ -20,9 +20,6 @@ public class DungeonRunner : MonoBehaviour
     [SerializeField] private RoomController            roomController;
     [SerializeField] private DungeonModeController    modeController;
     [SerializeField] private List<DungeonFloorDefinition> floors;
-    [SerializeField] private UIMenuManager            uiMenuManager;
-    [SerializeField] private string                   runCompletePageName = "RunComplete";
-    [SerializeField] private string                   gameOverPageName    = "GameOver";
 
     // ── Public Events ─────────────────────────────────────────────────────────
 
@@ -146,7 +143,11 @@ public class DungeonRunner : MonoBehaviour
                 _runActive = false;
                 Debug.Log($"[DungeonRunner] Run complete — {_currentFloorIndex} floors cleared, score {runScore}");
                 OnRunComplete?.Invoke(_currentFloorIndex, runScore);
-                uiMenuManager?.ShowPage(runCompletePageName);
+                // Route through the shared results sequence (music stop, metronome off,
+                // screen cover/reveal, populated score screen). Win presentation lives
+                // behind GameManager.TriggerRunComplete — swap in a dedicated victory
+                // screen there later without touching run sequencing.
+                GameManager.instance?.TriggerRunComplete();
                 return;
             }
 

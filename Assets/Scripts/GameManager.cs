@@ -336,8 +336,34 @@ public class GameManager : MonoBehaviour
             Debug.LogWarning("[GameManager] TriggerGameOver called but already showing results.");
             return;
         }
+        _runWon = false;
         currentPhase = GamePhase.ShowingResults;
         Debug.Log("[GameManager] TriggerGameOver — starting results sequence immediately.");
+        StartCoroutine(ShowResultsSequence());
+    }
+
+    // True when the current results sequence is a dungeon run victory.
+    // Read by ShowResultsUI — the single seam for win presentation.
+    private bool _runWon;
+
+    /// <summary>
+    /// Ends a dungeon run as a victory. Called by DungeonRunner when the final room
+    /// of the final floor completes. Runs the same results sequence as a loss
+    /// (cleanup, music stop, score display) with placeholder win presentation.
+    /// FUTURE: to give wins a dedicated screen, branch on <see cref="_runWon"/> in
+    /// ShowResultsUI (or replace the sequence here) — run sequencing and cleanup
+    /// stay identical either way.
+    /// </summary>
+    public void TriggerRunComplete()
+    {
+        if (currentPhase == GamePhase.ShowingResults)
+        {
+            Debug.LogWarning("[GameManager] TriggerRunComplete called but already showing results.");
+            return;
+        }
+        _runWon = true;
+        currentPhase = GamePhase.ShowingResults;
+        Debug.Log("[GameManager] TriggerRunComplete — run won, starting results sequence.");
         StartCoroutine(ShowResultsSequence());
     }
 
@@ -357,6 +383,7 @@ public class GameManager : MonoBehaviour
             return;
         }
 
+        _runWon = false;
         currentPhase = GamePhase.ShowingResults;
         Debug.Log($"[GameManager] Mode '{_activeMode.ModeId}' complete — transitioning to results.");
         StartCoroutine(ShowResultsSequence());
@@ -422,7 +449,10 @@ public class GameManager : MonoBehaviour
         {
             int roomsCleared = dungeonRunner != null ? dungeonRunner.RoomsCleared : 0;
             scoreScreen.DisplayScore(score, perfectHits, isNewHighScore, roomsCleared);
-            Debug.Log($"[GameManager] Score displayed: {score}");
+            // Win presentation seam: placeholder title on the shared Score page.
+            // Swap this for a dedicated victory screen when one exists.
+            scoreScreen.SetResultTitle(_runWon ? "Run Complete!" : null);
+            Debug.Log($"[GameManager] Score displayed: {score} (runWon: {_runWon})");
         }
         else
         {
