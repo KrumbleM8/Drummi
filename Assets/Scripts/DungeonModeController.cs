@@ -470,7 +470,7 @@ public class DungeonModeController : ModeController
             return;
         }
         AudioManager.instance.scheduledStartTime = realDspStartTime;
-        AudioManager.instance.PlayMusic();
+        AudioManager.instance.PlayMusic(loop: true);
         Debug.Log($"[DungeonModeController] Music scheduled at DSP: {realDspStartTime:F4}");
     }
 

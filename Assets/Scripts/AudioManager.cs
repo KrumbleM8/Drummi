@@ -87,10 +87,12 @@ public class AudioManager : MonoBehaviour
     }
 
     // Schedule the music to start playing at the (adjusted) scheduled time.
-    public void PlayMusic()
+    // loop=true is used by dungeon floor BGM, which relies on Unity's sample-accurate
+    // looping with bar-exact clips; song modes (Bongo) keep the default one-shot behavior.
+    public void PlayMusic(bool loop = false)
     {
         speakers[0].clip = musicTracks[selectedSongIndex];
-        speakers[0].loop = false;
+        speakers[0].loop = loop;
         // Adjust the scheduled start time by any accumulated pause duration.
         double adjustedStartTime = scheduledStartTime + accumulatedPauseDuration;
         speakers[0].PlayScheduled(adjustedStartTime);
@@ -206,18 +208,22 @@ public class AudioManager : MonoBehaviour
 
     /// <summary>
     /// Stops the current music source and schedules a new track to begin at
-    /// <paramref name="realDspSeamTime"/> (a real DSP timestamp, not virtual).
-    /// Call this for special rooms that override the BGM mid-run.
-    /// Pause offset is applied automatically so the swap stays aligned after any pauses.
+    /// <paramref name="realDspSeamTime"/>. Call this for special rooms that
+    /// override the BGM mid-run.
+    /// <paramref name="realDspSeamTime"/> must be a fully pause-corrected real DSP
+    /// timestamp (i.e. from GameClock.VirtualToRealDsp) — no pause offset is added
+    /// here, or the swap would land late by the total pause time and desync the
+    /// music from the beat grid.
     /// </summary>
     public void ScheduleTrackSwap(int trackIndex, double realDspSeamTime)
     {
         speakers[0].Stop();
         selectedSongIndex = trackIndex;
         speakers[0].clip = musicTracks[trackIndex];
-        speakers[0].loop = false;
-        speakers[0].PlayScheduled(realDspSeamTime + accumulatedPauseDuration);
-        Debug.Log($"[AudioManager] Track swap — index {trackIndex} scheduled at DSP {realDspSeamTime + accumulatedPauseDuration:F4}");
+        // Dungeon-only path — floor/override BGM loops until the next seam swap.
+        speakers[0].loop = true;
+        speakers[0].PlayScheduled(realDspSeamTime);
+        Debug.Log($"[AudioManager] Track swap — index {trackIndex} scheduled at DSP {realDspSeamTime:F4}");
     }
 
     public void ResetState()
