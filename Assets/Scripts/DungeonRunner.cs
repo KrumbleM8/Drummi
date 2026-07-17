@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using KrumbleHut.Drummi.Dungeons;
 using UnityEngine;
 
 /// <summary>
@@ -20,6 +21,19 @@ public class DungeonRunner : MonoBehaviour
     [SerializeField] private RoomController            roomController;
     [SerializeField] private DungeonModeController    modeController;
     [SerializeField] private List<DungeonFloorDefinition> floors;
+
+    [Header("Effects")]
+    [Tooltip("Run-effect state holder. Optional — runs work without the effect system.")]
+    [SerializeField] private DungeonEffectsController effectsController;
+
+    [Tooltip("Pick overlay shown between rooms. Optional — no overlay means no picks.")]
+    [SerializeField] private EffectPickOverlayController pickOverlay;
+
+    [Tooltip("A pick is offered after every Nth completed room (global across floors).")]
+    [SerializeField] private int pickCadence = 2;
+
+    [Tooltip("Number of effects offered per pick.")]
+    [SerializeField] private int pickOfferSize = 3;
 
     // ── Public Events ─────────────────────────────────────────────────────────
 
@@ -60,6 +74,7 @@ public class DungeonRunner : MonoBehaviour
         // Reset score and health exactly once at run start.
         // StartMode (called per-room) no longer resets them so they persist across rooms.
         modeController?.ResetToInitialState();
+        effectsController?.ResetForRun();
 
         Debug.Log("[DungeonRunner] Run started");
         LoadNextRoom();
@@ -92,6 +107,9 @@ public class DungeonRunner : MonoBehaviour
 
         var room = floor.Rooms[_currentRoomIndex];
         Debug.Log($"[DungeonRunner] Loading floor '{floor.FloorName}' room {_currentRoomIndex} — '{room?.RoomName}'");
+
+        // Room-start seam for effect lifetimes: NRooms effects tick down here.
+        effectsController?.NotifyRoomStarted();
 
         roomController.OnRoomComplete    += HandleRoomComplete;
         roomController.OnDirectionChosen += HandleDirectionChosen;
@@ -152,8 +170,33 @@ public class DungeonRunner : MonoBehaviour
             }
 
             Debug.Log($"[DungeonRunner] Advancing to floor {_currentFloorIndex}");
+            effectsController?.NotifyFloorAdvanced();
         }
 
+        // Effect pick: after every Nth completed room, defer the next room until the
+        // player picks. Between rooms the encounter is already disarmed
+        // (DungeonBeatManager sets EncounterActive=false at room end) and the floor
+        // BGM loops on untouched — input re-arms only via the room-start path, and
+        // the next room's bar seam is computed after the pick, inside StartRoom.
+        if (effectsController != null && pickOverlay != null
+            && pickCadence > 0 && _roomsCleared % pickCadence == 0)
+        {
+            var offer = effectsController.GetOffer(pickOfferSize);
+            if (offer.Count > 0)
+            {
+                Debug.Log($"[DungeonRunner] Effect pick — offering {offer.Count} effect(s)");
+                pickOverlay.Show(offer, HandleEffectPicked);
+                return;
+            }
+            // Empty offer (whole pool active) — skip the pick phase entirely.
+        }
+
+        LoadNextRoom();
+    }
+
+    private void HandleEffectPicked(EffectDefinition effect)
+    {
+        effectsController?.ApplyEffect(effect);
         LoadNextRoom();
     }
 }

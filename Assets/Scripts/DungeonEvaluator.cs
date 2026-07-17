@@ -41,8 +41,16 @@ public class DungeonEvaluator : MonoBehaviour
     private const string HIGH_SCORE_KEY = "DungeonHS";
     private int _previousHighScore;
 
-    private float PerfectThreshold => (float)(60.0 / metronome.bpm) * perfectFraction;
-    private float GoodThreshold    => (float)(60.0 / metronome.bpm) * goodFraction;
+    // Active-effect scale (e.g. Tight Timing ×0.75). Computed fresh per read like the
+    // BPM term, so effects apply/expire mid-run without any cache invalidation.
+    // Null instance (non-dungeon scenes, no effect system in scene) = unmodified.
+    private static float EffectWindowScale =>
+        KrumbleHut.Drummi.Dungeons.DungeonEffectsController.Instance != null
+            ? KrumbleHut.Drummi.Dungeons.DungeonEffectsController.Instance.TimingWindowMultiplier
+            : 1f;
+
+    private float PerfectThreshold => (float)(60.0 / metronome.bpm) * perfectFraction * EffectWindowScale;
+    private float GoodThreshold    => (float)(60.0 / metronome.bpm) * goodFraction    * EffectWindowScale;
     #endregion
 
     #region Lifecycle

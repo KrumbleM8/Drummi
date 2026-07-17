@@ -366,11 +366,22 @@ public class DungeonVisualController : MonoBehaviour
     {
         if (spawnIndicatorPrefab == null || indicatorParent == null) return;
 
-        var   go    = Instantiate(spawnIndicatorPrefab, indicatorParent);
         Color color = GetColor(type);
-        if (go.TryGetComponent(out Image img)) img.color = color;
-        if (go.TryGetComponent(out RectTransform rt))
-            rt.anchoredPosition = new Vector2(GetCurrentSliderX(), 0f);
+
+        // Blind Slider effect: suppress only the slider spawn marker. The enemy
+        // visual, timing objects, audio and scoring are untouched — a null marker
+        // is safe (PairedIndicator is held but never dereferenced).
+        bool hideMarker = KrumbleHut.Drummi.Dungeons.DungeonEffectsController.Instance != null
+            && KrumbleHut.Drummi.Dungeons.DungeonEffectsController.Instance.HideSliderMarkers;
+
+        GameObject go = null;
+        if (!hideMarker)
+        {
+            go = Instantiate(spawnIndicatorPrefab, indicatorParent);
+            if (go.TryGetComponent(out Image img)) img.color = color;
+            if (go.TryGetComponent(out RectTransform rt))
+                rt.anchoredPosition = new Vector2(GetCurrentSliderX(), 0f);
+        }
 
         SpawnEnemyVisual(spawnX, color, type, beat, go);
     }
