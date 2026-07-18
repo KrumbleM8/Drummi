@@ -2218,6 +2218,7 @@ GameObject:
   - component: {fileID: 420535644}
   - component: {fileID: 420535646}
   - component: {fileID: 420535647}
+  - component: {fileID: 420535648}
   m_Layer: 5
   m_Name: R_Input
   m_TagString: Untagged
@@ -2341,6 +2342,18 @@ MonoBehaviour:
     m_PreInfinity: 2
     m_PostInfinity: 2
     m_RotationOrder: 4
+--- !u!225 &420535648
+CanvasGroup:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 420535642}
+  m_Enabled: 1
+  m_Alpha: 1
+  m_Interactable: 1
+  m_BlocksRaycasts: 1
+  m_IgnoreParentGroups: 0
 --- !u!1 &450148780
 GameObject:
   m_ObjectHideFlags: 0
@@ -2542,7 +2555,6 @@ MonoBehaviour:
   visualController: {fileID: 482265708}
   health: {fileID: 482265714}
   barStartInputBufferSeconds: 0.125
-  allowInput: 0
 --- !u!114 &482265710
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -3185,6 +3197,7 @@ GameObject:
   - component: {fileID: 586673988}
   - component: {fileID: 586673990}
   - component: {fileID: 586673991}
+  - component: {fileID: 586673992}
   m_Layer: 5
   m_Name: L_Input
   m_TagString: Untagged
@@ -3308,6 +3321,18 @@ MonoBehaviour:
     m_PreInfinity: 2
     m_PostInfinity: 2
     m_RotationOrder: 4
+--- !u!225 &586673992
+CanvasGroup:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 586673986}
+  m_Enabled: 1
+  m_Alpha: 1
+  m_Interactable: 1
+  m_BlocksRaycasts: 1
+  m_IgnoreParentGroups: 0
 --- !u!1 &611587798
 GameObject:
   m_ObjectHideFlags: 0
@@ -5945,6 +5970,7 @@ GameObject:
   - component: {fileID: 1173594283}
   - component: {fileID: 1173594285}
   - component: {fileID: 1173594286}
+  - component: {fileID: 1173594287}
   m_Layer: 5
   m_Name: M_Input
   m_TagString: Untagged
@@ -6068,6 +6094,18 @@ MonoBehaviour:
     m_PreInfinity: 2
     m_PostInfinity: 2
     m_RotationOrder: 4
+--- !u!225 &1173594287
+CanvasGroup:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1173594281}
+  m_Enabled: 1
+  m_Alpha: 1
+  m_Interactable: 1
+  m_BlocksRaycasts: 1
+  m_IgnoreParentGroups: 0
 --- !u!1 &1177909641
 GameObject:
   m_ObjectHideFlags: 0
@@ -8414,6 +8452,7 @@ GameObject:
   - component: {fileID: 1569760097}
   - component: {fileID: 1569760099}
   - component: {fileID: 1569760098}
+  - component: {fileID: 1569760100}
   m_Layer: 0
   m_Name: BongoImage
   m_TagString: Untagged
@@ -8478,6 +8517,18 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1569760096}
   m_CullTransparentMesh: 1
+--- !u!225 &1569760100
+CanvasGroup:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1569760096}
+  m_Enabled: 1
+  m_Alpha: 1
+  m_Interactable: 1
+  m_BlocksRaycasts: 1
+  m_IgnoreParentGroups: 0
 --- !u!1 &1592039686
 GameObject:
   m_ObjectHideFlags: 0
@@ -10545,6 +10596,7 @@ GameObject:
   - component: {fileID: 2008353638}
   - component: {fileID: 2008353639}
   - component: {fileID: 2008353640}
+  - component: {fileID: 2008353641}
   m_Layer: 0
   m_Name: RoguelikeLayer
   m_TagString: Untagged
@@ -10715,6 +10767,7 @@ MonoBehaviour:
   singleDrumPad: {fileID: 857162168}
   drumPadTouch: {fileID: 2132122695}
   transitionDuration: 0.2
+  stateVisual: {fileID: 2008353641}
 --- !u!114 &2008353640
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -10731,6 +10784,44 @@ MonoBehaviour:
   - {fileID: 11400000, guid: 0eb40d04a3c0fe54c93aa09380138823, type: 2}
   - {fileID: 11400000, guid: f4ae5df188dbf5041a7502c1224e10f1, type: 2}
   - {fileID: 11400000, guid: 8147e13b84af0f84d9d176496a96d1e2, type: 2}
+--- !u!114 &2008353641
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2008353634}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e68ad3992ead8bd418a24eec80ff49fd, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  inputReader: {fileID: 482265709}
+  bongoInputReader: {fileID: 0}
+  padGroups:
+  - {fileID: 586673992}
+  - {fileID: 1173594287}
+  - {fileID: 420535648}
+  - {fileID: 1569760100}
+  - {fileID: 2107792716}
+  bounceOnBeats:
+  - {fileID: 586673991}
+  - {fileID: 1173594286}
+  - {fileID: 420535647}
+  - {fileID: 2107792712}
+  padBounceFeedbacks:
+  - {fileID: 586673990}
+  - {fileID: 1173594285}
+  - {fileID: 420535646}
+  - {fileID: 2107792715}
+  directScaleTargets:
+  - {fileID: 1569760097}
+  disabledScale: 0.85
+  disabledAlpha: 0.5
+  enableDuration: 0.3
+  enableLeadTime: 0.3
+  disableDuration: 0.2
+  ease: 6
 --- !u!1 &2021093514
 GameObject:
   m_ObjectHideFlags: 0
@@ -11214,6 +11305,7 @@ GameObject:
   - component: {fileID: 2107792713}
   - component: {fileID: 2107792712}
   - component: {fileID: 2107792715}
+  - component: {fileID: 2107792716}
   m_Layer: 0
   m_Name: SingleDrumPad
   m_TagString: Untagged
@@ -11336,6 +11428,18 @@ MonoBehaviour:
   scaleMultiplier: 1.2
   timeScaleUp: 0.09
   timeScaleDown: 0.1
+--- !u!225 &2107792716
+CanvasGroup:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2107792710}
+  m_Enabled: 1
+  m_Alpha: 1
+  m_Interactable: 1
+  m_BlocksRaycasts: 1
+  m_IgnoreParentGroups: 0
 --- !u!1 &2120058135
 GameObject:
   m_ObjectHideFlags: 0

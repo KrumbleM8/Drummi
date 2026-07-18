@@ -1396,6 +1396,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 84e61028181e0714ca6720d8a36e9d9f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  titleText: {fileID: 0}
   finalScoreText: {fileID: 542138465}
   perfectHitsText: {fileID: 546511817}
   highScoreText: {fileID: 1000381962}
@@ -4638,6 +4639,7 @@ GameObject:
   - component: {fileID: 891851652}
   - component: {fileID: 891851654}
   - component: {fileID: 891851655}
+  - component: {fileID: 891851656}
   m_Layer: 0
   m_Name: GameManager
   m_TagString: Untagged
@@ -4753,7 +4755,6 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   drumPadTouch: {fileID: 1196828593}
-  allowInput: 1
   metronome: {fileID: 1433809952}
   playerInputVisualScheduler: {fileID: 891851649}
   beatEvaluator: {fileID: 891851647}
@@ -4919,6 +4920,34 @@ MonoBehaviour:
   visualScheduler: {fileID: 891851645}
   playerInputVisual: {fileID: 891851649}
   barsBeforeEndForFinalBar: 1
+--- !u!114 &891851656
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 891851642}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e68ad3992ead8bd418a24eec80ff49fd, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  inputReader: {fileID: 0}
+  bongoInputReader: {fileID: 891851646}
+  padGroups:
+  - {fileID: 1958032453}
+  - {fileID: 1670835262}
+  bounceOnBeats: []
+  padBounceFeedbacks: []
+  directScaleTargets:
+  - {fileID: 1958032450}
+  - {fileID: 1670835259}
+  disabledScale: 0.85
+  disabledAlpha: 0.5
+  enableDuration: 0.3
+  enableLeadTime: 0.3
+  disableDuration: 0.2
+  ease: 6
 --- !u!224 &897368736 stripped
 RectTransform:
   m_CorrespondingSourceObject: {fileID: 2040462333756127397, guid: 09a82d829ba59174cac0e9f9b91043b3, type: 3}
@@ -9736,28 +9765,28 @@ MonoBehaviour:
   - pageName: Main
     pageTransform: {fileID: 686828141}
     onScreenPosition: {x: 0, y: 0}
-    offScreenLeftPosition: {x: -1136, y: 0}
-    offScreenRightPosition: {x: 1136, y: 0}
+    offScreenLeftPosition: {x: -655.76, y: 0}
+    offScreenRightPosition: {x: 655.76, y: 0}
   - pageName: Song
     pageTransform: {fileID: 498961237}
     onScreenPosition: {x: 0, y: 0}
-    offScreenLeftPosition: {x: -1136, y: 0}
-    offScreenRightPosition: {x: 1136, y: 0}
+    offScreenLeftPosition: {x: -655.76, y: 0}
+    offScreenRightPosition: {x: 655.76, y: 0}
   - pageName: Difficulty
     pageTransform: {fileID: 1373578963}
     onScreenPosition: {x: 0, y: 0}
-    offScreenLeftPosition: {x: -1136, y: 0}
-    offScreenRightPosition: {x: 1136, y: 0}
+    offScreenLeftPosition: {x: -655.76, y: 0}
+    offScreenRightPosition: {x: 655.76, y: 0}
   - pageName: Customize
     pageTransform: {fileID: 1030085468}
     onScreenPosition: {x: 0, y: 0}
-    offScreenLeftPosition: {x: -1136, y: 0}
-    offScreenRightPosition: {x: 1136, y: 0}
+    offScreenLeftPosition: {x: -655.76, y: 0}
+    offScreenRightPosition: {x: 655.76, y: 0}
   - pageName: Score
     pageTransform: {fileID: 373518197}
     onScreenPosition: {x: 0, y: 0}
-    offScreenLeftPosition: {x: -1136, y: 0}
-    offScreenRightPosition: {x: 1136, y: 0}
+    offScreenLeftPosition: {x: -655.76, y: 0}
+    offScreenRightPosition: {x: 655.76, y: 0}
   startingPageName: Main
   transitionDuration: 0.5
   transitionCurve:
@@ -10063,6 +10092,7 @@ GameObject:
   - component: {fileID: 1670835259}
   - component: {fileID: 1670835261}
   - component: {fileID: 1670835260}
+  - component: {fileID: 1670835262}
   m_Layer: 5
   m_Name: BongoBackShadow
   m_TagString: Untagged
@@ -10127,6 +10157,18 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1670835258}
   m_CullTransparentMesh: 1
+--- !u!225 &1670835262
+CanvasGroup:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1670835258}
+  m_Enabled: 1
+  m_Alpha: 1
+  m_Interactable: 1
+  m_BlocksRaycasts: 1
+  m_IgnoreParentGroups: 0
 --- !u!114 &1675741701 stripped
 MonoBehaviour:
   m_CorrespondingSourceObject: {fileID: 9106115052655600664, guid: 09a82d829ba59174cac0e9f9b91043b3, type: 3}
@@ -11934,6 +11976,7 @@ GameObject:
   - component: {fileID: 1958032450}
   - component: {fileID: 1958032452}
   - component: {fileID: 1958032451}
+  - component: {fileID: 1958032453}
   m_Layer: 5
   m_Name: BongoImage
   m_TagString: Untagged
@@ -11998,6 +12041,18 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1958032449}
   m_CullTransparentMesh: 1
+--- !u!225 &1958032453
+CanvasGroup:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1958032449}
+  m_Enabled: 1
+  m_Alpha: 1
+  m_Interactable: 1
+  m_BlocksRaycasts: 1
+  m_IgnoreParentGroups: 0
 --- !u!1 &1972450429
 GameObject:
   m_ObjectHideFlags: 0

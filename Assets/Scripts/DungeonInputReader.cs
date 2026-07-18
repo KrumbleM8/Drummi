@@ -41,8 +41,27 @@ public class DungeonInputReader : MonoBehaviour
     /// </summary>
     public event Action<DungeonEnemyType, InputMatch.MatchQuality> OnHit;
 
-    // Controlled by DungeonBeatManager — false outside the response window
-    public bool allowInput = false;
+    // Controlled by DungeonBeatManager — false outside the response window.
+    // Property wraps a backing field purely to fire AllowInputChanged on transitions;
+    // gating semantics are identical to the previous public field.
+    public bool allowInput
+    {
+        get => _allowInput;
+        set
+        {
+            if (_allowInput == value) return;
+            _allowInput = value;
+            AllowInputChanged?.Invoke(value);
+        }
+    }
+    private bool _allowInput = false;
+
+    /// <summary>
+    /// Fired whenever allowInput transitions (false↔true). Purely observational —
+    /// subscribers (e.g. DrumPadStateVisual) react cosmetically and must never
+    /// drive input logic from this event.
+    /// </summary>
+    public event Action<bool> AllowInputChanged;
 
     /// <summary>
     /// True only while a Dungeon encounter is actively running.

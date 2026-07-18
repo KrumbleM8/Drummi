@@ -22,6 +22,14 @@ public class PadBounceFeedback : MonoBehaviour
     [SerializeField] private float timeScaleUp     = 0.10f;
     [SerializeField] private float timeScaleDown   = 0.15f;
 
+    /// <summary>
+    /// Cosmetic scale multiplier driven by DrumPadStateVisual (input-state shrink/fade).
+    /// Read live at every scale write so the bounce shrinks proportionally while the pad
+    /// is in its smaller disabled state — even if the state tween runs mid-bounce.
+    /// 1 = normal. Not serialized — runtime-driven only; never affects input logic.
+    /// </summary>
+    [System.NonSerialized] public float ScaleMultiplier = 1f;
+
     private Vector3    _baseScale;
     private Coroutine  _routine;
 
@@ -65,20 +73,20 @@ public class PadBounceFeedback : MonoBehaviour
         while (t < 1f)
         {
             t += Time.unscaledDeltaTime / timeScaleUp;
-            transform.localScale = Vector3.LerpUnclamped(_baseScale, peak, Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(t)));
+            transform.localScale = Vector3.LerpUnclamped(_baseScale, peak, Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(t))) * ScaleMultiplier;
             yield return null;
         }
-        transform.localScale = peak;
+        transform.localScale = peak * ScaleMultiplier;
 
         // Ease back to base
         t = 0f;
         while (t < 1f)
         {
             t += Time.unscaledDeltaTime / timeScaleDown;
-            transform.localScale = Vector3.LerpUnclamped(peak, _baseScale, Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(t)));
+            transform.localScale = Vector3.LerpUnclamped(peak, _baseScale, Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(t))) * ScaleMultiplier;
             yield return null;
         }
-        transform.localScale = _baseScale;
+        transform.localScale = _baseScale * ScaleMultiplier;
         _routine = null;
     }
 }

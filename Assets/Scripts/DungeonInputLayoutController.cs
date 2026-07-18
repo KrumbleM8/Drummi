@@ -67,6 +67,10 @@ namespace KrumbleHut.Drummi.Dungeons
         [Tooltip("Duration of the scale-Y + fade animation in seconds.")]
         [SerializeField] private float transitionDuration = 0.2f;
 
+        [Header("State Visual")]
+        [Tooltip("Cosmetic pad input-state visual — snapped to the current allowInput state whenever a rig is activated so it never tweens from stale values.")]
+        [SerializeField] private DrumPadStateVisual stateVisual;
+
         private InputLayoutType _current = InputLayoutType.ThreePad;
         private Tween _outTween;
         private Tween _inTween;
@@ -87,6 +91,10 @@ namespace KrumbleHut.Drummi.Dungeons
         /// </summary>
         public void SwitchLayout(InputLayoutType target)
         {
+            // Cosmetic only: snap the pad state visuals to the current allowInput
+            // state so the incoming rig starts from correct values, not stale ones.
+            stateVisual?.SnapToCurrent();
+
             if (target == _current)
             {
                 ApplyInstant(GetRig(_current), visible: true);

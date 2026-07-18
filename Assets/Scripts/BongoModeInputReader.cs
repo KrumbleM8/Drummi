@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 using static InputMatch;
@@ -6,7 +7,27 @@ public class BongoModeInputReader : MonoBehaviour
 {
     [SerializeField] private DrumPadTouch drumPadTouch;
 
-    public bool allowInput = true;
+    // Controlled by BeatGenerator — true during free play and response windows.
+    // Property wraps a backing field purely to fire AllowInputChanged on transitions;
+    // gating semantics are identical to the previous public field.
+    public bool allowInput
+    {
+        get => _allowInput;
+        set
+        {
+            if (_allowInput == value) return;
+            _allowInput = value;
+            AllowInputChanged?.Invoke(value);
+        }
+    }
+    private bool _allowInput = true;
+
+    /// <summary>
+    /// Fired whenever allowInput transitions (false↔true). Purely observational —
+    /// subscribers (e.g. DrumPadStateVisual) react cosmetically and must never
+    /// drive input logic from this event.
+    /// </summary>
+    public event Action<bool> AllowInputChanged;
 
     public Metronome metronome;
     public List<BongoInput> playerInputData = new List<BongoInput>();

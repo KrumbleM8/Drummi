@@ -15,6 +15,14 @@ public class BounceOnBeat : MonoBehaviour
     public bool useCurve = false;
     public AnimationCurve bounceCurve = AnimationCurve.EaseInOut(0, 1, 1, 0);
 
+    /// <summary>
+    /// Cosmetic scale multiplier driven by DrumPadStateVisual (input-state shrink/fade).
+    /// Applied at the final scale write so the bounce amplitude shrinks proportionally
+    /// when the pad is in its smaller disabled state. 1 = normal. Not serialized —
+    /// runtime-driven only; never affects input logic.
+    /// </summary>
+    [NonSerialized] public float ScaleMultiplier = 1f;
+
     private Vector3 originalScale;
     private float currentVelocity = 0f;
     private float currentYScale;
@@ -82,7 +90,7 @@ public class BounceOnBeat : MonoBehaviour
             currentYScale = Mathf.SmoothDamp(currentYScale, originalScale.y, ref currentVelocity, smoothTime);
         }
 
-        transform.localScale = new Vector3(originalScale.x, currentYScale, originalScale.z);
+        transform.localScale = new Vector3(originalScale.x, currentYScale, originalScale.z) * ScaleMultiplier;
     }
 
     private void DetectBeat()
