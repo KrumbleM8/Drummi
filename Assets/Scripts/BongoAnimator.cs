@@ -56,11 +56,15 @@ public class BongoAnimator : MonoBehaviour
         }
     }
 
-    private void OnLeftHit()  => PlayBongoAnimation(isLeftSide: true);
-    private void OnRightHit() => PlayBongoAnimation(isLeftSide: false);
+    // Auto-subscribe path (Dungeon BongoRig): this rig needs the opposite
+    // mapping from the Bongo scene, hence left → false / right → true.
+    private void OnLeftHit()  => PlayBongoAnimation(isLeftSide: false);
+    private void OnRightHit() => PlayBongoAnimation(isLeftSide: true);
 
     /// <summary>
-    /// Play the bongo animation. True = left bongo, false = right bongo.
+    /// Play the bongo animation. The parameter picks the tilt direction
+    /// (true = negative Z rotation); which side that reads as visually
+    /// depends on the scene's bongo rig, so callers tune it per scene.
     /// </summary>
     public void PlayBongoAnimation(bool isLeftSide)
     {
