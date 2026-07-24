@@ -709,6 +709,14 @@ public class BeatGenerator : MonoBehaviour
         ClearState();
         currentState = GameState.Uninitialized;
 
+        // Restore the free-play default. ClearState() gates allowInput off (needed at
+        // song start so grace-period taps don't accumulate), but back in idle/free play
+        // the reader's default is true — leaving it false kept the bongos dimmed
+        // (DrumPadStateVisual) and taps unrecorded after a song ended. Any subsequent
+        // song start re-gates via StartGameplay() → ClearState().
+        if (playerInputReader != null)
+            playerInputReader.allowInput = true;
+
         Debug.Log("[BeatGenerator] Reset complete");
     }
     #endregion

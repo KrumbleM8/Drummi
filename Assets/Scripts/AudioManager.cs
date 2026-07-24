@@ -35,6 +35,10 @@ public class AudioManager : MonoBehaviour
     // Total pause duration that we add to scheduled times if needed.
     private double accumulatedPauseDuration = 0.0;
 
+    // Active music fade (dungeon floor transitions). Cancelled whenever a new
+    // track is started/scheduled so the volume is never left mid-fade.
+    private Coroutine musicFadeRoutine;
+
     private void Awake()
     {
         if (instance != null && instance != this)
@@ -91,6 +95,7 @@ public class AudioManager : MonoBehaviour
     // looping with bar-exact clips; song modes (Bongo) keep the default one-shot behavior.
     public void PlayMusic(bool loop = false)
     {
+        RestoreMusicVolume();
         speakers[0].clip = musicTracks[selectedSongIndex];
         speakers[0].loop = loop;
         // Adjust the scheduled start time by any accumulated pause duration.
@@ -217,6 +222,7 @@ public class AudioManager : MonoBehaviour
     /// </summary>
     public void ScheduleTrackSwap(int trackIndex, double realDspSeamTime)
     {
+        RestoreMusicVolume();
         speakers[0].Stop();
         selectedSongIndex = trackIndex;
         speakers[0].clip = musicTracks[trackIndex];
@@ -226,6 +232,50 @@ public class AudioManager : MonoBehaviour
         Debug.Log($"[AudioManager] Track swap — index {trackIndex} scheduled at DSP {realDspSeamTime:F4}");
     }
 
+    /// <summary>
+    /// Fades the music source (speakers[0]) to silence over <paramref name="seconds"/>
+    /// of unscaled real time. Used by the dungeon floor transition while the title
+    /// card is up. Volume is restored automatically the next time a track starts
+    /// (PlayMusic / ScheduleTrackSwap / ResetState).
+    ///
+    /// STEM-REDUCTION HOOK: when stem-authored floor tracks and a stem mixer exist,
+    /// replace this whole-track volume fade with a filter down to the bass stem.
+    /// Call site: DungeonRunner.FloorTransitionRoutine().
+    /// </summary>
+    public void FadeOutMusic(float seconds)
+    {
+        if (musicFadeRoutine != null) StopCoroutine(musicFadeRoutine);
+        musicFadeRoutine = StartCoroutine(FadeOutMusicRoutine(seconds));
+    }
+
+    private System.Collections.IEnumerator FadeOutMusicRoutine(float seconds)
+    {
+        AudioSource music = speakers[0];
+        float startVolume = music.volume;
+        float elapsed = 0f;
+
+        while (elapsed < seconds)
+        {
+            elapsed += Time.unscaledDeltaTime;
+            music.volume = Mathf.Lerp(startVolume, 0f, elapsed / seconds);
+            yield return null;
+        }
+
+        music.volume = 0f;
+        musicFadeRoutine = null;
+    }
+
+    /// <summary>Cancels any running music fade and restores full source volume.</summary>
+    private void RestoreMusicVolume()
+    {
+        if (musicFadeRoutine != null)
+        {
+            StopCoroutine(musicFadeRoutine);
+            musicFadeRoutine = null;
+        }
+        speakers[0].volume = 1f;
+    }
+
     public void ResetState()
     {
         // Stop every speaker cleanly before the new session starts
@@ -233,6 +283,7 @@ public class AudioManager : MonoBehaviour
         {
             if (src != null) src.Stop();
         }
+        RestoreMusicVolume();
 
         // Clear all pause tracking so the new session starts from zero
         isPaused = false;

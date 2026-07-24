@@ -53,6 +53,10 @@ public class DungeonModeController : ModeController
     // True until the first StartRoom() call in a run. Set back to true by ResetToInitialState().
     private bool _isFirstRoom = true;
 
+    // When true, the next StartRoom() takes the first-room path (fresh GameClock/audio
+    // session) even mid-run. Armed by PrepareFloorRestart() on floor transitions.
+    private bool _freshStartPending = false;
+
     // Virtual time at which the run's first bar started — used to calculate bar boundaries
     // for subsequent rooms so the beat grid stays phase-aligned to the music.
     private double _sessionStartVirtualTime;
@@ -222,6 +226,22 @@ public class DungeonModeController : ModeController
     }
 
     /// <summary>
+    /// Routes the next StartRoom() through the first-room branch: fresh GameClock/audio
+    /// session, music scheduled from scratch at the new floor's track and BPM, and the
+    /// musical lead-in applied — the full "run start" feel, per floor.
+    /// Call from DungeonRunner after the floor-transition card, BEFORE LoadRoom().
+    /// Unlike PrepareLeadIn(), this restarts the music session entirely; use it when the
+    /// outgoing track has been faded/stopped during a multi-second transition, where a
+    /// bar-seam ScheduleTrackSwap would splice into silence.
+    /// Note: IsFirstRoom stays false — RoomController's first-room intro delay must not
+    /// re-fire on floor transitions.
+    /// </summary>
+    public void PrepareFloorRestart()
+    {
+        _freshStartPending = true;
+    }
+
+    /// <summary>
     /// High-level entry point called by RoomController instead of GameManager.StartGame().
     /// On the first room of a run this behaves identically to the old implementation:
     /// it resets timing systems and schedules the music from scratch.
@@ -259,9 +279,10 @@ public class DungeonModeController : ModeController
             ? new[] { DungeonEnemyType.Left, DungeonEnemyType.Right }
             : null;
 
-        if (_isFirstRoom)
+        if (_isFirstRoom || _freshStartPending)
         {
-            _isFirstRoom = false;
+            _isFirstRoom       = false;
+            _freshStartPending = false;
 
             // ── First room: full reset, schedule music fresh ─────────────────
             if (AudioManager.instance != null)
@@ -291,7 +312,11 @@ public class DungeonModeController : ModeController
                 beatManager.metronome.enabled = true;
             }
 
-            int totalBeats = CalculateTotalBeats(effectiveBpm);
+            // Honor designer-specified room length, same as the subsequent-room branch —
+            // floor-transition restarts route floor-first rooms through here too.
+            int totalBeats = def.RoomLengthBars > 0
+                ? def.RoomLengthBars * GameConstants.BEATS_PER_LOOP
+                : CalculateTotalBeats(effectiveBpm);
             TimingCoordinator.Instance?.Initialize(virtualStartTime, effectiveBpm, totalBeats, BarsBeforeEndForFinalBar);
 
             // StartMode will call ScheduleMusic normally (flag is false).
@@ -426,6 +451,7 @@ public class DungeonModeController : ModeController
         if (evaluator        != null) evaluator.ResetScore();
         if (health           != null) health.ResetHealth();
         _isFirstRoom              = true;
+        _freshStartPending        = false;
         _suppressMusicSchedule    = false;
         _skipGracePeriod          = false;
         _suppressBeatManager      = false;

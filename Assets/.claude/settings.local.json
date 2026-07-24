@@ -18,7 +18,22 @@
       "Bash(grep:*)",
       "mcp__coplay-mcp__parent_game_object",
       "mcp__coplay-mcp__set_property",
-      "mcp__coplay-mcp__set_unity_project_root"
+      "mcp__coplay-mcp__set_unity_project_root",
+      "Bash(python -c ':*)",
+      "Bash(sed -n '8495,8510p' Assets/Scenes/Dungeon.unity)",
+      "Bash(sed -n '1140,1160p' Assets/Scenes/Dungeon.unity)",
+      "mcp__coplay-mcp__capture_ui_canvas",
+      "mcp__claude_ai_Google_Drive__get_file_metadata",
+      "mcp__claude_ai_Google_Drive__create_file",
+      "Bash(rm:*)",
+      "Bash(awk \"/^--- !u!1 &1762856855/{f=1} f&&/m_Name/{print; exit}\" Scenes/Bongo.unity)",
+      "Bash(sed -n '6305,6340p' Scenes/Bongo.unity)",
+      "Bash(sed -n '4744,4760p' Scenes/Bongo.unity)",
+      "mcp__coplay-mcp__open_scene",
+      "Bash(awk 'NR>=600 && NR<=700 && \\(/void |ClearState|allowInput|#region|#endregion/\\)' Scripts/BeatGenerator.cs)",
+      "mcp__coplay-mcp__stop_game",
+      "mcp__coplay-mcp__play_game",
+      "mcp__claude_ai_Google_Drive__read_file_content"
     ]
   }
 }

@@ -16,6 +16,9 @@ public class DungeonFloorDefinition : ScriptableObject
     [Tooltip("Zero-based index used by DungeonRunner to order floors.")]
     [SerializeField] private int floorIndex;
 
+    [Tooltip("Tutorial floors are skipped once completed (PlayerPrefs flag), unless the player opts in to replay via the start-page toggle.")]
+    [SerializeField] private bool isTutorialFloor;
+
     [Header("Music")]
     [Tooltip("Index into AudioManager.musicTracks played for this floor. Rooms may override via RoomDefinition.BgmTrackOverride.")]
     [SerializeField] private int bgmTrackIndex;
@@ -38,6 +41,9 @@ public class DungeonFloorDefinition : ScriptableObject
 
     /// <summary>Zero-based floor index used by DungeonRunner.</summary>
     public int FloorIndex => floorIndex;
+
+    /// <summary>True for tutorial floors — skipped by DungeonRunner once completed, unless a replay is requested.</summary>
+    public bool IsTutorialFloor => isTutorialFloor;
 
     /// <summary>AudioManager.musicTracks index played for this floor unless a room overrides it.</summary>
     public int BgmTrackIndex => bgmTrackIndex;

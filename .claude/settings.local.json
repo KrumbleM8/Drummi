@@ -30,7 +30,18 @@
       "mcp__coplay-mcp__get_unity_logs",
       "Bash(git -C \"D:/UnityProjects/Unity Projects/Drummi 2\" status --short)",
       "Bash(git -C \"D:/UnityProjects/Unity Projects/Drummi 2\" log --oneline -8)",
-      "Bash(git:*)"
+      "Bash(git:*)",
+      "Bash(grep -l \"overrideBgm\\\\|bgmTrackIndex\" \"Assets/ScriptableObjects/Rooms/\"*.asset \"Assets/ScriptableObjects/Boss/\"*.asset)",
+      "Bash(grep -H \"overrideBgm\\\\|bgmTrackIndex\" \"Assets/ScriptableObjects/Rooms/\"*.asset \"Assets/ScriptableObjects/Boss/\"*.asset)",
+      "mcp__coplay-mcp__set_unity_project_root",
+      "Bash(grep -rl \"musicTracks\" Assets/Scenes/*.unity)",
+      "Bash(ls Assets/*.unity)",
+      "Bash(grep -H \"roomName\\\\|bgmTrack\\\\|overrideBgm\" Assets/ScriptableObjects/Rooms/*.asset Assets/ScriptableObjects/Boss/*.asset)",
+      "Bash(sed:*)",
+      "mcp__claude_ai_Google_Drive__create_file",
+      "mcp__claude_ai_Google_Drive__read_file_content",
+      "Bash(python:*)",
+      "Bash(awk 'NR>=5560 && NR<=5690 && \\(/m_Name/ || /GameObject/ || /--- !u!/\\)' \"D:/UnityProjects/Unity Projects/Drummi 2/Assets/Scenes/Dungeon.unity\")"
     ]
   }
 }

@@ -71,7 +71,9 @@ namespace KrumbleHut.Drummi.Dungeons
         [Tooltip("Cosmetic pad input-state visual — snapped to the current allowInput state whenever a rig is activated so it never tweens from stale values.")]
         [SerializeField] private DrumPadStateVisual stateVisual;
 
-        private InputLayoutType _current = InputLayoutType.ThreePad;
+        // Null until the first SwitchLayout so the first room always runs the full
+        // animated path (Awake shows the bongo rig with no layout side-effects applied).
+        private InputLayoutType? _current;
         private Tween _outTween;
         private Tween _inTween;
 
@@ -97,7 +99,10 @@ namespace KrumbleHut.Drummi.Dungeons
 
             if (target == _current)
             {
-                ApplyInstant(GetRig(_current), visible: true);
+                // Drift guard: snap the target visible AND the others hidden.
+                ApplyInstant(threePadRig,   visible: target == InputLayoutType.ThreePad);
+                ApplyInstant(singleDrumRig, visible: target == InputLayoutType.SingleDrum);
+                ApplyInstant(bongoRig,      visible: target == InputLayoutType.TwoPad);
                 return;
             }
 
@@ -113,7 +118,9 @@ namespace KrumbleHut.Drummi.Dungeons
                 drumPadTouch?.RestoreCenterPad();
             }
 
-            CanvasGroup outRig = GetRig(_current);
+            // Before the first switch (_current == null) the visible rig is the bongo
+            // rig from Awake — animate it out like any other outgoing layout.
+            CanvasGroup outRig = GetRig(_current ?? InputLayoutType.TwoPad);
             CanvasGroup inRig  = GetRig(target);
             _current = target;
 
@@ -136,11 +143,16 @@ namespace KrumbleHut.Drummi.Dungeons
             _outTween?.Kill();
             _inTween?.Kill();
 
-            // Outgoing: squash Y to zero + fade out simultaneously.
-            _outTween = DOTween.Sequence()
-                .Append(outRig.DOFade(0f, transitionDuration).SetEase(Ease.InQuad))
-                .Join(outRig.transform.DOScaleY(0f, transitionDuration).SetEase(Ease.InBack))
-                .SetLink(gameObject);
+            // Outgoing: squash Y to zero + fade out simultaneously. Skipped when the
+            // outgoing rig IS the incoming rig (first switch into TwoPad: the bongo rig
+            // is already showing) — the in-tween below owns the animation then.
+            if (outRig != inRig)
+            {
+                _outTween = DOTween.Sequence()
+                    .Append(outRig.DOFade(0f, transitionDuration).SetEase(Ease.InQuad))
+                    .Join(outRig.transform.DOScaleY(0f, transitionDuration).SetEase(Ease.InBack))
+                    .SetLink(gameObject);
+            }
 
             // Incoming: start squashed/invisible, expand + fade in simultaneously.
             Vector3 inScale = inRig.transform.localScale;

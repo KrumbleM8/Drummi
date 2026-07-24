@@ -22,6 +22,13 @@ public class DungeonRunner : MonoBehaviour
     [SerializeField] private DungeonModeController    modeController;
     [SerializeField] private List<DungeonFloorDefinition> floors;
 
+    [Header("Floor Transition")]
+    [Tooltip("Presents the wipe + floor title card between floors. Optional — without it, floors advance with no visual transition.")]
+    [SerializeField] private FloorTransitionController floorTransition;
+
+    [Tooltip("Seconds over which the outgoing floor's music fades to silence under the transition card. Keep at or below cover duration + title hold.")]
+    [SerializeField] private float floorMusicFadeSeconds = 1.5f;
+
     [Header("Effects")]
     [Tooltip("Run-effect state holder. Optional — runs work without the effect system.")]
     [SerializeField] private DungeonEffectsController effectsController;
@@ -34,6 +41,20 @@ public class DungeonRunner : MonoBehaviour
 
     [Tooltip("Number of effects offered per pick.")]
     [SerializeField] private int pickOfferSize = 3;
+
+    // ── Tutorial ──────────────────────────────────────────────────────────────
+
+    private const string TutorialCompletedKey = "Drummi_Dungeon_TutorialCompleted";
+
+    /// <summary>True once the player has completed a tutorial floor at least once.</summary>
+    public static bool TutorialCompleted => PlayerPrefs.GetInt(TutorialCompletedKey, 0) == 1;
+
+    /// <summary>
+    /// When true, the next StartRun() includes tutorial floors even though the
+    /// tutorial has already been completed. Set by TutorialPromptController from the
+    /// start-page toggle before the run begins.
+    /// </summary>
+    public bool ReplayTutorialRequested { get; set; }
 
     // ── Public Events ─────────────────────────────────────────────────────────
 
@@ -50,6 +71,7 @@ public class DungeonRunner : MonoBehaviour
     private bool _runActive;
     private int  _lastChosenDirection = -1;
     private int  _roomsCleared;
+    private bool _pendingFloorTransition;
 
     /// <summary>
     /// True while a run is in progress.
@@ -66,10 +88,21 @@ public class DungeonRunner : MonoBehaviour
     /// <summary>Resets all run state and begins from floor 0, room 0.</summary>
     public void StartRun()
     {
-        _currentFloorIndex = 0;
-        _currentRoomIndex  = 0;
-        _runActive         = true;
-        _roomsCleared      = 0;
+        _currentFloorIndex      = 0;
+        _currentRoomIndex       = 0;
+        _runActive              = true;
+        _roomsCleared           = 0;
+        _pendingFloorTransition = false;
+
+        // Skip leading tutorial floors once completed, unless a replay was requested.
+        // (Dying on the tutorial leaves the flag unset, so it is forced again — intended.)
+        bool includeTutorial = !TutorialCompleted || ReplayTutorialRequested;
+        if (!includeTutorial)
+        {
+            while (_currentFloorIndex < floors.Count && floors[_currentFloorIndex] != null
+                   && floors[_currentFloorIndex].IsTutorialFloor)
+                _currentFloorIndex++;
+        }
 
         // Reset score and health exactly once at run start.
         // StartMode (called per-room) no longer resets them so they persist across rooms.
@@ -148,11 +181,25 @@ public class DungeonRunner : MonoBehaviour
         }
 
         _currentRoomIndex++;
-        _roomsCleared++;
 
         var currentFloor = floors[_currentFloorIndex];
+        bool clearedTutorialRoom = currentFloor.IsTutorialFloor;
+
+        // Tutorial rooms don't count toward the effect-pick cadence — live-floor pick
+        // pacing must be identical whether or not the tutorial was played.
+        if (!clearedTutorialRoom)
+            _roomsCleared++;
+
         if (_currentRoomIndex >= currentFloor.Rooms.Count)
         {
+            if (clearedTutorialRoom)
+            {
+                // Tutorial floor completed — future runs skip it unless a replay is requested.
+                PlayerPrefs.SetInt(TutorialCompletedKey, 1);
+                PlayerPrefs.Save();
+                Debug.Log("[DungeonRunner] Tutorial floor completed — flag saved");
+            }
+
             _currentFloorIndex++;
             _currentRoomIndex = 0;
 
@@ -171,6 +218,9 @@ public class DungeonRunner : MonoBehaviour
 
             Debug.Log($"[DungeonRunner] Advancing to floor {_currentFloorIndex}");
             effectsController?.NotifyFloorAdvanced();
+            // Present the wipe + floor title card before the new floor's first room.
+            // Deferred to ProceedToNextRoom so an effect pick (if due) resolves first.
+            _pendingFloorTransition = true;
         }
 
         // Effect pick: after every Nth completed room, defer the next room until the
@@ -178,7 +228,7 @@ public class DungeonRunner : MonoBehaviour
         // (DungeonBeatManager sets EncounterActive=false at room end) and the floor
         // BGM loops on untouched — input re-arms only via the room-start path, and
         // the next room's bar seam is computed after the pick, inside StartRoom.
-        if (effectsController != null && pickOverlay != null
+        if (!clearedTutorialRoom && effectsController != null && pickOverlay != null
             && pickCadence > 0 && _roomsCleared % pickCadence == 0)
         {
             var offer = effectsController.GetOffer(pickOfferSize);
@@ -191,12 +241,57 @@ public class DungeonRunner : MonoBehaviour
             // Empty offer (whole pool active) — skip the pick phase entirely.
         }
 
-        LoadNextRoom();
+        ProceedToNextRoom();
     }
 
     private void HandleEffectPicked(EffectDefinition effect)
     {
         effectsController?.ApplyEffect(effect);
+        ProceedToNextRoom();
+    }
+
+    /// <summary>
+    /// Routes to the next room, inserting the floor transition presentation first
+    /// when a floor boundary was just crossed. If a pick and a floor advance coincide,
+    /// the pick overlay resolves first (existing order in HandleRoomComplete), then the
+    /// transition runs here — deterministic either way.
+    /// </summary>
+    private void ProceedToNextRoom()
+    {
+        if (_pendingFloorTransition && floorTransition != null)
+        {
+            _pendingFloorTransition = false;
+            StartCoroutine(FloorTransitionRoutine());
+        }
+        else
+        {
+            _pendingFloorTransition = false;
+            LoadNextRoom();
+        }
+    }
+
+    private System.Collections.IEnumerator FloorTransitionRoutine()
+    {
+        var floor = floors[_currentFloorIndex];
+
+        // Fade the outgoing floor's music to silence under the card.
+        // (Stem-reduction hook lives in AudioManager.FadeOutMusic — when stem-authored
+        // tracks exist, this becomes a filter down to the bass stem instead.)
+        AudioManager.instance?.FadeOutMusic(floorMusicFadeSeconds);
+
+        yield return floorTransition.PlayCoverAndTitle(floor.FloorName);
+
+        // Never start the next room while paused — StartRoom schedules audio against
+        // the clock, and the player can open the pause menu during the title card.
+        while (GameClock.Instance != null && GameClock.Instance.IsPaused)
+            yield return null;
+
+        if (!_runActive) yield break;
+
+        // Restart the music session for the new floor: fresh clock origin, new track
+        // scheduled from silence at the floor's BPM, musical lead-in applied — the
+        // outgoing track was just faded out, so a bar-seam swap would splice into silence.
+        modeController?.PrepareFloorRestart();
         LoadNextRoom();
     }
 }
