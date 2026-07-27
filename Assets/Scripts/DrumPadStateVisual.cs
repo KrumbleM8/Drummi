@@ -40,6 +40,9 @@ namespace KrumbleHut.Drummi.Dungeons
         [Tooltip("BongoModeInputReader whose allowInput state these visuals mirror (Bongo scene). Event-driven only — no window anticipation, because BeatGenerator already enables allowInput slightly before the input window.")]
         [SerializeField] private BongoModeInputReader bongoInputReader;
 
+        [Tooltip("Optional (Dungeon scene). While no run is active (main menu / post-run) the pads are forced to the full enabled visuals instead of the disabled state. Leave null in the Bongo scene.")]
+        [SerializeField] private DungeonRunner dungeonRunner;
+
         [Tooltip("Nested CanvasGroups on each pad visual. Alphas multiply with the rig-root CanvasGroup, so layout-switch fades are unaffected.")]
         [SerializeField] private CanvasGroup[] padGroups;
 
@@ -113,6 +116,14 @@ namespace KrumbleHut.Drummi.Dungeons
             // before the input window (CheckAndTriggerListeningAnimation).
             if (inputReader == null) return;
 
+            // Main menu / no active run: the rig on display (bongo by default) should
+            // sit at full opacity and original size, not the disabled visuals.
+            if (OutOfRun)
+            {
+                SetInputEnabled(true, animated: true);
+                return;
+            }
+
             if (_targetEnabled || inputReader.allowInput)
             {
                 // Self-correct: if we anticipated a window that never opened (the
@@ -154,7 +165,7 @@ namespace KrumbleHut.Drummi.Dungeons
         /// a room, so the incoming rig never tweens from stale values.
         /// </summary>
         public void SnapToCurrent()
-            => SetInputEnabled(CurrentAllowInput, animated: false);
+            => SetInputEnabled(CurrentAllowInput || OutOfRun, animated: false);
 
         /// <summary>Drive the visuals toward the enabled or disabled state.</summary>
         public void SetInputEnabled(bool inputEnabled, bool animated)
@@ -189,6 +200,10 @@ namespace KrumbleHut.Drummi.Dungeons
         }
 
         // ── Private ───────────────────────────────────────────────────────────
+
+        // Dungeon-only: true while the scene is outside a run (main menu / post-run).
+        private bool OutOfRun =>
+            inputReader != null && dungeonRunner != null && !dungeonRunner.IsRunActive;
 
         private bool CurrentAllowInput =>
             inputReader != null ? inputReader.allowInput

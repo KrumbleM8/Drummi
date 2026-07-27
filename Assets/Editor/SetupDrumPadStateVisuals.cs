@@ -81,8 +81,13 @@ public class SetupDrumPadStateVisuals
         var visual = roguelikeLayer.GetComponent<DrumPadStateVisual>();
         if (visual == null) visual = roguelikeLayer.AddComponent<DrumPadStateVisual>();
 
+        var runner = Object.FindFirstObjectByType<DungeonRunner>(FindObjectsInactive.Include);
+        if (runner == null)
+            Debug.LogWarning("[SetupDrumPadStateVisuals] DungeonRunner not found — main-menu full-visual state will not apply.");
+
         var so = new SerializedObject(visual);
-        so.FindProperty("inputReader").objectReferenceValue = inputReader;
+        so.FindProperty("inputReader").objectReferenceValue   = inputReader;
+        so.FindProperty("dungeonRunner").objectReferenceValue = runner;
         SetArray(so, "padGroups",          groups);
         SetArray(so, "bounceOnBeats",      bounces);
         SetArray(so, "padBounceFeedbacks", feedbacks);

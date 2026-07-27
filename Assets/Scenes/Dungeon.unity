@@ -1249,18 +1249,18 @@ MonoBehaviour:
   - pageName: Main
     pageTransform: {fileID: 1943619380}
     onScreenPosition: {x: 0, y: 0}
-    offScreenLeftPosition: {x: -1136, y: 0}
-    offScreenRightPosition: {x: 1136, y: 0}
+    offScreenLeftPosition: {x: -812.16, y: 0}
+    offScreenRightPosition: {x: 812.16, y: 0}
   - pageName: Customize
     pageTransform: {fileID: 1312737091}
     onScreenPosition: {x: 0, y: 0}
-    offScreenLeftPosition: {x: -1136, y: 0}
-    offScreenRightPosition: {x: 1136, y: 0}
+    offScreenLeftPosition: {x: -812.16, y: 0}
+    offScreenRightPosition: {x: 812.16, y: 0}
   - pageName: Score
     pageTransform: {fileID: 1848881446}
     onScreenPosition: {x: 0, y: 0}
-    offScreenLeftPosition: {x: -1136, y: 0}
-    offScreenRightPosition: {x: 1136, y: 0}
+    offScreenLeftPosition: {x: -812.16, y: 0}
+    offScreenRightPosition: {x: 812.16, y: 0}
   startingPageName: Main
   transitionDuration: 0.5
   transitionCurve:
@@ -2574,7 +2574,7 @@ MonoBehaviour:
   m_spriteAsset: {fileID: 0}
   m_tintAllSprites: 0
   m_StyleSheet: {fileID: 0}
-  m_TextStyleHashCode: 0
+  m_TextStyleHashCode: -1183493901
   m_overrideHtmlColors: 0
   m_faceColor:
     serializedVersion: 2
@@ -11214,6 +11214,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   inputReader: {fileID: 482265709}
   bongoInputReader: {fileID: 0}
+  dungeonRunner: {fileID: 2008353635}
   padGroups:
   - {fileID: 586673992}
   - {fileID: 1173594287}
