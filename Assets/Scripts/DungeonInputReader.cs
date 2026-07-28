@@ -208,6 +208,19 @@ public class DungeonInputReader : MonoBehaviour
                 return;
             }
 
+            // Just past the scheduled window open, but DungeonBeatManager's Update has
+            // not yet set allowInput this frame — the same sub-frame race the override
+            // branch tolerates. Buffer for replay at window open instead of penalising
+            // an on-time tap. This cannot mask a genuinely late tap: the window closes
+            // at EvaluationTime (InputWindowStart + 3.5 beats), far beyond the tolerance,
+            // and after evaluation CurrentBar advances so this branch is not reached.
+            double lateBy = GameClock.Instance.GameTime - coordinator.CurrentBar.InputWindowStart;
+            if (lateBy <= windowOpenLateToleranceSeconds)
+            {
+                _bufferedInput = new BufferedInput { type = type, virtualTime = GameClock.Instance.GameTime };
+                return;
+            }
+
             // Response phase has passed — input is genuinely out-of-window, penalise.
             health?.TakeOutOfWindowPenalty();
             return;
