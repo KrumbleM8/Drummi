@@ -34,6 +34,13 @@ public class DungeonInputReader : MonoBehaviour
     [Header("Timing")]
     [SerializeField] private float barStartInputBufferSeconds = 0.125f;
 
+    [Tooltip("Sub-frame race tolerance (virtual-time seconds): a tap landing AFTER the window's " +
+             "scheduled open time but BEFORE the controlling script's Update has set allowInput " +
+             "true that frame would otherwise be silently dropped. Taps up to this long past the " +
+             "boundary are coyote-buffered and replayed at window open. Should stay >= one frame " +
+             "at the lowest supported frame rate; may need tuning against mobile frame pacing.")]
+    [SerializeField] private float windowOpenLateToleranceSeconds = 0.05f;
+
     /// <summary>
     /// Fired immediately after a Perfect or Good hit is confirmed by DungeonEvaluator.
     /// Subscribers (e.g. EliteEnemyController) can register damage without a direct
@@ -172,13 +179,16 @@ public class DungeonInputReader : MonoBehaviour
 
         if (!allowInput)
         {
-            // C&R call window: use the response-start override set by CallAndResponseController.
-            // Buffer if within the coyote window; silently ignore all other early inputs (no penalty).
+            // C&R / Flash Card call window: use the response-start override set by the
+            // encounter controller. Buffer if within the coyote window; silently ignore all
+            // other early inputs (no penalty). The negative tolerance covers the sub-frame
+            // race where the boundary has passed but the controller's Update has not yet
+            // opened the window this frame — without it, an on-time boundary tap is eaten.
             if (CoyoteWindowStartOverride.HasValue)
             {
                 double now             = GameClock.Instance.GameTime;
                 double timeUntilWindow = CoyoteWindowStartOverride.Value - now;
-                if (timeUntilWindow >= 0 && timeUntilWindow <= barStartInputBufferSeconds)
+                if (timeUntilWindow >= -windowOpenLateToleranceSeconds && timeUntilWindow <= barStartInputBufferSeconds)
                     _bufferedInput = new BufferedInput { type = type, virtualTime = now };
                 return;
             }

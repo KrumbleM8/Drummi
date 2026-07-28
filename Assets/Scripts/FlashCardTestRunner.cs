@@ -90,16 +90,14 @@ namespace KrumbleHut.Drummi.Dungeons
             int scenario = cardIndex % 4;
 
             // Base: clean perform — one tap per note slot at its perform-bar time.
-            // Slot 0 is nudged +25 ms (still deep in the Perfect window): a tap at
-            // EXACTLY the window-open boundary races the controller's same-frame
-            // window-open and is silently dropped (see Phase 1 report, finding on the
-            // [ResponseStartTime, window-open] frame gap — also present in C&R).
-            const double FirstSlotNudge = 0.025;
+            // Slot 0 fires at EXACTLY the window-open boundary: this intentionally
+            // exercises the sub-frame race covered by DungeonInputReader's
+            // windowOpenLateToleranceSeconds (Phase 1.1) — the tap must be
+            // coyote-buffered and replayed, not silently dropped.
             for (int slot = 0; slot < noteMask.Count; slot++)
             {
                 if (noteMask[slot])
-                    Enqueue(performStart + slot * beatInterval + (slot == 0 ? FirstSlotNudge : 0.0),
-                            $"card={cardIndex} slot={slot} NOTE (clean)");
+                    Enqueue(performStart + slot * beatInterval, $"card={cardIndex} slot={slot} NOTE (clean)");
             }
 
             switch (scenario)
@@ -115,7 +113,7 @@ namespace KrumbleHut.Drummi.Dungeons
                     break;
                 }
                 case 2: // Double tap — second tap 65 ms after the first note
-                        // (first tap lands at +25 ms; both inside the note's Good window).
+                        // (both inside the note's Good window).
                 {
                     Enqueue(performStart + 0.065,
                             $"card={cardIndex} slot=0 DOUBLE-TAP (+65ms after first note)");
