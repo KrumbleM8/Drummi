@@ -29,15 +29,15 @@ namespace KrumbleHut.Drummi.Dungeons
     /// callback drives a visual reveal for ALL 8 slots (rests flip too), and no
     /// CallPerformer / call audio exists at all.
     ///
-    /// Phase 1: debug reveal visuals only (Debug.Log + optional colored squares).
-    /// Card UI (flip animation, notation sprites) is a later phase.
+    /// Visuals: FlashCardView subscribes to the reveal/perform events and renders the
+    /// 2x4 card. The controller stays visual-free — beat accuracy comes from the
+    /// virtual-time polling here; the view's tweens are cosmetic only.
     ///
     /// INSPECTOR SETUP:
     ///   metronome      — shared Metronome (Metronome.bpm)
     ///   modeController — DungeonModeController (session beat-grid origin)
     ///   inputReader    — DungeonInputReader (gates managed per-phase)
     ///   evaluator      — DungeonEvaluator (grades each perform bar)
-    ///   debugSquares   — OPTIONAL: up to 8 SpriteRenderers colored on reveal
     ///   (debug) press F at runtime to start a test encounter with Inspector defaults
     /// </summary>
     public class FlashCardController : MonoBehaviour
@@ -67,12 +67,6 @@ namespace KrumbleHut.Drummi.Dungeons
         [Tooltip("Maximum notes per card.")]
         [SerializeField, Range(1, 8)] private int maxNotes = 6;
 
-        [Header("Debug Reveal Visuals (optional)")]
-        [Tooltip("Up to 8 SpriteRenderers, one per card slot, colored as each square reveals. Leave empty for log-only reveals.")]
-        [SerializeField] private SpriteRenderer[] debugSquares;
-        [SerializeField] private Color hiddenColor = new Color(0.2f, 0.2f, 0.2f, 1f);
-        [SerializeField] private Color noteColor   = new Color(1f, 0.85f, 0.2f, 1f);
-        [SerializeField] private Color restColor   = new Color(0.35f, 0.35f, 0.45f, 1f);
         #endregion
 
         #region Events
@@ -96,6 +90,13 @@ namespace KrumbleHut.Drummi.Dungeons
 
         /// <summary>Fired once, after the final card's evaluation completes.</summary>
         public event Action OnEncounterComplete;
+
+        /// <summary>
+        /// Fired when the encounter is stopped externally mid-cycle (death, room interrupt).
+        /// NOT fired on normal completion — subscribers use OnEncounterComplete for that.
+        /// Lets the card view tear down cleanly without polling encounter state.
+        /// </summary>
+        public event Action OnEncounterStopped;
         #endregion
 
         #region State
@@ -197,8 +198,6 @@ namespace KrumbleHut.Drummi.Dungeons
 
             _current = PhraseTiming.Compute(0, CardBeats, snapped, _beatInterval);
 
-            ResetDebugSquares();
-
             Debug.Log($"[FlashCard] === ENCOUNTER START ===");
             Debug.Log($"[FlashCard]   BPM={metronome.bpm:F2}  beatInterval={_beatInterval:F6}s  " +
                       $"cards={cardsPerEncounter}  notes={minNotes}-{maxNotes}");
@@ -213,6 +212,7 @@ namespace KrumbleHut.Drummi.Dungeons
             _running = false;
             TerminateEncounter();
             Debug.Log("[FlashCard] Encounter stopped externally.");
+            OnEncounterStopped?.Invoke();
         }
         #endregion
 
@@ -250,7 +250,6 @@ namespace KrumbleHut.Drummi.Dungeons
                 LogCard(_cardIndex, _current, _noteMask);
 
                 _revealSlot = 0;
-                ResetDebugSquares();
 
                 // Arm the coyote buffer so near-boundary early inputs carry into the
                 // perform bar. EncounterActive=true lets TriggerInput reach the coyote
@@ -279,8 +278,6 @@ namespace KrumbleHut.Drummi.Dungeons
                 {
                     int  slot   = _revealSlot++;
                     bool isNote = _noteMask[slot];
-
-                    SetDebugSquare(slot, isNote);
 
                     double expected = _current.CallStartTime + slot * _beatInterval;
                     Debug.Log($"[FlashCard] Reveal       | card={_cardIndex} slot={slot} " +
@@ -442,22 +439,6 @@ namespace KrumbleHut.Drummi.Dungeons
             for (int i = 0; i < CardBeats; i++) slots[i] = noteMask[i] ? 'X' : '.';
             Debug.Log($"[FlashCard] Card stored  | card={cardIndex} pattern=[{new string(slots)}] " +
                       $"reveal=[{timing.CallStartTime:F6}, {timing.ResponseStartTime:F6})");
-        }
-        #endregion
-
-        #region Private — Debug Squares
-        private void ResetDebugSquares()
-        {
-            if (debugSquares == null) return;
-            foreach (var sq in debugSquares)
-                if (sq != null) sq.color = hiddenColor;
-        }
-
-        private void SetDebugSquare(int slot, bool isNote)
-        {
-            if (debugSquares == null || slot >= debugSquares.Length) return;
-            var sq = debugSquares[slot];
-            if (sq != null) sq.color = isNote ? noteColor : restColor;
         }
         #endregion
 
