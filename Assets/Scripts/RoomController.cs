@@ -25,6 +25,7 @@ public class RoomController : MonoBehaviour
     [SerializeField] private DungeonModeController          modeController;
     [SerializeField] private DungeonInputLayoutController   inputLayoutController;
     [SerializeField] private CallAndResponseController       callAndResponseController;
+    [SerializeField] private FlashCardController              flashCardController;
     [SerializeField] private ScreenTransition                screenTransition;
     [SerializeField] private DungeonZoomTransition  dungeonTransition;
     [SerializeField] private DungeonHealth         playerHealth;
@@ -174,6 +175,27 @@ public class RoomController : MonoBehaviour
                     // Health depletion during C&R must route through the same failure path as combat.
                     playerHealth.OnHealthDepleted += HandleHealthDepleted;
                 }
+                else if (_currentDef != null && _currentDef.RoomType == RoomType.FlashCard)
+                {
+                    // Flash Card room: same audio/visual setup as C&R (music scheduling, timing,
+                    // metronome) with DungeonBeatManager suppressed. FlashCardController drives
+                    // its own reveal/perform encounter loop.
+                    if (doorsUI != null) doorsUI.SetActive(false);
+                    modeController.StartRoomAudioVisual(_currentDef, _currentFloor);
+                    if (flashCardController != null)
+                    {
+                        // EncounterStartVirtualTime is already on the beat grid — the
+                        // controller's beat-snap is a no-op, same as the C&R path.
+                        flashCardController.OnEncounterComplete += HandleFlashCardEncounterComplete;
+                        flashCardController.StartEncounter(modeController.EncounterStartVirtualTime);
+                    }
+                    else
+                    {
+                        Debug.LogError("[RoomController] FlashCardController not assigned — FlashCard room cannot start.");
+                    }
+                    // Health depletion must route through the same failure path as combat.
+                    playerHealth.OnHealthDepleted += HandleHealthDepleted;
+                }
                 else
                 {
                     // Standard combat encounter: hide doors, wire events, start the mode.
@@ -245,6 +267,8 @@ public class RoomController : MonoBehaviour
         playerHealth.OnHealthDepleted                          -= HandleHealthDepleted;
         if (callAndResponseController != null)
             callAndResponseController.OnEncounterComplete      -= HandleCarEncounterComplete;
+        if (flashCardController != null)
+            flashCardController.OnEncounterComplete            -= HandleFlashCardEncounterComplete;
     }
 
     private void HandleModeComplete()
@@ -261,8 +285,10 @@ public class RoomController : MonoBehaviour
         if (_state != RoomState.Playing) return;
         _state = RoomState.Evaluating;
         UnsubscribeEvents();
-        // Stop a running C&R encounter so it cannot fire OnEncounterComplete after death.
+        // Stop a running C&R / Flash Card encounter so it cannot fire OnEncounterComplete after death.
         callAndResponseController?.StopEncounter();
+        if (flashCardController != null && flashCardController.IsRunning)
+            flashCardController.StopEncounter();
         // Stop the beat manager immediately so it cannot fire OnSongComplete later and
         // trigger a second ShowResultsSequence after the run has already handled routing.
         modeController.Cleanup();
@@ -278,6 +304,16 @@ public class RoomController : MonoBehaviour
     {
         if (callAndResponseController != null)
             callAndResponseController.OnEncounterComplete -= HandleCarEncounterComplete;
+        if (_state != RoomState.Playing) return;
+        _state = RoomState.Evaluating;
+        BuildResult(survived: true);
+        SetState(RoomState.Exiting);
+    }
+
+    private void HandleFlashCardEncounterComplete()
+    {
+        if (flashCardController != null)
+            flashCardController.OnEncounterComplete -= HandleFlashCardEncounterComplete;
         if (_state != RoomState.Playing) return;
         _state = RoomState.Evaluating;
         BuildResult(survived: true);

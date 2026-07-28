@@ -1,0 +1,22 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a7473b4d93accfc4b85259916a994f87, type: 3}
+  m_Name: FloorDebug_FlashCard
+  m_EditorClassIdentifier:
+  floorName: Flash Card Debug Floor
+  floorIndex: 99
+  isTutorialFloor: 0
+  bgmTrackIndex: 1
+  bpm: 105
+  backgroundSprite: {fileID: 0}
+  rooms:
+  - {fileID: 11400000, guid: 7d6b9e91304ca129012ad5426d79c57e, type: 2}

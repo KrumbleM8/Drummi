@@ -173,4 +173,11 @@ public enum RoomType
     /// Left and Right — no Center. Uses the Bongo-style two-pad input rig.
     /// </summary>
     CombatTwoPad,
+
+    /// <summary>
+    /// Flash Card sight-reading encounter: a card of 8 squares reveals a rhythm
+    /// silently over one bar, then the player performs it over the next bar.
+    /// Driven by FlashCardController; DungeonBeatManager is suppressed.
+    /// </summary>
+    FlashCard,
 }

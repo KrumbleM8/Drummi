@@ -1249,18 +1249,18 @@ MonoBehaviour:
   - pageName: Main
     pageTransform: {fileID: 1943619380}
     onScreenPosition: {x: 0, y: 0}
-    offScreenLeftPosition: {x: -812.16, y: 0}
-    offScreenRightPosition: {x: 812.16, y: 0}
+    offScreenLeftPosition: {x: -1136, y: 0}
+    offScreenRightPosition: {x: 1136, y: 0}
   - pageName: Customize
     pageTransform: {fileID: 1312737091}
     onScreenPosition: {x: 0, y: 0}
-    offScreenLeftPosition: {x: -812.16, y: 0}
-    offScreenRightPosition: {x: 812.16, y: 0}
+    offScreenLeftPosition: {x: -1136, y: 0}
+    offScreenRightPosition: {x: 1136, y: 0}
   - pageName: Score
     pageTransform: {fileID: 1848881446}
     onScreenPosition: {x: 0, y: 0}
-    offScreenLeftPosition: {x: -812.16, y: 0}
-    offScreenRightPosition: {x: 812.16, y: 0}
+    offScreenLeftPosition: {x: -1136, y: 0}
+    offScreenRightPosition: {x: 1136, y: 0}
   startingPageName: Main
   transitionDuration: 0.5
   transitionCurve:
@@ -9375,6 +9375,77 @@ MonoBehaviour:
   transitionDuration: 0.7
   targetScale: 5
   fadeStartThreshold: 0.384
+--- !u!1 &1648430581
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1648430584}
+  - component: {fileID: 1648430583}
+  - component: {fileID: 1648430582}
+  m_Layer: 0
+  m_Name: FlashCardController
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &1648430582
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1648430581}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c6611581466afd04cb6e20904de731b1, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  controller: {fileID: 1648430583}
+  inputReader: {fileID: 482265709}
+  runScenarios: 1
+--- !u!114 &1648430583
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1648430581}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 5a0ca6b0cd8fd894a930406c916efadd, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  metronome: {fileID: 1821836176}
+  modeController: {fileID: 482265712}
+  inputReader: {fileID: 482265709}
+  evaluator: {fileID: 482265710}
+  cardsPerEncounter: 4
+  minNotes: 3
+  maxNotes: 6
+  debugSquares: []
+  hiddenColor: {r: 0.2, g: 0.2, b: 0.2, a: 1}
+  noteColor: {r: 1, g: 0.85, b: 0.2, a: 1}
+  restColor: {r: 0.35, g: 0.35, b: 0.45, a: 1}
+--- !u!4 &1648430584
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1648430581}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1675653755
 GameObject:
   m_ObjectHideFlags: 0
@@ -11055,6 +11126,7 @@ MonoBehaviour:
   modeController: {fileID: 482265712}
   inputLayoutController: {fileID: 2008353639}
   callAndResponseController: {fileID: 359671065}
+  flashCardController: {fileID: 1648430583}
   screenTransition: {fileID: 303421862}
   dungeonTransition: {fileID: 1631813141}
   playerHealth: {fileID: 482265714}
@@ -12160,3 +12232,4 @@ SceneRoots:
   - {fileID: 1273952078}
   - {fileID: 1340560754}
   - {fileID: 8328848}
+  - {fileID: 1648430584}
