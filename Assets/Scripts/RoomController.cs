@@ -135,7 +135,9 @@ public class RoomController : MonoBehaviour
         switch (next)
         {
             case RoomState.Entering:
-                modeController.ClearVisuals(_currentDef != null && _currentDef.RoomType == RoomType.CallAndResponse);
+                modeController.ClearVisuals(_currentDef != null &&
+                                            (_currentDef.RoomType == RoomType.CallAndResponse ||
+                                             _currentDef.RoomType == RoomType.FlashCard));
                 ApplyBackground();
                 screenTransition.StartReveal();
                 dungeonTransition.StartReveal();
@@ -184,10 +186,22 @@ public class RoomController : MonoBehaviour
                     modeController.StartRoomAudioVisual(_currentDef, _currentFloor);
                     if (flashCardController != null)
                     {
+                        // Card count derives from the authored room length: each card is one
+                        // 2-bar reveal/perform cycle, so cards = RoomLengthBars / 2. Zero =
+                        // fall back to the controller's Inspector default.
+                        int bars  = _currentDef.RoomLengthBars;
+                        int cards = bars > 0 ? Mathf.Max(1, bars / 2) : 0;
+                        if (bars > 0 && bars % 2 != 0)
+                            Debug.LogWarning($"[RoomController] FlashCard room '{_currentDef.RoomName}' has odd " +
+                                             $"RoomLengthBars={bars} — each card spans 2 bars; rounding down to {cards} card(s).");
+
                         // EncounterStartVirtualTime is already on the beat grid — the
                         // controller's beat-snap is a no-op, same as the C&R path.
                         flashCardController.OnEncounterComplete += HandleFlashCardEncounterComplete;
-                        flashCardController.StartEncounter(modeController.EncounterStartVirtualTime);
+                        flashCardController.StartEncounter(
+                            modeController.EncounterStartVirtualTime,
+                            cards,
+                            _currentDef.FlashCardNoteRange);
                     }
                     else
                     {
@@ -302,20 +316,21 @@ public class RoomController : MonoBehaviour
 
     private void HandleCarEncounterComplete()
     {
-        if (callAndResponseController != null)
-            callAndResponseController.OnEncounterComplete -= HandleCarEncounterComplete;
         if (_state != RoomState.Playing) return;
         _state = RoomState.Evaluating;
+        // Full unsubscribe (not just this handler) — the health-depleted subscription
+        // added at room start must not accumulate across completed encounter rooms.
+        UnsubscribeEvents();
         BuildResult(survived: true);
         SetState(RoomState.Exiting);
     }
 
     private void HandleFlashCardEncounterComplete()
     {
-        if (flashCardController != null)
-            flashCardController.OnEncounterComplete -= HandleFlashCardEncounterComplete;
         if (_state != RoomState.Playing) return;
         _state = RoomState.Evaluating;
+        // Full unsubscribe (not just this handler) — same rationale as the C&R handler.
+        UnsubscribeEvents();
         BuildResult(survived: true);
         SetState(RoomState.Exiting);
     }

@@ -65,8 +65,26 @@ namespace KrumbleHut.Drummi.Dungeons
         [SerializeField] private Color borderYourTurnColor = new Color(1f, 0.82f, 0.25f, 0.9f);
         [SerializeField] private Color cursorColor       = new Color(1f, 1f, 1f, 0.35f);
 
+        [Header("Grade Flash Colors (per-card evaluation feedback)")]
+        [SerializeField] private Color gradeAllPerfectColor = new Color(1f, 0.85f, 0.30f, 1f);
+        [SerializeField] private Color gradeAllGoodColor    = new Color(0.35f, 0.90f, 0.40f, 1f);
+        [SerializeField] private Color gradePassableColor   = new Color(0.95f, 0.60f, 0.20f, 1f);
+        [SerializeField] private Color gradeFailedColor     = new Color(0.90f, 0.25f, 0.25f, 1f);
+
         [Header("Flip (cosmetic)")]
         [SerializeField] private float flipHalfDuration = 0.07f;
+
+        [Header("Grade Flash (cosmetic)")]
+        [Tooltip("Seconds the border holds the grade color before fading back to idle. " +
+                 "The flash starts on the evaluation boundary (controller event); these " +
+                 "durations are cosmetic only and bleed into the next card's reveal bar.")]
+        [SerializeField] private float gradeHoldDuration = 0.35f;
+        [SerializeField] private float gradeFadeDuration = 0.45f;
+
+        [Tooltip("Real-time seconds the card stays visible after normal encounter completion " +
+                 "so the final card's grade flash is readable during the room-exit cover. " +
+                 "Death teardown (OnEncounterStopped) hides immediately, ignoring this.")]
+        [SerializeField] private float completeHideDelay = 0.8f;
         #endregion
 
         #region State
@@ -79,6 +97,8 @@ namespace KrumbleHut.Drummi.Dungeons
 
         private readonly Tween[] _flipTweens = new Tween[8];
         private Tween            _borderTween;
+        private Tween            _hideDelayTween;
+        private bool             _gradeFlashActive;
         #endregion
 
         #region Unity
@@ -89,8 +109,8 @@ namespace KrumbleHut.Drummi.Dungeons
             controller.OnSquareReveal      += HandleSquareReveal;
             controller.OnPerformStart      += HandlePerformStart;
             controller.OnCardEvaluated     += HandleCardEvaluated;
-            controller.OnEncounterComplete += HandleEncounterEnd;
-            controller.OnEncounterStopped  += HandleEncounterEnd;
+            controller.OnEncounterComplete += HandleEncounterComplete;
+            controller.OnEncounterStopped  += HandleEncounterStopped;
         }
 
         private void OnDisable()
@@ -101,8 +121,8 @@ namespace KrumbleHut.Drummi.Dungeons
                 controller.OnSquareReveal      -= HandleSquareReveal;
                 controller.OnPerformStart      -= HandlePerformStart;
                 controller.OnCardEvaluated     -= HandleCardEvaluated;
-                controller.OnEncounterComplete -= HandleEncounterEnd;
-                controller.OnEncounterStopped  -= HandleEncounterEnd;
+                controller.OnEncounterComplete -= HandleEncounterComplete;
+                controller.OnEncounterStopped  -= HandleEncounterStopped;
             }
             HideCard();
         }
@@ -128,13 +148,20 @@ namespace KrumbleHut.Drummi.Dungeons
             _beatInterval = (_timing.ResponseStartTime - _timing.CallStartTime)
                             / FlashCardPatternGenerator.SlotCount;
 
+            // A pending post-completion hide belongs to a previous encounter — cancel it.
+            _hideDelayTween?.Kill();
+            _hideDelayTween = null;
+
             if (cardRoot != null && !cardRoot.gameObject.activeSelf)
                 cardRoot.gameObject.SetActive(true);
 
-            // New card: everything back to face-down, border idle, cursor off.
+            // New card: everything back to face-down, cursor off. The border resets to
+            // idle UNLESS the previous card's grade flash is still fading — cards chain
+            // zero-gap, so the flash must bleed into this reveal bar to be readable.
             for (int i = 0; i < squares.Length; i++) ResetSquare(i);
             SetCursor(-1);
-            SetBorder(borderIdleColor, animate: false);
+            if (!_gradeFlashActive)
+                SetBorder(borderIdleColor, animate: false);
             _state = ViewState.Revealing;
         }
 
@@ -173,10 +200,27 @@ namespace KrumbleHut.Drummi.Dungeons
             // cycles chain zero-gap, so this state is typically one frame long.
             _state = ViewState.Held;
             SetCursor(-1);
-            SetBorder(borderIdleColor, animate: false);
+
+            // Grade flash: the MOMENT is the evaluation boundary (controller event,
+            // virtual time); the hold/fade back to idle is cosmetic only.
+            if (result != null)
+                FlashGradeBorder(GradeColor(result.Grade));
+            else
+                SetBorder(borderIdleColor, animate: false);
         }
 
-        private void HandleEncounterEnd() => HideCard();
+        // Normal completion: hold the card briefly so the final card's grade flash is
+        // readable while the room-exit transition covers the screen. Real-time delay,
+        // cosmetic only — the hide moment is not beat-critical.
+        private void HandleEncounterComplete()
+        {
+            _hideDelayTween?.Kill();
+            _hideDelayTween = DOVirtual.DelayedCall(completeHideDelay, HideCard, ignoreTimeScale: true)
+                                       .SetLink(gameObject);
+        }
+
+        // External stop (death, room interrupt): tear down immediately.
+        private void HandleEncounterStopped() => HideCard();
         #endregion
 
         #region Private — Visual State
@@ -223,6 +267,36 @@ namespace KrumbleHut.Drummi.Dungeons
             }
         }
 
+        private Color GradeColor(EvaluationGrade grade) => grade switch
+        {
+            EvaluationGrade.AllPerfect => gradeAllPerfectColor,
+            EvaluationGrade.AllGood    => gradeAllGoodColor,
+            EvaluationGrade.Passable   => gradePassableColor,
+            _                          => gradeFailedColor,
+        };
+
+        /// <summary>
+        /// Border grade flash: snap to the grade color with a small punch, hold, then
+        /// fade back to idle. Kill-before-reuse via the shared _borderTween slot —
+        /// SetBorder and HideCard stomp this naturally.
+        /// </summary>
+        private void FlashGradeBorder(Color color)
+        {
+            if (cardBorder == null) return;
+            _borderTween?.Kill();
+            cardBorder.transform.localScale = Vector3.one;
+            cardBorder.color = color;
+            _gradeFlashActive = true;
+
+            var seq = DOTween.Sequence().SetLink(cardBorder.gameObject);
+            seq.Append(cardBorder.transform
+                .DOPunchScale(new Vector3(0.04f, 0.04f, 0f), 0.25f, vibrato: 1));
+            seq.AppendInterval(Mathf.Max(0f, gradeHoldDuration - 0.25f));
+            seq.Append(cardBorder.DOColor(borderIdleColor, gradeFadeDuration));
+            seq.OnKill(() => _gradeFlashActive = false);
+            _borderTween = seq;
+        }
+
         private void SetBorder(Color color, bool animate)
         {
             if (cardBorder == null) return;
@@ -252,6 +326,9 @@ namespace KrumbleHut.Drummi.Dungeons
             }
             _borderTween?.Kill();
             _borderTween = null;
+            _hideDelayTween?.Kill();
+            _hideDelayTween   = null;
+            _gradeFlashActive = false;
             _state       = ViewState.Hidden;
             _cursorIndex = -1;
             if (cardRoot != null) cardRoot.gameObject.SetActive(false);

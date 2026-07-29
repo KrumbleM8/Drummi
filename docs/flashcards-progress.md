@@ -73,23 +73,71 @@ were one long day: Phases 0 → 2.
   4-card resets, death mid-cycle teardown (panel inactive, zero DOTween
   warnings), BarSlider fully dormant (IsActive=false, value 0).
 
+### Phase 3 — First-class dungeon room type (2026-07-30)
+- **Room-authored config** — cards derive from `RoomDefinition.RoomLengthBars`
+  (cards = bars/2; each card is a 2-bar cycle; odd bars round down min 1 with
+  a warning; 0 = controller Inspector default). New
+  `RoomDefinition.flashCardNoteRange` (Vector2Int, (0,0) sentinel = controller
+  defaults) + `HasFlashCardNoteRange`. FlashCardController gained
+  `StartEncounter(startVirtualTime, cardCount, noteRange)` overload resolving
+  active config exactly like C&R's `_activePhraseLengths` pattern.
+  `patternDurations` remains INERT for FlashCard rooms (tooltip documents it).
+- **Routing polish (2 gaps fixed vs C&R quality bar)**:
+  1. `SetState(Entering)` now suppresses bar visuals for FlashCard rooms too
+     (was C&R-only — bar-slider flash risk during reveal).
+  2. `HandleCarEncounterComplete`/`HandleFlashCardEncounterComplete` now call
+     `UnsubscribeEvents()` (was self-only unsubscribe — the health-depleted
+     subscription accumulated one dup per completed encounter room; benign
+     due to the state guard, but wrong).
+- **Per-card grade feedback** — FlashCardView border flashes the grade color
+  at each evaluation boundary (event-driven moment; DOTween hold+fade back to
+  idle is cosmetic and bleeds into the next reveal bar since cards chain
+  zero-gap). Serialized colors per EvaluationGrade tier (no shared dungeon
+  grade-color convention exists — checked). Normal completion holds the card
+  ~0.8s (real-time, cosmetic) so the FINAL card's grade is readable during
+  room exit; death (`OnEncounterStopped`) hides immediately.
+- **Verified in editor** (temp floor [Combat → FlashA(4 bars, notes 3–5) →
+  C&R{2,4} → FlashB(6 bars, defaults, BGM/BPM override track 2 @110)],
+  auto-tap harnesses, two full runs + death run):
+  - Seams: mid-floor entry (grid-offset +0.000ms on session grid), exit to
+    C&R and back, BGM+BPM override at seam (FlashB @110, session re-anchored),
+    -1 sentinels honored. Reveal/eval deltas ≤ ~11ms throughout.
+  - Card counts from RoomLengthBars (4→2, 6→3); note-range authoring and
+    (0,0)-sentinel fallback both observed in logs.
+  - Score aggregation continuous across all room types (run total 54).
+  - Pause/resume DURING reveal bar AND perform bar: virtual time froze
+    exactly (537.820590 → 537.820590), flips resumed beat-correct, the
+    paused card still graded AllPerfect.
+  - Death mid-FlashCard (FlashB card 0, perform bar): StopEncounter → run
+    failed → results, FlashCardPanel confirmed inactive, zero DOTween
+    warnings/errors.
+  - Regressions in-floor: combat boundary+stray-tap bars (AllPerfect +
+    exactly-one-penalty Passable), C&R boundary echo + call-window ignore
+    (AllPerfect), FlashCard scenario grades all as expected.
+- **Test infra added**: `DungeonFloorTestDriver`
+  (Assets/Scripts, committed) orchestrates the three tap runners across a
+  mixed floor (C&R runner needs create-inactive→wire→activate — OnEnable
+  subscribes before field wiring otherwise). `FlashCardTestRunner` now also
+  clears queued taps on `OnEncounterStopped` (post-death injection artifact,
+  taps were rejected by the disarmed reader but noisy).
+  CoplayScripts (NOT committed): CreatePhase3TestAssets /
+  StartPhase3TestRun / Phase3AutoPick (auto-clicks effect-pick overlay) /
+  Phase3PauseTest / DeletePhase3TestAssets. Temp floor deleted after
+  verification.
+
 ---
 
-## Immediate next step — PHASE 3 (dungeon room type, full integration)
+## Immediate next step
 
-Recon owed before spec (assumptions to verify against current files):
-- RoomDefinition: what card config should be room-authored vs controller
-  Inspector defaults. NOTE: `patternDurations` on a FlashCard room is INERT
-  (it feeds DungeonBeatManager, which is suppressed; cards come from
-  FlashCardPatternGenerator + controller minNotes/maxNotes). Phase 3 likely
-  adds explicit fields (card count, min/max notes — later: difficulty tier).
-- How a FlashCard room should sit inside a real floor sequence (music
-  continuity across the seam into/out of a FlashCard room is untested —
-  all testing so far used a single-room debug floor with fresh session).
-- Room end condition: currently fixed `cardsPerEncounter`. Design says
-  lessons are repeat-until-pass (no score) — decide whether that's a Phase 3
-  room behavior or standalone-only.
-- Per-hit grade feedback on squares was explicitly deferred (polish pass).
+- **Karl's manual editor playtest** (see below) — includes eyeballing the new
+  grade-flash colors for tier distinctness (code-verified only; colors are
+  serialized on FlashCardView).
+- Room end condition question remains OPEN (deferred out of Phase 3): fixed
+  card count from RoomLengthBars is the room behavior; repeat-until-pass is
+  standalone-mode territory unless design says otherwise.
+- Adding FlashCard rooms to real floors is now a pure content decision
+  (author RoomLengthBars even, optional flashCardNoteRange, SingleDrum
+  layout) — intentionally NOT done (tutorial/introduction design deferred).
 
 ## Still TODO (later phases)
 - **Karl's manual editor playtest** (readability at 105 BPM, reveal→perform

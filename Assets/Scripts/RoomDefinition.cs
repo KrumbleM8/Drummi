@@ -40,6 +40,14 @@ public class RoomDefinition : ScriptableObject
              "SingleDrum: any pad counts, grading is timing-only.")]
     [SerializeField] private CallResponseInputMode callResponseInputMode = CallResponseInputMode.Directional;
 
+    [Header("Flash Card Config")]
+    [Tooltip("Note-count range per card: x = min, y = max (beat 1 is always a note). " +
+             "(0,0) = use FlashCardController Inspector defaults. " +
+             "Only meaningful when RoomType == FlashCard. " +
+             "Card count comes from RoomLengthBars — each card spans 2 bars, so author an even value. " +
+             "PatternDurations is INERT for FlashCard rooms (DungeonBeatManager is suppressed).")]
+    [SerializeField] private Vector2Int flashCardNoteRange = Vector2Int.zero;
+
     [Header("Input Layout")]
     [Tooltip("Pad rig shown during this room. ThreePad = standard combat (L/C/R buttons). SingleDrum = one wide drum (C&R encounters).")]
     [SerializeField] private InputLayoutType inputLayout = InputLayoutType.ThreePad;
@@ -93,6 +101,19 @@ public class RoomDefinition : ScriptableObject
     /// Only meaningful when <see cref="RoomType"/> is <see cref="RoomType.CallAndResponse"/>.
     /// </summary>
     public CallResponseInputMode CallResponseMode => callResponseInputMode;
+
+    /// <summary>
+    /// Authored note-count range per Flash Card (x = min, y = max).
+    /// Only meaningful when <see cref="RoomType"/> is <see cref="RoomType.FlashCard"/>;
+    /// check <see cref="HasFlashCardNoteRange"/> before use.
+    /// </summary>
+    public Vector2Int FlashCardNoteRange => flashCardNoteRange;
+
+    /// <summary>
+    /// True when this room authors a Flash Card note-count range.
+    /// False = (0,0) sentinel — caller falls back to FlashCardController Inspector defaults.
+    /// </summary>
+    public bool HasFlashCardNoteRange => flashCardNoteRange.x > 0 && flashCardNoteRange.y > 0;
 
     /// <summary>Track index this room overrides the floor BGM with, or -1 for no override.</summary>
     public int BgmTrackOverride => bgmTrackOverride;

@@ -121,6 +121,12 @@ namespace KrumbleHut.Drummi.Dungeons
         // Constant type stamped on all notes and echo inputs — Tier 1 is rhythm-only
         // (any pad counts; grading is timing-only), same collapse as SingleDrum C&R.
         private const DungeonEnemyType ConstantType = DungeonEnemyType.Center;
+
+        // Resolved at encounter start: room-authored config overrides Inspector defaults
+        // (same pattern as CallAndResponseController._activePhraseLengths).
+        private int _activeCards;
+        private int _activeMinNotes;
+        private int _activeMaxNotes;
         #endregion
 
         #region Public Properties
@@ -147,6 +153,25 @@ namespace KrumbleHut.Drummi.Dungeons
         /// DungeonModeController.EncounterStartVirtualTime from a room, where the snap is a no-op.
         /// </param>
         public void StartEncounter(double startVirtualTime)
+            => StartEncounter(startVirtualTime, 0, Vector2Int.zero);
+
+        /// <summary>
+        /// Starts a Flash Card encounter using the room's authored configuration.
+        /// Called by RoomController when a RoomType.FlashCard room begins.
+        /// </summary>
+        /// <param name="startVirtualTime">
+        /// Current virtual time (GameClock.GameTime) near which the first reveal bar should
+        /// start. Snapped forward to the next beat on the session grid before use.
+        /// </param>
+        /// <param name="cardCount">
+        /// Number of cards for this encounter (derived from RoomDefinition.RoomLengthBars).
+        /// 0 or negative = use the Inspector cardsPerEncounter default.
+        /// </param>
+        /// <param name="noteRange">
+        /// Authored note-count range (x = min, y = max) from RoomDefinition.FlashCardNoteRange.
+        /// (0,0) sentinel = use the Inspector minNotes/maxNotes defaults.
+        /// </param>
+        public void StartEncounter(double startVirtualTime, int cardCount, Vector2Int noteRange)
         {
             if (metronome == null)
             {
@@ -156,6 +181,17 @@ namespace KrumbleHut.Drummi.Dungeons
 
             // Stop any previous encounter cleanly before initialising the new one.
             if (_running) TerminateEncounter();
+
+            // Resolve active config: room-authored overrides Inspector defaults.
+            _activeCards    = cardCount > 0 ? cardCount : cardsPerEncounter;
+            bool hasRange   = noteRange.x > 0 && noteRange.y > 0;
+            _activeMinNotes = hasRange ? noteRange.x : minNotes;
+            _activeMaxNotes = hasRange ? noteRange.y : maxNotes;
+            if (_activeMaxNotes < _activeMinNotes)
+            {
+                Debug.LogWarning($"[FlashCard] Note range max ({_activeMaxNotes}) < min ({_activeMinNotes}) — clamping max to min.");
+                _activeMaxNotes = _activeMinNotes;
+            }
 
             _beatInterval  = 60.0 / metronome.bpm;
             _cardGenerator = new FlashCardPatternGenerator();
@@ -200,7 +236,7 @@ namespace KrumbleHut.Drummi.Dungeons
 
             Debug.Log($"[FlashCard] === ENCOUNTER START ===");
             Debug.Log($"[FlashCard]   BPM={metronome.bpm:F2}  beatInterval={_beatInterval:F6}s  " +
-                      $"cards={cardsPerEncounter}  notes={minNotes}-{maxNotes}");
+                      $"cards={_activeCards}  notes={_activeMinNotes}-{_activeMaxNotes}");
             Debug.Log($"[FlashCard]   {_current}");
         }
 
@@ -336,7 +372,7 @@ namespace KrumbleHut.Drummi.Dungeons
         {
             _cardIndex++;
 
-            if (_cardIndex >= cardsPerEncounter)
+            if (_cardIndex >= _activeCards)
             {
                 _running = false;
                 if (inputReader != null)
@@ -422,7 +458,7 @@ namespace KrumbleHut.Drummi.Dungeons
         #region Private — Card Generation
         private List<DungeonScheduledBeat> BuildCard(PhraseTiming timing, out bool[] noteMask)
         {
-            var beats  = _cardGenerator.GenerateCard(minNotes, maxNotes, ConstantType, out noteMask);
+            var beats  = _cardGenerator.GenerateCard(_activeMinNotes, _activeMaxNotes, ConstantType, out noteMask);
             var result = new List<DungeonScheduledBeat>(beats.Count);
             foreach (var b in beats)
             {

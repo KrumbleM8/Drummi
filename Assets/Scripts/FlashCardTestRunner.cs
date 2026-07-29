@@ -43,6 +43,9 @@ namespace KrumbleHut.Drummi.Dungeons
             {
                 controller.OnCardRevealStart += HandleCardRevealStart;
                 controller.OnEncounterComplete += HandleEncounterComplete;
+                // External stop (death/interrupt) must also clear queued taps —
+                // otherwise they keep injecting after the encounter is torn down.
+                controller.OnEncounterStopped += HandleEncounterComplete;
             }
         }
 
@@ -52,6 +55,7 @@ namespace KrumbleHut.Drummi.Dungeons
             {
                 controller.OnCardRevealStart -= HandleCardRevealStart;
                 controller.OnEncounterComplete -= HandleEncounterComplete;
+                controller.OnEncounterStopped -= HandleEncounterComplete;
             }
             _pending.Clear();
         }
