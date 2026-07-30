@@ -656,13 +656,13 @@ MonoBehaviour:
   - pageName: Main
     pageTransform: {fileID: 990825035}
     onScreenPosition: {x: 0, y: 0}
-    offScreenLeftPosition: {x: -1136, y: 0}
-    offScreenRightPosition: {x: 1136, y: 0}
+    offScreenLeftPosition: {x: -394.76, y: 0}
+    offScreenRightPosition: {x: 394.76, y: 0}
   - pageName: Score
     pageTransform: {fileID: 1079231910}
     onScreenPosition: {x: 0, y: 0}
-    offScreenLeftPosition: {x: -1136, y: 0}
-    offScreenRightPosition: {x: 1136, y: 0}
+    offScreenLeftPosition: {x: -394.76, y: 0}
+    offScreenRightPosition: {x: 394.76, y: 0}
   startingPageName: Main
   transitionDuration: 0.3
   transitionCurve:
@@ -2288,10 +2288,13 @@ MonoBehaviour:
     vocab: 19
     noteRange: {x: 3, y: 5}
   - minCardsCleared: 10
-    vocab: 23
+    vocab: 27
     noteRange: {x: 4, y: 6}
   - minCardsCleared: 16
-    vocab: 31
+    vocab: 91
+    noteRange: {x: 4, y: 6}
+  - minCardsCleared: 22
+    vocab: 123
     noteRange: {x: 4, y: 6}
   strikePips:
   - {fileID: 1643739432}
@@ -2432,8 +2435,9 @@ MonoBehaviour:
   noteSprite: {fileID: 21300000, guid: 4953a0442da127c4297354dc058efed8, type: 3}
   restSprite: {fileID: 21300000, guid: d286191b9af15964d866deecbafe6356, type: 3}
   eighthPairSprite: {fileID: 21300000, guid: b7263af19b385494daeb0a6fc56f9ecf, type: 3}
-  downbeatEighthSprite: {fileID: 21300000, guid: 3bfeab8257fa23e46946f511d09b0fc7, type: 3}
   offbeatEighthSprite: {fileID: 21300000, guid: bebf061393663a84bbf421893dd9a218, type: 3}
+  sixteenthQuadSprite: {fileID: 21300000, guid: da8644eef08176d42b443d60dd496f53, type: 3}
+  tripletSprite: {fileID: 21300000, guid: 77dbab6979eb88d4d82e43d1a2746240, type: 3}
   faceDownColor: {r: 0.16, g: 0.13, b: 0.22, a: 1}
   noteFaceColor: {r: 0.96, g: 0.93, b: 0.82, a: 1}
   restFaceColor: {r: 0.62, g: 0.6, b: 0.68, a: 1}

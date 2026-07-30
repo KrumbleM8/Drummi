@@ -66,10 +66,18 @@ public class DungeonEvaluator : MonoBehaviour
 
     /// <summary>
     /// Effective Good half-window as a fraction of one beat, including any active
-    /// runtime window scaling. Read-only diagnostic — used by the Flash Card eighths
-    /// tuning guard (rest enforcement requires this to stay below 0.25).
+    /// runtime window scaling. Read-only diagnostic — used by the Flash Card
+    /// subdivision tuning guard (rest enforcement requires this to stay below 0.25).
     /// </summary>
     public float EffectiveGoodWindowBeats => goodFraction * EffectWindowScale;
+
+    /// <summary>
+    /// Effective Perfect half-window as a fraction of one beat, including any active
+    /// runtime window scaling. Read-only diagnostic — the Flash Card subdivision
+    /// tuning guard requires this below half the densest spacing (0.125 for sixteenths)
+    /// so Perfect zones of adjacent notes never overlap.
+    /// </summary>
+    public float EffectivePerfectWindowBeats => perfectFraction * EffectWindowScale;
     #endregion
 
     #region Lifecycle

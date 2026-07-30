@@ -20,7 +20,7 @@ namespace KrumbleHut.Drummi.Dungeons
     ///                 take the out-of-window penalty. This holds down to half-beat
     ///                 (eighth) spacing: rests sit >= 0.5 beat from the nearest note,
     ///                 beyond the Good threshold (0.199 beat shipped; guard warns if
-    ///                 tuning ever reaches 0.25 — see CheckEighthsTuningGuard).
+    ///                 tuning ever reaches 0.25 — see CheckSubdivisionTuningGuard).
     /// Cards chain zero-gap: next card's reveal starts exactly at this card's
     /// evaluation boundary (PhraseTiming.NextPhraseStart), no accumulated drift.
     ///
@@ -545,35 +545,40 @@ namespace KrumbleHut.Drummi.Dungeons
                 result.Add(new DungeonScheduledBeat(virtualTime, b.enemyType));
             }
 
-            CheckEighthsTuningGuard(templates);
+            CheckSubdivisionTuningGuard(templates);
             return result;
         }
 
         /// <summary>
-        /// TUNING GUARD: geometric rest enforcement at half-beat spacing relies on the
-        /// effective Good window (goodFraction × any runtime window scaling) staying
-        /// BELOW 0.25 beat — at ≥ 0.25 the penalizable gap between adjacent half-beat
-        /// positions collapses to zero and taps on eighth rests grade as sloppy hits.
-        /// Shipped tuning is 0.199 (gap = 0.102 beat, BPM-invariant). Warn once per
-        /// encounter when an eighth-bearing card is generated under bad tuning.
+        /// TUNING GUARD: geometric rest enforcement relies on the effective Good
+        /// window (goodFraction × any runtime window scaling) staying BELOW 0.25
+        /// beat — the binding case is a rest position 0.25 beat from the nearest
+        /// note (adjacent half-beat positions at the eighths tier; a rest square or
+        /// offbeat rest bordering a SixteenthQuad's last note at the Phase 6 tier).
+        /// At ≥ 0.25 those rests grade as sloppy hits instead of penalizing.
+        /// Shipped tuning is 0.199. Additionally, Perfect must stay below half the
+        /// densest spacing (0.125 for sixteenths) so Perfect zones never overlap;
+        /// shipped 0.051. Warn once per encounter on a subdivided card.
         /// </summary>
-        private void CheckEighthsTuningGuard(SquareTemplate[] templates)
+        private void CheckSubdivisionTuningGuard(SquareTemplate[] templates)
         {
             if (_tuningGuardWarned || evaluator == null) return;
 
-            bool hasEighths = false;
+            bool subdivided = false;
             foreach (var t in templates)
-                if (t.HasEighths()) { hasEighths = true; break; }
-            if (!hasEighths) return;
+                if (t.HasSubdivision()) { subdivided = true; break; }
+            if (!subdivided) return;
 
-            float goodBeats = evaluator.EffectiveGoodWindowBeats;
-            if (goodBeats >= 0.25f)
+            float goodBeats    = evaluator.EffectiveGoodWindowBeats;
+            float perfectBeats = evaluator.EffectivePerfectWindowBeats;
+            if (goodBeats >= 0.25f || perfectBeats >= 0.125f)
             {
                 _tuningGuardWarned = true;
-                Debug.LogWarning($"[FlashCard] TUNING GUARD: effective Good window is {goodBeats:F3} beat " +
-                                 "(≥ 0.25) while generating an eighth-bearing card — rest enforcement at " +
-                                 "half-beat spacing has NO penalizable gap. Reduce DungeonEvaluator.goodFraction " +
-                                 "or the active timing-window effect scale.");
+                Debug.LogWarning($"[FlashCard] TUNING GUARD: effective windows Good={goodBeats:F3} / " +
+                                 $"Perfect={perfectBeats:F3} beat while generating a subdivided card — " +
+                                 "rest enforcement needs Good < 0.25 and non-overlapping Perfect zones need " +
+                                 "Perfect < 0.125. Reduce DungeonEvaluator fractions or the active " +
+                                 "timing-window effect scale.");
             }
         }
 

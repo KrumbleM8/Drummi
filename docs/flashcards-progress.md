@@ -140,6 +140,41 @@ were one long day: Phases 0 → 2.
 - Zero evaluator/reader logic changes (evaluator code-default fractions
   aligned to scene values, constants only).
 
+### Phase 6 — Sixteenths & triplets (2026-07-31)
+- Vocabulary: REMOVED DownbeatEighth (performance-identical to Quarter; enum
+  member deleted — safe, SquareTemplate is never serialized). FlashCardVocab
+  bit 1<<2 is RESERVED forever (stale serialized ints — old ladder steps,
+  "Everything" = -1 assets — may carry it; generator never reads it, verified
+  inert with a 300-card stale-bit sample). ADDED SixteenthQuad (1<<5; taps at
+  +0/.25/.5/.75) and Triplet (1<<6; +0/1/3/2/3). Both downbeat-bearing
+  (anchor-eligible). Log chars: S / T.
+- **Accept-leniency decision** (simulated against the real evaluator,
+  CoplayScripts/SimulateDenseMatching): at quad spacing Good windows overlap
+  (0.398 > 0.25) but greedy IN-ORDER bar matching pairs late-shifted clusters
+  correctly (+0.10 → AllGood; +0.22 → Passable), mash → Passable with no
+  phantom penalties (windows tile the square; standalone has no health),
+  6-tap spam → Failed via |inputs−beats| tolerance. Per-beat window caps
+  rejected: would not fix attribution (midpoint unchanged), only add
+  difficulty, and would touch both evaluator hot paths.
+- Tuning guard: CheckEighthsTuningGuard → CheckSubdivisionTuningGuard.
+  Threshold stays Good < 0.25 (binding case now: rest 0.25 beat from a quad's
+  last note); trigger broadened to any subdivided template; added
+  Perfect < 0.125 check (Perfect zones must never overlap; shipped 0.051).
+  New read-only DungeonEvaluator.EffectivePerfectWindowBeats.
+- Endless ladder now 5 steps: 0 Q|R (3-4) → 4 +EighthPair (3-5) →
+  10 +OffbeatEighth (4-6) → 16 +Triplet (4-6) → 22 +SixteenthQuad (4-6);
+  FlashCards.unity serialized ints migrated 17/19/27/91/123.
+- Debug_FlashCard.asset vocab = -1 (Everything) auto-gains the new templates —
+  approved as-is (debug room).
+- Physical: quad inter-tap 143ms @105 (7/s), triplet 190ms (5.25/s); the drum
+  accepts alternating multi-touch. Content guideline: keep quads out of
+  dungeon rooms ≥ 120 BPM.
+- Verified: 2000-card full-vocab sample (anchor/range/fractional beat shapes,
+  incl. float-third precision — error ~1e-8 beat, non-issue), 500-card legacy
+  + 300-card stale-bit samples, dense-matching sim, endless run through all 5
+  ladder steps with 17-beat cards grading AllPerfect, dungeon mixed-floor
+  regression. Triplet/quad placeholder glyphs generated + wired in both scenes.
+
 ### Phase 4 — Standalone endless mode (2026-07-31)
 - **Phase 4.0 recon findings (all confirmed in build):**
   - FlashCardController's only dungeon entanglement was

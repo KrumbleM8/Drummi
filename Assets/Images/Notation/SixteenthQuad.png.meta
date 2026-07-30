@@ -1,16 +1,10 @@
 fileFormatVersion: 2
-guid: 3bfeab8257fa23e46946f511d09b0fc7
+guid: da8644eef08176d42b443d60dd496f53
 TextureImporter:
   internalIDToNameTable:
   - first:
-      213: -6480037884435049384
-    second: DownbeatEighth_0
-  - first:
-      213: 7037476385752135581
-    second: DownbeatEighth_1
-  - first:
-      213: -3491720573832110222
-    second: DownbeatEighth_2
+      213: -5577916481578893177
+    second: SixteenthQuad_0
   externalObjects: {}
   serializedVersion: 13
   mipmaps:
@@ -145,13 +139,13 @@ TextureImporter:
     serializedVersion: 2
     sprites:
     - serializedVersion: 2
-      name: DownbeatEighth_0
+      name: SixteenthQuad_0
       rect:
         serializedVersion: 2
-        x: 21
-        y: 41
-        width: 111
-        height: 176
+        x: 15
+        y: 38
+        width: 223
+        height: 179
       alignment: 0
       pivot: {x: 0, y: 0}
       border: {x: 0, y: 0, z: 0, w: 0}
@@ -160,52 +154,8 @@ TextureImporter:
       physicsShape: []
       tessellationDetail: -1
       bones: []
-      spriteID: 854dc2770e74216a0800000000000000
-      internalID: -6480037884435049384
-      vertices: []
-      indices: 
-      edges: []
-      weights: []
-    - serializedVersion: 2
-      name: DownbeatEighth_1
-      rect:
-        serializedVersion: 2
-        x: 157
-        y: 143
-        width: 35
-        height: 35
-      alignment: 0
-      pivot: {x: 0, y: 0}
-      border: {x: 0, y: 0, z: 0, w: 0}
-      customData: 
-      outline: []
-      physicsShape: []
-      tessellationDetail: -1
-      bones: []
-      spriteID: d97b4f79c732aa160800000000000000
-      internalID: 7037476385752135581
-      vertices: []
-      indices: 
-      edges: []
-      weights: []
-    - serializedVersion: 2
-      name: DownbeatEighth_2
-      rect:
-        serializedVersion: 2
-        x: 169
-        y: 69
-        width: 59
-        height: 103
-      alignment: 0
-      pivot: {x: 0, y: 0}
-      border: {x: 0, y: 0, z: 0, w: 0}
-      customData: 
-      outline: []
-      physicsShape: []
-      tessellationDetail: -1
-      bones: []
-      spriteID: 27f50d553aaea8fc0800000000000000
-      internalID: -3491720573832110222
+      spriteID: 78081b853824792b0800000000000000
+      internalID: -5577916481578893177
       vertices: []
       indices: 
       edges: []
@@ -224,9 +174,7 @@ TextureImporter:
     spriteCustomMetadata:
       entries: []
     nameFileIdTable:
-      DownbeatEighth_0: -6480037884435049384
-      DownbeatEighth_1: 7037476385752135581
-      DownbeatEighth_2: -3491720573832110222
+      SixteenthQuad_0: -5577916481578893177
   mipmapLimitGroupName: 
   pSDRemoveMatte: 0
   userData: 

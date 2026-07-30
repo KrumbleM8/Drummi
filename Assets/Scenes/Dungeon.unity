@@ -1476,18 +1476,18 @@ MonoBehaviour:
   - pageName: Main
     pageTransform: {fileID: 1943619380}
     onScreenPosition: {x: 0, y: 0}
-    offScreenLeftPosition: {x: -812.16, y: 0}
-    offScreenRightPosition: {x: 812.16, y: 0}
+    offScreenLeftPosition: {x: -655.76, y: 0}
+    offScreenRightPosition: {x: 655.76, y: 0}
   - pageName: Customize
     pageTransform: {fileID: 1312737091}
     onScreenPosition: {x: 0, y: 0}
-    offScreenLeftPosition: {x: -812.16, y: 0}
-    offScreenRightPosition: {x: 812.16, y: 0}
+    offScreenLeftPosition: {x: -655.76, y: 0}
+    offScreenRightPosition: {x: 655.76, y: 0}
   - pageName: Score
     pageTransform: {fileID: 1848881446}
     onScreenPosition: {x: 0, y: 0}
-    offScreenLeftPosition: {x: -812.16, y: 0}
-    offScreenRightPosition: {x: 812.16, y: 0}
+    offScreenLeftPosition: {x: -655.76, y: 0}
+    offScreenRightPosition: {x: 655.76, y: 0}
   startingPageName: Main
   transitionDuration: 0.5
   transitionCurve:
@@ -2946,6 +2946,8 @@ MonoBehaviour:
   goodReward: 5
   passableReward: 1
   allowedMistakes: 1
+  highScoreKey: DungeonHS
+  resetScoreOnRepeatedFailure: 1
 --- !u!114 &482265711
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -11129,8 +11131,9 @@ MonoBehaviour:
   noteSprite: {fileID: 21300000, guid: 4953a0442da127c4297354dc058efed8, type: 3}
   restSprite: {fileID: 21300000, guid: d286191b9af15964d866deecbafe6356, type: 3}
   eighthPairSprite: {fileID: 21300000, guid: b7263af19b385494daeb0a6fc56f9ecf, type: 3}
-  downbeatEighthSprite: {fileID: 21300000, guid: 3bfeab8257fa23e46946f511d09b0fc7, type: 3}
   offbeatEighthSprite: {fileID: 21300000, guid: bebf061393663a84bbf421893dd9a218, type: 3}
+  sixteenthQuadSprite: {fileID: 21300000, guid: da8644eef08176d42b443d60dd496f53, type: 3}
+  tripletSprite: {fileID: 21300000, guid: 77dbab6979eb88d4d82e43d1a2746240, type: 3}
   faceDownColor: {r: 0.16, g: 0.13, b: 0.22, a: 1}
   noteFaceColor: {r: 0.96, g: 0.93, b: 0.82, a: 1}
   restFaceColor: {r: 0.62, g: 0.6, b: 0.68, a: 1}

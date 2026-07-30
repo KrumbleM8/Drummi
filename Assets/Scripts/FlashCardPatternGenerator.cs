@@ -6,12 +6,13 @@ namespace KrumbleHut.Drummi.Dungeons
     /// <summary>
     /// Generates a single Flash Card: 8 beat slots, each stamped with one
     /// SquareTemplate from the authored vocabulary. A square is always exactly one
-    /// beat; eighth notes sit at slot + 0.5 with duration 0.5f. No pad encoding —
+    /// beat; subdivided notes sit at fractional slots (eighths +0.5, sixteenths
+    /// +0.25 steps, triplets +1/3 steps) with matching durations. No pad encoding —
     /// every note is retagged to a constant type by the caller, grading is timing-only.
     ///
     /// Rules:
     ///   - Slot 0 anchor: always a downbeat-bearing template
-    ///     (Quarter | EighthPair | DownbeatEighth) — the readability anchor.
+    ///     (Quarter | EighthPair | SixteenthQuad | Triplet) — the readability anchor.
     ///   - noteRange [minNotes, maxNotes] counts NOTE-BEARING SQUARES (not taps),
     ///     preserving the meaning of existing authored assets. Clamped to [1, 8].
     ///   - When the vocabulary excludes Rest, every square is note-bearing (range
@@ -78,9 +79,12 @@ namespace KrumbleHut.Drummi.Dungeons
                 _freeSlots.RemoveAt(pick);
             }
 
-            // Emit beats. Eighths carry duration 0.5f (cosmetic — evaluation uses
-            // only the scheduled time) and offbeats sit at slot + 0.5.
-            var beats = new List<DungeonBeat>(noteCount * 2);
+            // Emit beats. Durations are cosmetic (evaluation uses only the scheduled
+            // time); subdivided notes sit at fractional slots. Triplet thirds as
+            // float lose ~1e-8 beat (~nanoseconds at any BPM) — far below timing
+            // precision, a non-issue (Phase 6 recon).
+            const float Third = 1f / 3f;
+            var beats = new List<DungeonBeat>(noteCount * 4);
             for (int s = 0; s < SlotCount; s++)
             {
                 switch (templates[s])
@@ -92,11 +96,19 @@ namespace KrumbleHut.Drummi.Dungeons
                         beats.Add(new DungeonBeat(0.5f, s,        constantType));
                         beats.Add(new DungeonBeat(0.5f, s + 0.5f, constantType));
                         break;
-                    case SquareTemplate.DownbeatEighth:
-                        beats.Add(new DungeonBeat(0.5f, s, constantType));
-                        break;
                     case SquareTemplate.OffbeatEighth:
                         beats.Add(new DungeonBeat(0.5f, s + 0.5f, constantType));
+                        break;
+                    case SquareTemplate.SixteenthQuad:
+                        beats.Add(new DungeonBeat(0.25f, s,         constantType));
+                        beats.Add(new DungeonBeat(0.25f, s + 0.25f, constantType));
+                        beats.Add(new DungeonBeat(0.25f, s + 0.5f,  constantType));
+                        beats.Add(new DungeonBeat(0.25f, s + 0.75f, constantType));
+                        break;
+                    case SquareTemplate.Triplet:
+                        beats.Add(new DungeonBeat(Third, s,             constantType));
+                        beats.Add(new DungeonBeat(Third, s + Third,     constantType));
+                        beats.Add(new DungeonBeat(Third, s + 2f * Third, constantType));
                         break;
                     // SquareTemplate.Rest: no beats.
                 }
@@ -113,10 +125,12 @@ namespace KrumbleHut.Drummi.Dungeons
         private void BuildPools(FlashCardVocab vocab)
         {
             _notePool.Clear();
-            if ((vocab & FlashCardVocab.Quarter)        != 0) _notePool.Add(SquareTemplate.Quarter);
-            if ((vocab & FlashCardVocab.EighthPair)     != 0) _notePool.Add(SquareTemplate.EighthPair);
-            if ((vocab & FlashCardVocab.DownbeatEighth) != 0) _notePool.Add(SquareTemplate.DownbeatEighth);
-            if ((vocab & FlashCardVocab.OffbeatEighth)  != 0) _notePool.Add(SquareTemplate.OffbeatEighth);
+            if ((vocab & FlashCardVocab.Quarter)       != 0) _notePool.Add(SquareTemplate.Quarter);
+            if ((vocab & FlashCardVocab.EighthPair)    != 0) _notePool.Add(SquareTemplate.EighthPair);
+            if ((vocab & FlashCardVocab.OffbeatEighth) != 0) _notePool.Add(SquareTemplate.OffbeatEighth);
+            if ((vocab & FlashCardVocab.SixteenthQuad) != 0) _notePool.Add(SquareTemplate.SixteenthQuad);
+            if ((vocab & FlashCardVocab.Triplet)       != 0) _notePool.Add(SquareTemplate.Triplet);
+            // Bit 1 << 2 (was DownbeatEighth) is reserved and intentionally never read.
 
             if (_notePool.Count == 0)
             {

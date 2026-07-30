@@ -29,8 +29,9 @@ namespace KrumbleHut.Drummi.Dungeons
     ///   cardRoot    — panel root under DungeonCanvas/GameplayUI (starts inactive)
     ///   cardBorder  — border image behind the card background ("your turn" state)
     ///   squares     — 8 entries in reading order (back image, glyph image, cursor overlay)
-    ///   noteSprite / restSprite / eighthPairSprite / downbeatEighthSprite /
-    ///   offbeatEighthSprite — per-template notation glyphs (placeholder art, drop-in swap later)
+    ///   noteSprite / restSprite / eighthPairSprite / offbeatEighthSprite /
+    ///   sixteenthQuadSprite / tripletSprite — per-template notation glyphs
+    ///   (placeholder art, drop-in swap later)
     /// </summary>
     public class FlashCardView : MonoBehaviour
     {
@@ -58,8 +59,9 @@ namespace KrumbleHut.Drummi.Dungeons
         [SerializeField] private Sprite noteSprite;
         [SerializeField] private Sprite restSprite;
         [SerializeField] private Sprite eighthPairSprite;
-        [SerializeField] private Sprite downbeatEighthSprite;
         [SerializeField] private Sprite offbeatEighthSprite;
+        [SerializeField] private Sprite sixteenthQuadSprite;
+        [SerializeField] private Sprite tripletSprite;
 
         [Header("Colors")]
         [SerializeField] private Color faceDownColor     = new Color(0.16f, 0.13f, 0.22f, 1f);
@@ -255,11 +257,12 @@ namespace KrumbleHut.Drummi.Dungeons
 
         private Sprite GlyphSprite(SquareTemplate template) => template switch
         {
-            SquareTemplate.Quarter        => noteSprite,
-            SquareTemplate.EighthPair     => eighthPairSprite,
-            SquareTemplate.DownbeatEighth => downbeatEighthSprite,
-            SquareTemplate.OffbeatEighth  => offbeatEighthSprite,
-            _                             => restSprite,
+            SquareTemplate.Quarter       => noteSprite,
+            SquareTemplate.EighthPair    => eighthPairSprite,
+            SquareTemplate.OffbeatEighth => offbeatEighthSprite,
+            SquareTemplate.SixteenthQuad => sixteenthQuadSprite,
+            SquareTemplate.Triplet       => tripletSprite,
+            _                            => restSprite,
         };
 
         private void SetCursor(int index)

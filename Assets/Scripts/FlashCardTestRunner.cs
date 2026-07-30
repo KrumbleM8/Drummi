@@ -115,12 +115,19 @@ namespace KrumbleHut.Drummi.Dungeons
                         Enqueue(performStart + slot * beatInterval,          $"card={cardIndex} slot={slot} EIGHTH-PAIR down (clean)");
                         Enqueue(performStart + (slot + 0.5) * beatInterval,  $"card={cardIndex} slot={slot} EIGHTH-PAIR off (clean)");
                         break;
-                    case SquareTemplate.DownbeatEighth:
-                        Enqueue(performStart + slot * beatInterval, $"card={cardIndex} slot={slot} DOWNBEAT-8TH (clean)");
-                        break;
                     case SquareTemplate.OffbeatEighth:
                         Enqueue(performStart + (slot + 0.5) * beatInterval,
                                 $"card={cardIndex} slot={slot} OFFBEAT-8TH +0.5 (clean, expect Perfect)");
+                        break;
+                    case SquareTemplate.SixteenthQuad:
+                        for (int k = 0; k < 4; k++)
+                            Enqueue(performStart + (slot + 0.25 * k) * beatInterval,
+                                    $"card={cardIndex} slot={slot} 16TH-QUAD +{0.25 * k:F2} (clean)");
+                        break;
+                    case SquareTemplate.Triplet:
+                        for (int k = 0; k < 3; k++)
+                            Enqueue(performStart + (slot + k / 3.0) * beatInterval,
+                                    $"card={cardIndex} slot={slot} TRIPLET +{k}/3 (clean)");
                         break;
                     // SquareTemplate.Rest: no tap.
                 }
