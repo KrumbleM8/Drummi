@@ -18,9 +18,14 @@ public class DungeonEvaluator : MonoBehaviour
     [SerializeField] private TMP_Text     scoreText;
     [SerializeField] private DungeonHealth health;
 
+    // Code defaults match the shipped serialized values in Dungeon.unity (0.051/0.199).
+    // goodFraction MUST stay below 0.25: Flash Card eighth-rest enforcement is geometric,
+    // and at 0.25 the penalizable gap between adjacent half-beat positions collapses to
+    // zero (see FlashCardController.CheckEighthsTuningGuard). A component reset must not
+    // silently zero that gap, hence the aligned defaults.
     [Header("Timing Windows (fraction of one beat)")]
-    [SerializeField][Range(0f, 0.5f)] private float perfectFraction = 0.08f;
-    [SerializeField][Range(0f, 0.5f)] private float goodFraction    = 0.25f;
+    [SerializeField][Range(0f, 0.5f)] private float perfectFraction = 0.051f;
+    [SerializeField][Range(0f, 0.5f)] private float goodFraction    = 0.199f;
 
     [Header("Scoring")]
     [SerializeField] private int perfectReward   = 200;
@@ -51,6 +56,13 @@ public class DungeonEvaluator : MonoBehaviour
 
     private float PerfectThreshold => (float)(60.0 / metronome.bpm) * perfectFraction * EffectWindowScale;
     private float GoodThreshold    => (float)(60.0 / metronome.bpm) * goodFraction    * EffectWindowScale;
+
+    /// <summary>
+    /// Effective Good half-window as a fraction of one beat, including any active
+    /// runtime window scaling. Read-only diagnostic — used by the Flash Card eighths
+    /// tuning guard (rest enforcement requires this to stay below 0.25).
+    /// </summary>
+    public float EffectiveGoodWindowBeats => goodFraction * EffectWindowScale;
     #endregion
 
     #region Lifecycle

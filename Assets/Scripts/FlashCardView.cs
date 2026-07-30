@@ -29,7 +29,8 @@ namespace KrumbleHut.Drummi.Dungeons
     ///   cardRoot    — panel root under DungeonCanvas/GameplayUI (starts inactive)
     ///   cardBorder  — border image behind the card background ("your turn" state)
     ///   squares     — 8 entries in reading order (back image, glyph image, cursor overlay)
-    ///   noteSprite / restSprite — notation glyphs (placeholder art, drop-in swap later)
+    ///   noteSprite / restSprite / eighthPairSprite / downbeatEighthSprite /
+    ///   offbeatEighthSprite — per-template notation glyphs (placeholder art, drop-in swap later)
     /// </summary>
     public class FlashCardView : MonoBehaviour
     {
@@ -56,6 +57,9 @@ namespace KrumbleHut.Drummi.Dungeons
         [Header("Glyphs (drop-in swap for final art)")]
         [SerializeField] private Sprite noteSprite;
         [SerializeField] private Sprite restSprite;
+        [SerializeField] private Sprite eighthPairSprite;
+        [SerializeField] private Sprite downbeatEighthSprite;
+        [SerializeField] private Sprite offbeatEighthSprite;
 
         [Header("Colors")]
         [SerializeField] private Color faceDownColor     = new Color(0.16f, 0.13f, 0.22f, 1f);
@@ -165,7 +169,7 @@ namespace KrumbleHut.Drummi.Dungeons
             _state = ViewState.Revealing;
         }
 
-        private void HandleSquareReveal(int cardIndex, int slot, bool isNote)
+        private void HandleSquareReveal(int cardIndex, int slot, SquareTemplate template)
         {
             if (slot < 0 || slot >= squares.Length) return;
             var sq = squares[slot];
@@ -173,7 +177,7 @@ namespace KrumbleHut.Drummi.Dungeons
 
             double expected = _timing.CallStartTime + slot * _beatInterval;
             double delta    = GameClock.Instance != null ? GameClock.Instance.GameTime - expected : 0.0;
-            Debug.Log($"[FlashCardView] Flip | card={cardIndex} slot={slot} {(isNote ? "NOTE" : "rest")} " +
+            Debug.Log($"[FlashCardView] Flip | card={cardIndex} slot={slot} {template} " +
                       $"delta=+{delta * 1000.0:F3}ms");
 
             // Cosmetic flip: scaleX 1→0, swap face at the midpoint, 0→1.
@@ -182,7 +186,7 @@ namespace KrumbleHut.Drummi.Dungeons
             sq.root.localScale = Vector3.one;
             var seq = DOTween.Sequence().SetLink(sq.root.gameObject);
             seq.Append(sq.root.DOScaleX(0f, flipHalfDuration).SetEase(Ease.InQuad));
-            seq.AppendCallback(() => ShowFace(sq, isNote));
+            seq.AppendCallback(() => ShowFace(sq, template));
             seq.Append(sq.root.DOScaleX(1f, flipHalfDuration * 1.6f).SetEase(Ease.OutBack));
             _flipTweens[slot] = seq;
         }
@@ -236,17 +240,27 @@ namespace KrumbleHut.Drummi.Dungeons
             if (sq.cursor != null) sq.cursor.enabled = false;
         }
 
-        private void ShowFace(Square sq, bool isNote)
+        private void ShowFace(Square sq, SquareTemplate template)
         {
+            bool isNote = template.IsNoteBearing();
             if (sq.back != null) sq.back.color = isNote ? noteFaceColor : restFaceColor;
             if (sq.glyph != null)
             {
-                sq.glyph.sprite  = isNote ? noteSprite : restSprite;
+                sq.glyph.sprite  = GlyphSprite(template);
                 sq.glyph.enabled = sq.glyph.sprite != null;
                 // Rests read quieter: dim the glyph slightly.
                 sq.glyph.color = isNote ? Color.black : new Color(0.15f, 0.15f, 0.2f, 0.8f);
             }
         }
+
+        private Sprite GlyphSprite(SquareTemplate template) => template switch
+        {
+            SquareTemplate.Quarter        => noteSprite,
+            SquareTemplate.EighthPair     => eighthPairSprite,
+            SquareTemplate.DownbeatEighth => downbeatEighthSprite,
+            SquareTemplate.OffbeatEighth  => offbeatEighthSprite,
+            _                             => restSprite,
+        };
 
         private void SetCursor(int index)
         {

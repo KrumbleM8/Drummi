@@ -200,7 +200,8 @@ public class RoomController : MonoBehaviour
                         flashCardController.StartEncounter(
                             modeController.EncounterStartVirtualTime,
                             cards,
-                            _currentDef.FlashCardNoteRange);
+                            _currentDef.FlashCardNoteRange,
+                            _currentDef.FlashCardVocabulary);
                     }
                     else
                     {

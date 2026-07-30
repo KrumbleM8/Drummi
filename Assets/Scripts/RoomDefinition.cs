@@ -1,4 +1,5 @@
 using UnityEngine;
+using KrumbleHut.Drummi.Dungeons;
 
 /// <summary>
 /// Defines the properties of a single dungeon room encounter.
@@ -16,7 +17,8 @@ public class RoomDefinition : ScriptableObject
     [SerializeField] private EnemyTier tier;
 
     [Header("Gameplay")]
-    [Tooltip("Pattern durations passed to DungeonBeatManager — overrides the default { 1f, 0.5f }. Leave empty to use defaults.")]
+    [Tooltip("Pattern durations passed to DungeonBeatManager — overrides the default { 1f, 0.5f }. Leave empty to use defaults. " +
+             "INERT for FlashCard rooms (DungeonBeatManager is suppressed; card content is driven by FlashCardVocabulary/FlashCardNoteRange).")]
     [SerializeField] private float[] patternDurations;
 
     [Header("Visuals")]
@@ -37,12 +39,19 @@ public class RoomDefinition : ScriptableObject
     [SerializeField] private int[] callResponsePhraseLengths = { 2, 4, 6 };
 
     [Header("Flash Card Config")]
-    [Tooltip("Note-count range per card: x = min, y = max (beat 1 is always a note). " +
+    [Tooltip("Note-count range per card: x = min, y = max. Counts NOTE-BEARING SQUARES (not taps); " +
+             "square 1 always carries a downbeat note. " +
              "(0,0) = use FlashCardController Inspector defaults. " +
              "Only meaningful when RoomType == FlashCard. " +
              "Card count comes from RoomLengthBars — each card spans 2 bars, so author an even value. " +
              "PatternDurations is INERT for FlashCard rooms (DungeonBeatManager is suppressed).")]
     [SerializeField] private Vector2Int flashCardNoteRange = Vector2Int.zero;
+
+    [Tooltip("Square-template vocabulary the card generator draws from. " +
+             "None = use FlashCardController Inspector default (Quarter | Rest ≡ quarters-and-rests-only behavior). " +
+             "Must include at least one note-bearing template (generator warns and falls back to Quarter otherwise). " +
+             "Without Rest, every square is note-bearing. Only meaningful when RoomType == FlashCard.")]
+    [SerializeField] private FlashCardVocab flashCardVocabulary = FlashCardVocab.None;
 
     [Header("Input Layout")]
     [Tooltip("Pad rig shown during this room. ThreePad = standard combat (L/C/R buttons). SingleDrum = one wide drum (C&R encounters).")]
@@ -104,6 +113,14 @@ public class RoomDefinition : ScriptableObject
     /// False = (0,0) sentinel — caller falls back to FlashCardController Inspector defaults.
     /// </summary>
     public bool HasFlashCardNoteRange => flashCardNoteRange.x > 0 && flashCardNoteRange.y > 0;
+
+    /// <summary>
+    /// Authored square-template vocabulary for Flash Card generation.
+    /// <see cref="FlashCardVocab.None"/> sentinel = caller falls back to the
+    /// FlashCardController Inspector default (Quarter | Rest).
+    /// Only meaningful when <see cref="RoomType"/> is <see cref="RoomType.FlashCard"/>.
+    /// </summary>
+    public FlashCardVocab FlashCardVocabulary => flashCardVocabulary;
 
     /// <summary>Track index this room overrides the floor BGM with, or -1 for no override.</summary>
     public int BgmTrackOverride => bgmTrackOverride;

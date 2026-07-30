@@ -8,14 +8,20 @@ namespace KrumbleHut.Drummi.Dungeons
     /// scheduled virtual times to verify the Flash Card reveal/perform cycle without
     /// touch input. Editor-only tooling; safe to leave disabled in the scene.
     ///
-    /// One scenario per card index (cycling for encounters longer than 4 cards):
-    ///   card 0 — CLEAN:      tap every note at its perform-bar time.
-    ///   card 1 — REST TAP:   clean + one extra tap on the first rest slot
-    ///                        (expects the out-of-window penalty).
-    ///   card 2 — DOUBLE TAP: clean + a second tap 40 ms after the first note
-    ///                        (observes double-hit consumption behaviour).
-    ///   card 3 — REVEAL TAP: one tap mid-reveal-bar (expects silent ignore,
-    ///                        no penalty, no evaluator pollution) + clean perform.
+    /// One scenario per card index (cycling for encounters longer than 5 cards):
+    ///   card 0 — CLEAN:        tap every note at its perform-bar time (eighths
+    ///                          included: offbeat taps at slot + 0.5).
+    ///   card 1 — REST TAP:     clean + one extra tap on the first full-rest slot
+    ///                          (expects the out-of-window penalty).
+    ///   card 2 — DOUBLE TAP:   clean + a second tap 65 ms after the first note
+    ///                          (observes double-hit consumption behaviour).
+    ///   card 3 — REVEAL TAP:   one tap mid-reveal-bar (expects silent ignore,
+    ///                          no penalty, no evaluator pollution) + clean perform.
+    ///   card 4 — OFFBEAT PROBE: clean + one extra tap on the DOWNBEAT of the first
+    ///                          OffbeatEighth square (expects the out-of-window
+    ///                          penalty — the square's only note is at +0.5, whose
+    ///                          clean tap grades Perfect). Skipped with a warning
+    ///                          when the card has no OffbeatEighth square.
     ///
     /// All schedule times are GameClock virtual time; injection fires from Update
     /// polling, so tap accuracy is one frame (~16 ms at 60 fps) — well inside the
@@ -83,32 +89,48 @@ namespace KrumbleHut.Drummi.Dungeons
             if (!runScenarios) return;
             _pending.Clear();
 
-            var timing   = controller.CurrentTiming;
-            var noteMask = controller.CurrentNoteMask;
-            if (noteMask == null) return;
+            var timing    = controller.CurrentTiming;
+            var templates = controller.CurrentTemplates;
+            if (templates == null) return;
 
             double beatInterval = (timing.ResponseStartTime - timing.CallStartTime)
                                   / FlashCardPatternGenerator.SlotCount;
             double performStart = timing.ResponseStartTime;
 
-            int scenario = cardIndex % 4;
+            int scenario = cardIndex % 5;
 
-            // Base: clean perform — one tap per note slot at its perform-bar time.
-            // Slot 0 fires at EXACTLY the window-open boundary: this intentionally
-            // exercises the sub-frame race covered by DungeonInputReader's
-            // windowOpenLateToleranceSeconds (Phase 1.1) — the tap must be
-            // coyote-buffered and replayed, not silently dropped.
-            for (int slot = 0; slot < noteMask.Count; slot++)
+            // Base: clean perform — one tap per note position at its perform-bar time
+            // (offbeat eighths at slot + 0.5). Slot 0 fires at EXACTLY the window-open
+            // boundary: this intentionally exercises the sub-frame race covered by
+            // DungeonInputReader's windowOpenLateToleranceSeconds (Phase 1.1) — the
+            // tap must be coyote-buffered and replayed, not silently dropped.
+            for (int slot = 0; slot < templates.Count; slot++)
             {
-                if (noteMask[slot])
-                    Enqueue(performStart + slot * beatInterval, $"card={cardIndex} slot={slot} NOTE (clean)");
+                switch (templates[slot])
+                {
+                    case SquareTemplate.Quarter:
+                        Enqueue(performStart + slot * beatInterval, $"card={cardIndex} slot={slot} QUARTER (clean)");
+                        break;
+                    case SquareTemplate.EighthPair:
+                        Enqueue(performStart + slot * beatInterval,          $"card={cardIndex} slot={slot} EIGHTH-PAIR down (clean)");
+                        Enqueue(performStart + (slot + 0.5) * beatInterval,  $"card={cardIndex} slot={slot} EIGHTH-PAIR off (clean)");
+                        break;
+                    case SquareTemplate.DownbeatEighth:
+                        Enqueue(performStart + slot * beatInterval, $"card={cardIndex} slot={slot} DOWNBEAT-8TH (clean)");
+                        break;
+                    case SquareTemplate.OffbeatEighth:
+                        Enqueue(performStart + (slot + 0.5) * beatInterval,
+                                $"card={cardIndex} slot={slot} OFFBEAT-8TH +0.5 (clean, expect Perfect)");
+                        break;
+                    // SquareTemplate.Rest: no tap.
+                }
             }
 
             switch (scenario)
             {
-                case 1: // Rest tap — extra tap on the first rest slot.
+                case 1: // Rest tap — extra tap on the first full-rest slot.
                 {
-                    int restSlot = FindFirstRest(noteMask);
+                    int restSlot = FindFirstTemplate(templates, SquareTemplate.Rest);
                     if (restSlot >= 0)
                         Enqueue(performStart + restSlot * beatInterval,
                                 $"card={cardIndex} slot={restSlot} REST-TAP (expect out-of-window penalty)");
@@ -129,12 +151,25 @@ namespace KrumbleHut.Drummi.Dungeons
                             $"card={cardIndex} REVEAL-TAP at beat 2.5 of reveal bar (expect silent ignore)");
                     break;
                 }
+                case 4: // Offbeat probe — tap the DOWNBEAT of the first OffbeatEighth
+                        // square. The square's only note is at +0.5, a half beat away
+                        // (beyond the Good window) — geometric rest enforcement must
+                        // penalize this tap; the clean +0.5 tap grades Perfect.
+                {
+                    int offSlot = FindFirstTemplate(templates, SquareTemplate.OffbeatEighth);
+                    if (offSlot >= 0)
+                        Enqueue(performStart + offSlot * beatInterval,
+                                $"card={cardIndex} slot={offSlot} OFFBEAT-PROBE downbeat tap (expect out-of-window penalty)");
+                    else
+                        Debug.LogWarning($"[FlashCardTest] card={cardIndex}: no OffbeatEighth square on this card — offbeat-probe scenario skipped.");
+                    break;
+                }
             }
 
             _pending.Sort((a, b) => a.time.CompareTo(b.time));
 
             Debug.Log($"[FlashCardTest] Scenario armed | card={cardIndex} " +
-                      $"scenario={(scenario == 0 ? "CLEAN" : scenario == 1 ? "REST-TAP" : scenario == 2 ? "DOUBLE-TAP" : "REVEAL-TAP")} " +
+                      $"scenario={(scenario == 0 ? "CLEAN" : scenario == 1 ? "REST-TAP" : scenario == 2 ? "DOUBLE-TAP" : scenario == 3 ? "REVEAL-TAP" : "OFFBEAT-PROBE")} " +
                       $"taps={_pending.Count}");
         }
 
@@ -143,10 +178,10 @@ namespace KrumbleHut.Drummi.Dungeons
         private void Enqueue(double time, string label)
             => _pending.Add(new PendingTap { time = time, label = label });
 
-        private static int FindFirstRest(IReadOnlyList<bool> noteMask)
+        private static int FindFirstTemplate(IReadOnlyList<SquareTemplate> templates, SquareTemplate wanted)
         {
-            for (int i = 0; i < noteMask.Count; i++)
-                if (!noteMask[i]) return i;
+            for (int i = 0; i < templates.Count; i++)
+                if (templates[i] == wanted) return i;
             return -1;
         }
     }

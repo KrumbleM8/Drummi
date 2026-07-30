@@ -17,8 +17,10 @@ namespace KrumbleHut.Drummi.Dungeons
     ///   Perform bar — the player performs the revealed rhythm from beat 1. Graded by
     ///                 DungeonEvaluator.EvaluateBar with timeOffset = 8 * beatInterval.
     ///                 Taps landing in rests fall outside every note's Good window and
-    ///                 take the out-of-window penalty (rests are >= 1 full beat from
-    ///                 any note at Tier 1, far beyond the Good threshold).
+    ///                 take the out-of-window penalty. This holds down to half-beat
+    ///                 (eighth) spacing: rests sit >= 0.5 beat from the nearest note,
+    ///                 beyond the Good threshold (0.199 beat shipped; guard warns if
+    ///                 tuning ever reaches 0.25 — see CheckEighthsTuningGuard).
     /// Cards chain zero-gap: next card's reveal starts exactly at this card's
     /// evaluation boundary (PhraseTiming.NextPhraseStart), no accumulated drift.
     ///
@@ -67,6 +69,10 @@ namespace KrumbleHut.Drummi.Dungeons
         [Tooltip("Maximum notes per card.")]
         [SerializeField, Range(1, 8)] private int maxNotes = 6;
 
+        [Tooltip("Default template vocabulary when the room authors None. " +
+                 "Quarter | Rest ≡ pre-eighths behavior (quarters and full rests only).")]
+        [SerializeField] private FlashCardVocab vocabulary = FlashCardVocab.Quarter | FlashCardVocab.Rest;
+
         #endregion
 
         #region Events
@@ -75,9 +81,9 @@ namespace KrumbleHut.Drummi.Dungeons
 
         /// <summary>
         /// Fired as each card square reveals, on its beat.
-        /// Parameters: cardIndex, slot (0–7), isNote (false = rest).
+        /// Parameters: cardIndex, slot (0–7), template (rhythmic content of the square).
         /// </summary>
-        public event Action<int, int, bool> OnSquareReveal;
+        public event Action<int, int, SquareTemplate> OnSquareReveal;
 
         /// <summary>Fired when a card's perform bar begins. Parameter: cardIndex.</summary>
         public event Action<int> OnPerformStart;
@@ -114,9 +120,12 @@ namespace KrumbleHut.Drummi.Dungeons
 
         private FlashCardPatternGenerator _cardGenerator;
 
-        // Current card: scheduled notes in reveal-bar virtual times + full 8-slot mask.
+        // Current card: scheduled notes in reveal-bar virtual times + full 8-slot templates.
         private List<DungeonScheduledBeat> _cardBeats;
-        private bool[]                     _noteMask;
+        private SquareTemplate[]           _templates;
+
+        // One warning per encounter for the eighths tuning guard (see BuildCard).
+        private bool _tuningGuardWarned;
 
         // Constant type stamped on all notes and echo inputs — Tier 1 is rhythm-only
         // (any pad counts; grading is timing-only), same collapse as SingleDrum C&R.
@@ -124,9 +133,10 @@ namespace KrumbleHut.Drummi.Dungeons
 
         // Resolved at encounter start: room-authored config overrides Inspector defaults
         // (same pattern as CallAndResponseController._activePhraseLengths).
-        private int _activeCards;
-        private int _activeMinNotes;
-        private int _activeMaxNotes;
+        private int            _activeCards;
+        private int            _activeMinNotes;
+        private int            _activeMaxNotes;
+        private FlashCardVocab _activeVocab;
         #endregion
 
         #region Public Properties
@@ -136,8 +146,8 @@ namespace KrumbleHut.Drummi.Dungeons
         /// <summary>The scheduled notes of the current card (reveal-bar virtual times). Null before the first reveal.</summary>
         public IReadOnlyList<DungeonScheduledBeat> CurrentCardBeats => _cardBeats;
 
-        /// <summary>8-slot note/rest mask of the current card. Null before the first reveal.</summary>
-        public IReadOnlyList<bool> CurrentNoteMask => _noteMask;
+        /// <summary>8-slot templates of the current card. Null before the first reveal.</summary>
+        public IReadOnlyList<SquareTemplate> CurrentTemplates => _templates;
 
         /// <summary>Timing boundaries of the current card cycle.</summary>
         public PhraseTiming CurrentTiming => _current;
@@ -153,7 +163,7 @@ namespace KrumbleHut.Drummi.Dungeons
         /// DungeonModeController.EncounterStartVirtualTime from a room, where the snap is a no-op.
         /// </param>
         public void StartEncounter(double startVirtualTime)
-            => StartEncounter(startVirtualTime, 0, Vector2Int.zero);
+            => StartEncounter(startVirtualTime, 0, Vector2Int.zero, FlashCardVocab.None);
 
         /// <summary>
         /// Starts a Flash Card encounter using the room's authored configuration.
@@ -169,9 +179,14 @@ namespace KrumbleHut.Drummi.Dungeons
         /// </param>
         /// <param name="noteRange">
         /// Authored note-count range (x = min, y = max) from RoomDefinition.FlashCardNoteRange.
-        /// (0,0) sentinel = use the Inspector minNotes/maxNotes defaults.
+        /// Counts NOTE-BEARING SQUARES, not taps. (0,0) sentinel = use the Inspector
+        /// minNotes/maxNotes defaults.
         /// </param>
-        public void StartEncounter(double startVirtualTime, int cardCount, Vector2Int noteRange)
+        /// <param name="vocab">
+        /// Authored template vocabulary from RoomDefinition.FlashCardVocabulary.
+        /// None sentinel = use the Inspector vocabulary default (Quarter | Rest).
+        /// </param>
+        public void StartEncounter(double startVirtualTime, int cardCount, Vector2Int noteRange, FlashCardVocab vocab)
         {
             if (metronome == null)
             {
@@ -192,16 +207,18 @@ namespace KrumbleHut.Drummi.Dungeons
                 Debug.LogWarning($"[FlashCard] Note range max ({_activeMaxNotes}) < min ({_activeMinNotes}) — clamping max to min.");
                 _activeMaxNotes = _activeMinNotes;
             }
+            _activeVocab = vocab != FlashCardVocab.None ? vocab : vocabulary;
 
-            _beatInterval  = 60.0 / metronome.bpm;
-            _cardGenerator = new FlashCardPatternGenerator();
-            _cardIndex     = 0;
-            _running       = true;
-            _revealFired   = false;
-            _performFired  = false;
-            _revealSlot    = 0;
-            _cardBeats     = null;
-            _noteMask      = null;
+            _beatInterval      = 60.0 / metronome.bpm;
+            _cardGenerator     = new FlashCardPatternGenerator();
+            _cardIndex         = 0;
+            _running           = true;
+            _revealFired       = false;
+            _performFired      = false;
+            _revealSlot        = 0;
+            _cardBeats         = null;
+            _templates         = null;
+            _tuningGuardWarned = false;
 
             // Gate input off for the reveal bar. SuppressSpawnMarkers is held true for
             // the whole encounter — the standard bar slider is BarTiming-coupled and
@@ -236,7 +253,7 @@ namespace KrumbleHut.Drummi.Dungeons
 
             Debug.Log($"[FlashCard] === ENCOUNTER START ===");
             Debug.Log($"[FlashCard]   BPM={metronome.bpm:F2}  beatInterval={_beatInterval:F6}s  " +
-                      $"cards={_activeCards}  notes={_activeMinNotes}-{_activeMaxNotes}");
+                      $"cards={_activeCards}  notes={_activeMinNotes}-{_activeMaxNotes}  vocab={_activeVocab}");
             Debug.Log($"[FlashCard]   {_current}");
         }
 
@@ -282,8 +299,8 @@ namespace KrumbleHut.Drummi.Dungeons
                 // Generate the card. No audio is scheduled anywhere — the reveal is
                 // purely visual, so no pre-scheduling headroom is needed (unlike C&R's
                 // PrepareCallPhrase, which exists only for PlayScheduled DSP lead).
-                _cardBeats = BuildCard(_current, out _noteMask);
-                LogCard(_cardIndex, _current, _noteMask);
+                _cardBeats = BuildCard(_current, out _templates);
+                LogCard(_cardIndex, _current, _templates);
 
                 _revealSlot = 0;
 
@@ -312,14 +329,14 @@ namespace KrumbleHut.Drummi.Dungeons
                 while (_revealSlot < CardBeats &&
                        now >= _current.CallStartTime + _revealSlot * _beatInterval)
                 {
-                    int  slot   = _revealSlot++;
-                    bool isNote = _noteMask[slot];
+                    int slot     = _revealSlot++;
+                    var template = _templates[slot];
 
                     double expected = _current.CallStartTime + slot * _beatInterval;
                     Debug.Log($"[FlashCard] Reveal       | card={_cardIndex} slot={slot} " +
-                              $"{(isNote ? "NOTE" : "rest")}  " +
+                              $"{template}  " +
                               $"expected={expected:F6} actual={now:F6} delta=+{(now - expected) * 1000.0:F3}ms");
-                    OnSquareReveal?.Invoke(_cardIndex, slot, isNote);
+                    OnSquareReveal?.Invoke(_cardIndex, slot, template);
                 }
             }
 
@@ -393,7 +410,7 @@ namespace KrumbleHut.Drummi.Dungeons
             _performFired = false;
             _revealSlot   = 0;
             _cardBeats    = null;
-            _noteMask     = null;
+            _templates    = null;
 
             Debug.Log($"[FlashCard]   {_current}");
         }
@@ -456,23 +473,55 @@ namespace KrumbleHut.Drummi.Dungeons
         #endregion
 
         #region Private — Card Generation
-        private List<DungeonScheduledBeat> BuildCard(PhraseTiming timing, out bool[] noteMask)
+        private List<DungeonScheduledBeat> BuildCard(PhraseTiming timing, out SquareTemplate[] templates)
         {
-            var beats  = _cardGenerator.GenerateCard(_activeMinNotes, _activeMaxNotes, ConstantType, out noteMask);
+            var beats  = _cardGenerator.GenerateCard(
+                _activeMinNotes, _activeMaxNotes, ConstantType, _activeVocab, out templates);
             var result = new List<DungeonScheduledBeat>(beats.Count);
             foreach (var b in beats)
             {
-                // b.timeSlot is in beats from card start; multiply by _beatInterval for seconds.
+                // b.timeSlot is in beats from card start (may be half-integral for
+                // eighths); multiply by _beatInterval for seconds.
                 double virtualTime = timing.CallStartTime + b.timeSlot * _beatInterval;
                 result.Add(new DungeonScheduledBeat(virtualTime, b.enemyType));
             }
+
+            CheckEighthsTuningGuard(templates);
             return result;
         }
 
-        private void LogCard(int cardIndex, PhraseTiming timing, bool[] noteMask)
+        /// <summary>
+        /// TUNING GUARD: geometric rest enforcement at half-beat spacing relies on the
+        /// effective Good window (goodFraction × any runtime window scaling) staying
+        /// BELOW 0.25 beat — at ≥ 0.25 the penalizable gap between adjacent half-beat
+        /// positions collapses to zero and taps on eighth rests grade as sloppy hits.
+        /// Shipped tuning is 0.199 (gap = 0.102 beat, BPM-invariant). Warn once per
+        /// encounter when an eighth-bearing card is generated under bad tuning.
+        /// </summary>
+        private void CheckEighthsTuningGuard(SquareTemplate[] templates)
+        {
+            if (_tuningGuardWarned || evaluator == null) return;
+
+            bool hasEighths = false;
+            foreach (var t in templates)
+                if (t.HasEighths()) { hasEighths = true; break; }
+            if (!hasEighths) return;
+
+            float goodBeats = evaluator.EffectiveGoodWindowBeats;
+            if (goodBeats >= 0.25f)
+            {
+                _tuningGuardWarned = true;
+                Debug.LogWarning($"[FlashCard] TUNING GUARD: effective Good window is {goodBeats:F3} beat " +
+                                 "(≥ 0.25) while generating an eighth-bearing card — rest enforcement at " +
+                                 "half-beat spacing has NO penalizable gap. Reduce DungeonEvaluator.goodFraction " +
+                                 "or the active timing-window effect scale.");
+            }
+        }
+
+        private void LogCard(int cardIndex, PhraseTiming timing, SquareTemplate[] templates)
         {
             var slots = new char[CardBeats];
-            for (int i = 0; i < CardBeats; i++) slots[i] = noteMask[i] ? 'X' : '.';
+            for (int i = 0; i < CardBeats; i++) slots[i] = templates[i].ToLogChar();
             Debug.Log($"[FlashCard] Card stored  | card={cardIndex} pattern=[{new string(slots)}] " +
                       $"reveal=[{timing.CallStartTime:F6}, {timing.ResponseStartTime:F6})");
         }
