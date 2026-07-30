@@ -32,6 +32,14 @@ public class DungeonEvaluator : MonoBehaviour
     [SerializeField] private int goodReward      = 100;
     [SerializeField] private int passableReward  = 50;
     [SerializeField] private int allowedMistakes = 1;
+
+    [Tooltip("PlayerPrefs key for this evaluator's high score. Dungeon uses the default; " +
+             "the standalone Flash Cards scene overrides it so endless scores don't write the dungeon record.")]
+    [SerializeField] private string highScoreKey = "DungeonHS";
+
+    [Tooltip("Dungeon rule: a second consecutive failed bar zeroes the accumulated score. " +
+             "Disabled in the standalone Flash Cards scene — endless runs keep their score through the 3-strike death.")]
+    [SerializeField] private bool resetScoreOnRepeatedFailure = true;
     #endregion
 
     #region Public State
@@ -43,7 +51,6 @@ public class DungeonEvaluator : MonoBehaviour
     #endregion
 
     #region Private
-    private const string HIGH_SCORE_KEY = "DungeonHS";
     private int _previousHighScore;
 
     // Active-effect scale (e.g. Tight Timing ×0.75). Computed fresh per read like the
@@ -278,7 +285,7 @@ public class DungeonEvaluator : MonoBehaviour
         {
             HasFailedOnce = true;
         }
-        else if (Score > 0)
+        else if (resetScoreOnRepeatedFailure && Score > 0)
         {
             SaveHighScore();
             Score = 0;
@@ -291,13 +298,13 @@ public class DungeonEvaluator : MonoBehaviour
     #region Score Management
     public void SaveHighScore()
     {
-        int saved = PlayerPrefs.GetInt(HIGH_SCORE_KEY, 0);
-        if (Score > saved) { PlayerPrefs.SetInt(HIGH_SCORE_KEY, Score); PlayerPrefs.Save(); }
+        int saved = PlayerPrefs.GetInt(highScoreKey, 0);
+        if (Score > saved) { PlayerPrefs.SetInt(highScoreKey, Score); PlayerPrefs.Save(); }
     }
 
     public void ResetScore()
     {
-        _previousHighScore = PlayerPrefs.GetInt(HIGH_SCORE_KEY, 0);
+        _previousHighScore = PlayerPrefs.GetInt(highScoreKey, 0);
         Score            = 0;
         PerfectHits      = 0;
         TotalPerfectHits = 0;

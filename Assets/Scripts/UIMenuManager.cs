@@ -292,6 +292,7 @@ public class UIMenuManager : MonoBehaviour
     public void GoToGardenScene() => TransitionToScene("Garden", swipeLeft: true);
     public void GoToDungeonScene() => TransitionToScene("Dungeon", swipeLeft: true);
     public void GoToBongoScene() => TransitionToScene("Bongo", swipeLeft: true);
+    public void GoToFlashCardsScene() => TransitionToScene("FlashCards", swipeLeft: true);
 
 #if UNITY_EDITOR
     private void OnValidate()

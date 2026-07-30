@@ -137,6 +137,10 @@ namespace KrumbleHut.Drummi.Dungeons
         private int            _activeMinNotes;
         private int            _activeMaxNotes;
         private FlashCardVocab _activeVocab;
+
+        // Endless mode (standalone scene): AdvanceCard never terminates; the host
+        // stops the run via StopEncounter. False for all dungeon-room encounters.
+        private bool _endless;
         #endregion
 
         #region Public Properties
@@ -187,6 +191,50 @@ namespace KrumbleHut.Drummi.Dungeons
         /// None sentinel = use the Inspector vocabulary default (Quarter | Rest).
         /// </param>
         public void StartEncounter(double startVirtualTime, int cardCount, Vector2Int noteRange, FlashCardVocab vocab)
+            => StartCore(startVirtualTime, cardCount, noteRange, vocab, gridOriginOverride: null, endless: false);
+
+        /// <summary>
+        /// Starts an ENDLESS encounter — cards chain until <see cref="StopEncounter"/>
+        /// is called; OnEncounterComplete never fires. Host (FlashCardsModeController)
+        /// counts strikes/streaks via OnCardEvaluated and stops the run itself.
+        /// </summary>
+        /// <param name="startVirtualTime">
+        /// Virtual time of the first reveal bar. Must lie ON the grid defined by
+        /// <paramref name="gridOriginVirtualTime"/> (e.g. origin + whole lead-in bars) —
+        /// the snap is then a no-op.
+        /// </param>
+        /// <param name="gridOriginVirtualTime">
+        /// Beat-grid origin (the virtual time music started). Replaces
+        /// DungeonModeController.SessionStartVirtualTime, which does not exist in the
+        /// standalone scene.
+        /// </param>
+        /// <param name="vocab">Initial vocabulary (None = Inspector default).</param>
+        /// <param name="noteRange">Initial note range ((0,0) = Inspector defaults).</param>
+        public void StartEndless(double startVirtualTime, double gridOriginVirtualTime, FlashCardVocab vocab, Vector2Int noteRange)
+            => StartCore(startVirtualTime, 0, noteRange, vocab, gridOriginVirtualTime, endless: true);
+
+        /// <summary>
+        /// Updates the generation config used for SUBSEQUENT cards. The current card
+        /// (revealed or performing) is untouched — BuildCard reads these at each
+        /// reveal-bar start, so changes made from an OnCardEvaluated handler land on
+        /// exactly the next card. Used by the endless mode's escalation ladder.
+        /// </summary>
+        public void SetCardConfig(FlashCardVocab vocab, Vector2Int noteRange)
+        {
+            bool hasRange   = noteRange.x > 0 && noteRange.y > 0;
+            _activeMinNotes = hasRange ? noteRange.x : minNotes;
+            _activeMaxNotes = hasRange ? noteRange.y : maxNotes;
+            if (_activeMaxNotes < _activeMinNotes)
+            {
+                Debug.LogWarning($"[FlashCard] SetCardConfig: max ({_activeMaxNotes}) < min ({_activeMinNotes}) — clamping max to min.");
+                _activeMaxNotes = _activeMinNotes;
+            }
+            _activeVocab = vocab != FlashCardVocab.None ? vocab : vocabulary;
+            Debug.Log($"[FlashCard] Card config → notes={_activeMinNotes}-{_activeMaxNotes} vocab={_activeVocab} (applies from next card)");
+        }
+
+        private void StartCore(double startVirtualTime, int cardCount, Vector2Int noteRange, FlashCardVocab vocab,
+                               double? gridOriginOverride, bool endless)
         {
             if (metronome == null)
             {
@@ -208,6 +256,7 @@ namespace KrumbleHut.Drummi.Dungeons
                 _activeMaxNotes = _activeMinNotes;
             }
             _activeVocab = vocab != FlashCardVocab.None ? vocab : vocabulary;
+            _endless     = endless;
 
             _beatInterval      = 60.0 / metronome.bpm;
             _cardGenerator     = new FlashCardPatternGenerator();
@@ -233,9 +282,18 @@ namespace KrumbleHut.Drummi.Dungeons
             }
 
             // ── Beat-grid snap (same approach as CallAndResponseController) ──
+            // Origin priority: explicit override (endless host) > DungeonModeController
+            // session grid (dungeon rooms) > t=0 fallback (debug trigger only).
             double raw = startVirtualTime;
             double snapped;
-            if (modeController != null)
+            if (gridOriginOverride.HasValue)
+            {
+                double origin = gridOriginOverride.Value;
+                snapped = origin + SnapToBeat(raw - origin, _beatInterval);
+                Debug.Log($"[FlashCard] Beat-snap (explicit origin): raw={raw:F6}  snapped={snapped:F6}  " +
+                          $"grid-offset=+{(snapped - raw) * 1000.0:F3}ms  origin={origin:F6}");
+            }
+            else if (modeController != null)
             {
                 double sessionOrigin = modeController.SessionStartVirtualTime;
                 snapped = sessionOrigin + SnapToBeat(raw - sessionOrigin, _beatInterval);
@@ -253,7 +311,8 @@ namespace KrumbleHut.Drummi.Dungeons
 
             Debug.Log($"[FlashCard] === ENCOUNTER START ===");
             Debug.Log($"[FlashCard]   BPM={metronome.bpm:F2}  beatInterval={_beatInterval:F6}s  " +
-                      $"cards={_activeCards}  notes={_activeMinNotes}-{_activeMaxNotes}  vocab={_activeVocab}");
+                      $"cards={(_endless ? "endless" : _activeCards.ToString())}  " +
+                      $"notes={_activeMinNotes}-{_activeMaxNotes}  vocab={_activeVocab}");
             Debug.Log($"[FlashCard]   {_current}");
         }
 
@@ -389,7 +448,7 @@ namespace KrumbleHut.Drummi.Dungeons
         {
             _cardIndex++;
 
-            if (_cardIndex >= _activeCards)
+            if (!_endless && _cardIndex >= _activeCards)
             {
                 _running = false;
                 if (inputReader != null)

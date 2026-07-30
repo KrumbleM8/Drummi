@@ -1476,18 +1476,18 @@ MonoBehaviour:
   - pageName: Main
     pageTransform: {fileID: 1943619380}
     onScreenPosition: {x: 0, y: 0}
-    offScreenLeftPosition: {x: -655.76, y: 0}
-    offScreenRightPosition: {x: 655.76, y: 0}
+    offScreenLeftPosition: {x: -812.16, y: 0}
+    offScreenRightPosition: {x: 812.16, y: 0}
   - pageName: Customize
     pageTransform: {fileID: 1312737091}
     onScreenPosition: {x: 0, y: 0}
-    offScreenLeftPosition: {x: -655.76, y: 0}
-    offScreenRightPosition: {x: 655.76, y: 0}
+    offScreenLeftPosition: {x: -812.16, y: 0}
+    offScreenRightPosition: {x: 812.16, y: 0}
   - pageName: Score
     pageTransform: {fileID: 1848881446}
     onScreenPosition: {x: 0, y: 0}
-    offScreenLeftPosition: {x: -655.76, y: 0}
-    offScreenRightPosition: {x: 655.76, y: 0}
+    offScreenLeftPosition: {x: -812.16, y: 0}
+    offScreenRightPosition: {x: 812.16, y: 0}
   startingPageName: Main
   transitionDuration: 0.5
   transitionCurve:

@@ -3,7 +3,8 @@
 Sight-reading mechanic: a 2x4 card (8 beat slots) reveals a rhythm silently
 over one bar (each square flips on its beat), the player performs it over the
 next bar, graded by the existing evaluator pipeline. Two eventual homes:
-a dungeon room type (built) and a standalone gamemode (not started).
+a dungeon room type (built, Phases 1-3 + 5) and a standalone endless mode
+(built, Phase 4 — FlashCards.unity).
 
 Full phase plan came out of the Phase 0 recon (2026-07-28). Sessions so far
 were one long day: Phases 0 → 2.
@@ -126,6 +127,68 @@ were one long day: Phases 0 → 2.
   verification.
 
 ---
+
+### Phase 5 — Eighths tier (commit `de158f0`, 2026-07-30)
+- SquareTemplate vocabulary per square: Quarter / EighthPair / DownbeatEighth /
+  OffbeatEighth / Rest. Squares stay one beat; eighths at slot + 0.5.
+- Rest enforcement stayed GEOMETRIC — recon proved shipped tuning
+  (goodFraction 0.199 < 0.25) leaves a BPM-invariant 0.102-beat penalizable
+  gap at half-beat spacing; semantic rests would have changed zero outcomes.
+  Tuning guard warns if effective Good ≥ 0.25 beat on an eighth-bearing card.
+- `FlashCardVocab` flags on RoomDefinition (None → controller default
+  Quarter|Rest); noteRange counts note-bearing squares; slot-0 anchor rule.
+- Zero evaluator/reader logic changes (evaluator code-default fractions
+  aligned to scene values, constants only).
+
+### Phase 4 — Standalone endless mode (2026-07-31)
+- **Phase 4.0 recon findings (all confirmed in build):**
+  - FlashCardController's only dungeon entanglement was
+    DungeonModeController.SessionStartVirtualTime (grid origin) — solved by
+    `StartEndless(start, gridOrigin, vocab, noteRange)` taking the origin
+    explicitly. Reader/evaluator are scene-instantiable; TimingCoordinator is
+    never consulted on the FlashCard input path; DungeonEffectsController
+    null → window scale 1 by design.
+  - Penalty routing: NO health object at all (reader + evaluator are
+    `health?.` null-safe). Run failure is strikes-based in the mode.
+  - Evaluator seams (additive, dungeon defaults unchanged): serialized
+    `highScoreKey` ("FlashCardsHS" in this scene) and
+    `resetScoreOnRepeatedFailure` (false here — dungeon double-fail zeroing
+    would wipe endless scores on consecutive strikes).
+  - OnPause/OnResume: NO rescheduling obligations — reveal is silent, BGM
+    pause is central (PauseAllAudio + accumulatedPauseDuration), controller
+    is GameClock-polled. OnPause = SaveHighScore only.
+  - AllPerfect already implies Inputs == Beats (DetermineGrade), so
+    "streak = consecutive AllPerfect" makes spam break streaks for free.
+- **Build:** `FlashCardsModeController` (namespace KrumbleHut.Drummi.FlashCards)
+  — ModeId "FlashCards"; endless via `CalculateTotalBeats` = 100k;
+  serialized escalation ladder {minCardsCleared, vocab, noteRange}:
+  0+ Q|R 3-4 → 4+ +EighthPair 3-5 → 10+ +DownbeatEighth 4-6 →
+  16+ +OffbeatEighth 4-6; 3 strikes (Failed cards) end the run;
+  `SetCardConfig` applies ladder changes on the NEXT card by construction.
+  Serialized music pair: track 1 @ 105 BPM (stand-in), BGM loops.
+- **Scene:** FlashCards.unity built by CoplayScripts/BuildFlashCardsScene
+  (rerunnable): GameClock/Metronome/TimingCoordinator/GameManager+PauseHandler/
+  ScreenTransition/UIMenuManager (Main+Score pages)/AudioManager prefab/
+  single-drum rig (rect wired straight into DrumPadTouch.centerPad — no
+  layout controller)/HUD (3 strike pips, score, streak)/card panel (dungeon
+  geometry)/ScoreScreen (best-streak + cards-cleared texts owned by the mode,
+  written before CompletMode). Build Settings entry added; Home scene got a
+  FlashCards bubble (duplicated Dungeon bubble → GoToFlashCardsScene, added
+  to UIMenuManager as a one-liner).
+- **Verified in editor:** escalation at exactly 4/10/16 cleared with
+  next-card-only vocab landing (card patterns: pure Q → first E on card 4,
+  first D on card 10, first O on card 16); 3-strike run-over → results →
+  replay with fully reset state; pause/resume mid-reveal and across the
+  perform boundary resumes at +2.2ms deltas; scene circuit FlashCards → Home
+  → Dungeon → Home → FlashCards leaves no residue (singletons healthy, one
+  view, timeScale 1) and a fresh run works after; Phase-3 mixed dungeon floor
+  run passes untouched (4 rooms, run won).
+- **PENDING: mobile device pass** — menu flow + a full endless run on device
+  (touch latency vs Perfect window, drum hit-zone size, HUD readability).
+- Editor-harness gotcha: driving FlashCard encounters by script WITHOUT the
+  room flow leaves DungeonHealth at 0 in the Dungeon scene (first penalty =
+  instant game-over teardown); the standalone scene has no health object so
+  the issue cannot occur there.
 
 ## Immediate next step
 
