@@ -167,8 +167,7 @@ public class RoomController : MonoBehaviour
                         callAndResponseController.OnEncounterComplete += HandleCarEncounterComplete;
                         callAndResponseController.StartEncounter(
                             modeController.EncounterStartVirtualTime,
-                            _currentDef.PhraseLengths,
-                            _currentDef.CallResponseMode);
+                            _currentDef.PhraseLengths);
                     }
                     else
                     {

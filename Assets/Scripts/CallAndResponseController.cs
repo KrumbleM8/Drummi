@@ -121,10 +121,8 @@ namespace KrumbleHut.Drummi.Dungeons
         // Resolved at encounter start: room-authored overrides Inspector default.
         private int[] _activePhraseLengths;
 
-        // Resolved at encounter start from RoomDefinition or overload default.
-        private CallResponseInputMode _activeMode;
-
-        // Constant enemy type forced on all call beats and echo inputs in SingleDrum mode.
+        // Constant enemy type forced on all call beats and echo inputs — C&R is
+        // single-input only (any pad counts, grading is timing-only).
         private const DungeonEnemyType SingleDrumConstantType = DungeonEnemyType.Center;
         #endregion
 
@@ -149,17 +147,10 @@ namespace KrumbleHut.Drummi.Dungeons
         /// Snapped forward to the next session beat before use.
         /// </param>
         public void StartEncounter(double startVirtualTime)
-            => StartEncounterCore(startVirtualTime, null, CallResponseInputMode.Directional);
+            => StartEncounterCore(startVirtualTime, null);
 
         /// <summary>
-        /// Starts a full encounter using the room's authored phrase configuration, Directional mode.
-        /// Falls back to Inspector defaults if <paramref name="roomPhraseLengths"/> is null or empty.
-        /// </summary>
-        public void StartEncounter(double startVirtualTime, int[] roomPhraseLengths)
-            => StartEncounterCore(startVirtualTime, roomPhraseLengths, CallResponseInputMode.Directional);
-
-        /// <summary>
-        /// Starts a full encounter using the room's authored phrase configuration and input mode.
+        /// Starts a full encounter using the room's authored phrase configuration.
         /// Called by RoomController when a RoomType.CallAndResponse room begins.
         /// Falls back to Inspector defaults if <paramref name="roomPhraseLengths"/> is null or empty.
         /// </summary>
@@ -171,12 +162,8 @@ namespace KrumbleHut.Drummi.Dungeons
         /// Authored phrase lengths from RoomDefinition.PhraseLengths. Takes priority over
         /// the Inspector phraseLengths field for this encounter.
         /// </param>
-        /// <param name="mode">
-        /// Directional (default): player echoes L/C/R direction. SingleDrum: any pad counts,
-        /// grading is timing-only.
-        /// </param>
-        public void StartEncounter(double startVirtualTime, int[] roomPhraseLengths, CallResponseInputMode mode)
-            => StartEncounterCore(startVirtualTime, roomPhraseLengths, mode);
+        public void StartEncounter(double startVirtualTime, int[] roomPhraseLengths)
+            => StartEncounterCore(startVirtualTime, roomPhraseLengths);
 
         /// <summary>
         /// Stops the encounter immediately. OnEncounterComplete is NOT fired.
@@ -342,14 +329,12 @@ namespace KrumbleHut.Drummi.Dungeons
         #endregion
 
         #region Private — Encounter Start
-        private void StartEncounterCore(double startVirtualTime, int[] overridePhraseLengths, CallResponseInputMode mode)
+        private void StartEncounterCore(double startVirtualTime, int[] overridePhraseLengths)
         {
             // Resolve active phrase lengths: room-authored takes priority over Inspector defaults.
             _activePhraseLengths = (overridePhraseLengths != null && overridePhraseLengths.Length > 0)
                 ? overridePhraseLengths
                 : phraseLengths;
-
-            _activeMode = mode;
 
             if (metronome == null)
             {
@@ -470,11 +455,9 @@ namespace KrumbleHut.Drummi.Dungeons
             inputReader.SetScheduledBeats(_currentCallPhrase);
             inputReader.SetTimeOffset(n * _beatInterval);
             inputReader.CoyoteWindowStartOverride = null;  // clear before opening so replay goes through normally
-            // SingleDrum: arm the type override so any pad tap is tagged to the constant type.
-            // Directional: leave null so pad identity is preserved as today.
-            inputReader.SingleDrumEchoConstant = _activeMode == CallResponseInputMode.SingleDrum
-                ? SingleDrumConstantType
-                : (DungeonEnemyType?)null;
+            // Arm the type override so any pad tap is tagged to the constant type
+            // (grading is timing-only; pad identity is irrelevant).
+            inputReader.SingleDrumEchoConstant = SingleDrumConstantType;
             inputReader.EncounterActive = true;
             inputReader.allowInput      = true;
         }
@@ -542,9 +525,7 @@ namespace KrumbleHut.Drummi.Dungeons
         #region Private — Phrase Generation
         private List<DungeonScheduledBeat> BuildCallPhrase(PhraseTiming timing)
         {
-            var beats = _activeMode == CallResponseInputMode.SingleDrum
-                ? _phraseGenerator.GeneratePhraseWithConstantType(timing.PhraseLength, SingleDrumConstantType)
-                : _phraseGenerator.GeneratePhrase(timing.PhraseLength);
+            var beats = _phraseGenerator.GeneratePhraseWithConstantType(timing.PhraseLength, SingleDrumConstantType);
             var result = new List<DungeonScheduledBeat>(beats.Count);
 
             foreach (var b in beats)
