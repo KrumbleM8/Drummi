@@ -32,6 +32,19 @@ namespace KrumbleHut.Drummi.UI
         [Header("Bars Menu")]
         [SerializeField] private BarsMenuController barsMenu;
 
+        [Header("Frame Zoom")]
+        [Tooltip("Decorative stage-frame overlay. After the curtain reveal it grows out of vision, as if entering the stage.")]
+        [SerializeField] private RectTransform frameRect;
+
+        [Tooltip("Delay after the curtain reveal before the frame starts growing.")]
+        [SerializeField] private float frameZoomDelay = 0.5f;
+
+        [Tooltip("Duration of the frame grow-out.")]
+        [SerializeField] private float frameZoomDuration = 1.2f;
+
+        [Tooltip("Scale at which the frame is fully out of vision.")]
+        [SerializeField] private float frameZoomScale = 6f;
+
         [Header("Scene Transition")]
         [SerializeField] private ScreenTransition screenTransitioner;
 
@@ -60,6 +73,16 @@ namespace KrumbleHut.Drummi.UI
             {
                 titleRect.localScale = Vector3.zero;
                 titleRect.DOScale(1f, titleEntranceDuration).SetEase(Ease.OutBack);
+            }
+
+            // Enter the stage: after a brief delay the frame grows past the
+            // screen edges, then is disabled.
+            if (frameRect != null)
+            {
+                frameRect.DOScale(frameZoomScale, frameZoomDuration)
+                         .SetDelay(frameZoomDelay)
+                         .SetEase(Ease.InQuad)
+                         .OnComplete(() => frameRect.gameObject.SetActive(false));
             }
 
             PlayThemeMusic();
