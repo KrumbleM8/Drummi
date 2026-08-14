@@ -15,6 +15,17 @@ namespace KrumbleHut.Drummi.UI
     /// </summary>
     public class HomeFlowController : MonoBehaviour
     {
+        /// <summary>
+        /// Set before loading New_Home (e.g. from a pause menu) to skip the
+        /// curtain + tap-to-start intro and jump straight to the bars menu.
+        /// Consumed and reset in Awake.
+        /// </summary>
+        public static bool SkipIntro;
+
+        [Header("Curtain")]
+        [Tooltip("Root GameObject holding the CurtainController. Disabled entirely when the intro is skipped.")]
+        [SerializeField] private GameObject curtainRoot;
+
         [Header("Title")]
         [Tooltip("RectTransform of the title text that animates in and later docks at the top.")]
         [SerializeField] private RectTransform titleRect;
@@ -63,6 +74,48 @@ namespace KrumbleHut.Drummi.UI
 
         private bool _started;
         private bool _leaving;
+        private bool _skipIntro;
+
+        // ── Skip Intro ────────────────────────────────────────────────────────
+
+        private void Awake()
+        {
+            if (!SkipIntro) return;
+            SkipIntro  = false;
+            _skipIntro = true;
+
+            // Disable the curtain before its Start() coroutine can run,
+            // so it never hides the menu content or subscribes to input.
+            if (curtainRoot != null)
+                curtainRoot.SetActive(false);
+        }
+
+        private void Start()
+        {
+            if (!_skipIntro) return;
+
+            Canvas.ForceUpdateCanvases();
+
+            if (frameRect != null)
+                frameRect.gameObject.SetActive(false);
+
+            if (tapToStartRoot != null)
+                tapToStartRoot.SetActive(false);
+
+            // Title snaps straight to its docked position/scale.
+            if (titleRect != null && titleDockTarget != null)
+            {
+                titleRect.position   = titleDockTarget.position;
+                titleRect.localScale = Vector3.one * titleDockScale;
+            }
+
+            _started = true;
+
+            if (barsMenu != null)
+                barsMenu.PlayEntrance();
+
+            PlayThemeMusic();
+        }
 
         // ── Curtain → Title ───────────────────────────────────────────────────
 

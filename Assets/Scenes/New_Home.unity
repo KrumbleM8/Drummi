@@ -490,6 +490,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d5860a6bd81ccf5408d6a4be5168f3a3, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  curtainRoot: {fileID: 1393882758}
   titleRect: {fileID: 1944581722}
   titleDockTarget: {fileID: 924614760}
   titleDockScale: 0.5

@@ -168,8 +168,15 @@ namespace KrumbleHut.Drummi.UI
 
         // ── Scene Loading ──────────────────────────────────────────────────────
 
-        /// <summary>Transitions to the Home scene.</summary>
-        public void GoToHomeScene()    => StartCoroutine(SceneTransitionRoutine("Home"));
+        /// <summary>Transitions to the home menu (New_Home), skipping its curtain/tap-to-start intro.</summary>
+        public void GoToHomeScene()
+        {
+            HomeFlowController.SkipIntro = true;
+            StartCoroutine(SceneTransitionRoutine("New_Home"));
+        }
+
+        /// <summary>Reloads the current scene, restarting the active game mode from its own menu.</summary>
+        public void RestartScene() => StartCoroutine(SceneTransitionRoutine(SceneManager.GetActiveScene().name));
 
         /// <summary>Transitions to the Arcade scene.</summary>
         public void GoToArcadeScene()  => StartCoroutine(SceneTransitionRoutine("Arcade"));
@@ -193,7 +200,10 @@ namespace KrumbleHut.Drummi.UI
             // Stop persistent music now, before the new scene loads.
             // PlayOnAwake audio in the incoming scene runs during its own Awake — after this point —
             // so it is never interrupted.
-            AudioManager.instance?.StopMusic();
+            // NOTE: explicit != null (not ?.) — Unity's overloaded null check must run, otherwise a
+            // destroyed instance (stale static with domain reload off) throws and kills this coroutine.
+            if (AudioManager.instance != null)
+                AudioManager.instance.StopMusic();
 
             if (screenTransitioner != null)
             {
