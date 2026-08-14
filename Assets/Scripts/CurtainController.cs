@@ -1,5 +1,6 @@
 using System.Collections;
 using UnityEngine;
+using UnityEngine.Events;
 
 namespace KrumbleHut.Drummi.UI
 {
@@ -35,6 +36,9 @@ namespace KrumbleHut.Drummi.UI
         [Header("Reveal")]
         [Tooltip("How far up the curtain must travel (canvas units) before ObjectToSpawn is shown.")]
         [SerializeField] private float revealThreshold = 650f;
+
+        [Tooltip("Fired once when the curtain reveals (after ObjectToSpawn is activated).")]
+        [SerializeField] private UnityEvent onRevealed;
 
         // ── State ─────────────────────────────────────────────────────────────
 
@@ -117,6 +121,8 @@ namespace KrumbleHut.Drummi.UI
 
             if (ObjectToSpawn != null)
                 ObjectToSpawn.SetActive(true);
+
+            onRevealed?.Invoke();
 
             // Disable the curtain object — no further rendering or Update cost.
             curtainRect.gameObject.SetActive(false);
