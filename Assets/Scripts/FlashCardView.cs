@@ -80,6 +80,27 @@ namespace KrumbleHut.Drummi.Dungeons
         [Header("Flip (cosmetic)")]
         [SerializeField] private float flipHalfDuration = 0.07f;
 
+        [Header("Hit Pop (cosmetic per-tap feedback)")]
+        [Tooltip("Peak scale of the square pop on a confirmed hit (UIQuickSpawnEffect-style grow).")]
+        [SerializeField] private float popGrowScale = 1.22f;
+        [Tooltip("Random ± Z tilt during the grow, in degrees.")]
+        [SerializeField] private float popRotateAngle = 10f;
+        [Tooltip("Grow duration. Kept fast — subdivided taps can be ~0.25s apart.")]
+        [SerializeField] private float popGrowDuration = 0.08f;
+        [Tooltip("Recoil scale (dips below 1 before settling, like UIQuickSpawnEffect).")]
+        [SerializeField] private float popRecoilScale = 0.95f;
+        [SerializeField] private float popRecoilDuration = 0.06f;
+        [SerializeField] private float popSettleDuration = 0.06f;
+        [Tooltip("Face tint on a Perfect hit; fades back to the note/rest face color.")]
+        [SerializeField] private Color hitPerfectColor = new Color(1f, 0.85f, 0.30f, 1f);
+        [Tooltip("Face tint on a Good hit; fades back to the note/rest face color.")]
+        [SerializeField] private Color hitGoodColor = new Color(0.35f, 0.90f, 0.40f, 1f);
+        [SerializeField] private float hitTintFadeDuration = 0.20f;
+        [Tooltip("Face flash on an out-of-window tap.")]
+        [SerializeField] private Color missFlashColor = new Color(0.90f, 0.25f, 0.25f, 1f);
+        [Tooltip("Squares shrink to this scale on an out-of-window tap (inverse of the hit pop).")]
+        [SerializeField] private float missShrinkScale = 0.92f;
+
         [Header("Grade Flash (cosmetic)")]
         [Tooltip("Seconds the border holds the grade color before fading back to idle. " +
                  "The flash starts on the evaluation boundary (controller event); these " +
@@ -102,6 +123,10 @@ namespace KrumbleHut.Drummi.Dungeons
         private int          _cursorIndex = -1;
 
         private readonly Tween[] _flipTweens = new Tween[8];
+        private readonly Tween[] _popTweens  = new Tween[8];
+        // Face color applied at reveal (note vs rest) — tint fades return to this,
+        // never to a mid-fade sample of back.color.
+        private readonly Color[] _faceColors = new Color[8];
         private Tween            _borderTween;
         private Tween            _hideDelayTween;
         private bool             _gradeFlashActive;
@@ -114,6 +139,8 @@ namespace KrumbleHut.Drummi.Dungeons
             controller.OnCardRevealStart   += HandleCardRevealStart;
             controller.OnSquareReveal      += HandleSquareReveal;
             controller.OnPerformStart      += HandlePerformStart;
+            controller.OnPlayerHit         += HandlePlayerHit;
+            controller.OnPlayerMissTap     += HandlePlayerMissTap;
             controller.OnCardEvaluated     += HandleCardEvaluated;
             controller.OnEncounterComplete += HandleEncounterComplete;
             controller.OnEncounterStopped  += HandleEncounterStopped;
@@ -126,6 +153,8 @@ namespace KrumbleHut.Drummi.Dungeons
                 controller.OnCardRevealStart   -= HandleCardRevealStart;
                 controller.OnSquareReveal      -= HandleSquareReveal;
                 controller.OnPerformStart      -= HandlePerformStart;
+                controller.OnPlayerHit         -= HandlePlayerHit;
+                controller.OnPlayerMissTap     -= HandlePlayerMissTap;
                 controller.OnCardEvaluated     -= HandleCardEvaluated;
                 controller.OnEncounterComplete -= HandleEncounterComplete;
                 controller.OnEncounterStopped  -= HandleEncounterStopped;
@@ -185,10 +214,13 @@ namespace KrumbleHut.Drummi.Dungeons
             // Cosmetic flip: scaleX 1→0, swap face at the midpoint, 0→1.
             // The reveal MOMENT was beat-accurate (controller event); the tween just dresses it.
             _flipTweens[slot]?.Kill();
-            sq.root.localScale = Vector3.one;
+            _popTweens[slot]?.Kill();
+            _popTweens[slot] = null;
+            sq.root.localScale    = Vector3.one;
+            sq.root.localRotation = Quaternion.identity;
             var seq = DOTween.Sequence().SetLink(sq.root.gameObject);
             seq.Append(sq.root.DOScaleX(0f, flipHalfDuration).SetEase(Ease.InQuad));
-            seq.AppendCallback(() => ShowFace(sq, template));
+            seq.AppendCallback(() => ShowFace(slot, sq, template));
             seq.Append(sq.root.DOScaleX(1f, flipHalfDuration * 1.6f).SetEase(Ease.OutBack));
             _flipTweens[slot] = seq;
         }
@@ -198,6 +230,64 @@ namespace KrumbleHut.Drummi.Dungeons
             _state = ViewState.Performing;
             SetBorder(borderYourTurnColor, animate: true);
             SetCursor(0);
+        }
+
+        /// <summary>
+        /// Confirmed Perfect/Good tap: quickspawn-style pop on the matched square
+        /// (grow + random tilt → recoil → settle) with a quality tint that fades
+        /// back to the face color. The MOMENT is the reader's hit confirmation
+        /// (controller event); the tween is cosmetic only.
+        /// </summary>
+        private void HandlePlayerHit(int slot, InputMatch.MatchQuality quality)
+        {
+            if (_state != ViewState.Performing) return;
+            if (slot < 0 || slot >= squares.Length) return;
+            var sq = squares[slot];
+            if (sq?.root == null) return;
+
+            KillSquareTweens(slot);
+            sq.root.localScale    = Vector3.one;
+            sq.root.localRotation = Quaternion.identity;
+
+            float angle = UnityEngine.Random.value > 0.5f ? popRotateAngle : -popRotateAngle;
+            var seq = DOTween.Sequence().SetLink(sq.root.gameObject);
+            seq.Append(sq.root.DOScale(popGrowScale, popGrowDuration).SetEase(Ease.OutQuad));
+            seq.Join(sq.root.DOLocalRotate(new Vector3(0f, 0f, angle), popGrowDuration).SetEase(Ease.OutQuad));
+            seq.Append(sq.root.DOScale(popRecoilScale, popRecoilDuration));
+            seq.Join(sq.root.DOLocalRotate(Vector3.zero, popRecoilDuration));
+            seq.Append(sq.root.DOScale(1f, popSettleDuration));
+            if (sq.back != null)
+            {
+                sq.back.color = quality == InputMatch.MatchQuality.Perfect ? hitPerfectColor : hitGoodColor;
+                seq.Join(sq.back.DOColor(_faceColors[slot], hitTintFadeDuration));
+            }
+            _popTweens[slot] = seq;
+        }
+
+        /// <summary>
+        /// Out-of-window tap: inverse feel — the nearest square shrinks and flashes
+        /// red, then recovers to its face color. Cosmetic only.
+        /// </summary>
+        private void HandlePlayerMissTap(int slot)
+        {
+            if (_state != ViewState.Performing) return;
+            if (slot < 0 || slot >= squares.Length) return;
+            var sq = squares[slot];
+            if (sq?.root == null) return;
+
+            KillSquareTweens(slot);
+            sq.root.localScale    = Vector3.one;
+            sq.root.localRotation = Quaternion.identity;
+
+            var seq = DOTween.Sequence().SetLink(sq.root.gameObject);
+            seq.Append(sq.root.DOScale(missShrinkScale, popGrowDuration).SetEase(Ease.OutQuad));
+            seq.Append(sq.root.DOScale(1f, popRecoilDuration + popSettleDuration));
+            if (sq.back != null)
+            {
+                sq.back.color = missFlashColor;
+                seq.Join(sq.back.DOColor(_faceColors[slot], hitTintFadeDuration));
+            }
+            _popTweens[slot] = seq;
         }
 
         private void HandleCardEvaluated(int cardIndex, EvaluationResult result)
@@ -230,22 +320,32 @@ namespace KrumbleHut.Drummi.Dungeons
         #endregion
 
         #region Private — Visual State
+        private void KillSquareTweens(int i)
+        {
+            _flipTweens[i]?.Kill();
+            _flipTweens[i] = null;
+            _popTweens[i]?.Kill();
+            _popTweens[i] = null;
+        }
+
         private void ResetSquare(int i)
         {
             var sq = squares[i];
             if (sq?.root == null) return;
-            _flipTweens[i]?.Kill();
-            _flipTweens[i] = null;
-            sq.root.localScale = Vector3.one;
+            KillSquareTweens(i);
+            sq.root.localScale    = Vector3.one;
+            sq.root.localRotation = Quaternion.identity;
+            _faceColors[i] = faceDownColor;
             if (sq.back   != null) sq.back.color = faceDownColor;
             if (sq.glyph  != null) sq.glyph.enabled = false;
             if (sq.cursor != null) sq.cursor.enabled = false;
         }
 
-        private void ShowFace(Square sq, SquareTemplate template)
+        private void ShowFace(int slot, Square sq, SquareTemplate template)
         {
             bool isNote = template.IsNoteBearing();
-            if (sq.back != null) sq.back.color = isNote ? noteFaceColor : restFaceColor;
+            _faceColors[slot] = isNote ? noteFaceColor : restFaceColor;
+            if (sq.back != null) sq.back.color = _faceColors[slot];
             if (sq.glyph != null)
             {
                 sq.glyph.sprite  = GlyphSprite(template);
@@ -337,10 +437,7 @@ namespace KrumbleHut.Drummi.Dungeons
         private void HideCard()
         {
             for (int i = 0; i < _flipTweens.Length; i++)
-            {
-                _flipTweens[i]?.Kill();
-                _flipTweens[i] = null;
-            }
+                KillSquareTweens(i);
             _borderTween?.Kill();
             _borderTween = null;
             _hideDelayTween?.Kill();

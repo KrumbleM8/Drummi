@@ -48,6 +48,12 @@ public class DungeonInputReader : MonoBehaviour
     /// </summary>
     public event Action<DungeonEnemyType, InputMatch.MatchQuality> OnHit;
 
+    /// <summary>
+    /// Fired when a recorded tap lands outside every note's Good window (the
+    /// out-of-window penalty path). Lets modes show negative per-tap feedback.
+    /// </summary>
+    public event Action<DungeonEnemyType, InputMatch.MatchQuality> OnMissTap;
+
     // Controlled by DungeonBeatManager — false outside the response window.
     // Property wraps a backing field purely to fire AllowInputChanged on transitions;
     // gating semantics are identical to the previous public field.
@@ -249,7 +255,10 @@ public class DungeonInputReader : MonoBehaviour
                 OnHit?.Invoke(type, quality);
             }
             else
+            {
                 health?.TakeOutOfWindowPenalty();
+                OnMissTap?.Invoke(type, quality);
+            }
         }
     }
 

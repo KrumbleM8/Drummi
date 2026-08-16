@@ -94,6 +94,18 @@ namespace KrumbleHut.Drummi.Dungeons
         /// </summary>
         public event Action<int, EvaluationResult> OnCardEvaluated;
 
+        /// <summary>
+        /// Fired on a confirmed Perfect/Good tap during the perform bar.
+        /// Parameters: slot (0–7) of the matched note's square, match quality.
+        /// </summary>
+        public event Action<int, InputMatch.MatchQuality> OnPlayerHit;
+
+        /// <summary>
+        /// Fired on an out-of-window tap during the perform bar.
+        /// Parameter: slot (0–7) nearest the tap time.
+        /// </summary>
+        public event Action<int> OnPlayerMissTap;
+
         /// <summary>Fired once, after the final card's evaluation completes.</summary>
         public event Action OnEncounterComplete;
 
@@ -279,6 +291,7 @@ namespace KrumbleHut.Drummi.Dungeons
                 inputReader.CoyoteWindowStartOverride = null;
                 inputReader.SuppressSpawnMarkers      = true;
                 inputReader.OnHit                    += HitCallback;
+                inputReader.OnMissTap                += MissCallback;
             }
 
             // ── Beat-grid snap (same approach as CallAndResponseController) ──
@@ -456,6 +469,7 @@ namespace KrumbleHut.Drummi.Dungeons
                     inputReader.allowInput                = false;
                     inputReader.SuppressSpawnMarkers      = false;
                     inputReader.OnHit                    -= HitCallback;
+                    inputReader.OnMissTap                -= MissCallback;
                     inputReader.CoyoteWindowStartOverride = null;
                 }
                 Debug.Log("[FlashCard] === ENCOUNTER COMPLETE ===");
@@ -522,13 +536,52 @@ namespace KrumbleHut.Drummi.Dungeons
                 inputReader.SuppressSpawnMarkers      = false;
                 inputReader.ResetInputs();
                 inputReader.OnHit                    -= HitCallback;
+                inputReader.OnMissTap                -= MissCallback;
                 inputReader.CoyoteWindowStartOverride = null;
             }
         }
 
-        // Per-tap feedback (Phase 1: log evidence; later phases route this to card UI).
+        /// <summary>
+        /// Per-tap feedback: resolves the matched note's square and notifies the view.
+        /// The MOMENT is the reader's confirmed hit; the view's pop is cosmetic only.
+        /// </summary>
         private void HitCallback(DungeonEnemyType type, InputMatch.MatchQuality quality)
-            => Debug.Log($"[FlashCard] Hit          | card={_cardIndex} quality={quality}");
+        {
+            Debug.Log($"[FlashCard] Hit          | card={_cardIndex} quality={quality}");
+            if (!_running || !_performFired || _cardBeats == null || _cardBeats.Count == 0) return;
+            if (GameClock.Instance == null) return;
+
+            // Find the scheduled note nearest the tap in perform-bar time coordinates
+            // (reveal-bar note time + N * beatInterval — same mapping as evaluation).
+            double now        = GameClock.Instance.GameTime;
+            double timeOffset = CardBeats * _beatInterval;
+            DungeonScheduledBeat nearest = null;
+            double bestDelta = double.MaxValue;
+            foreach (var beat in _cardBeats)
+            {
+                double delta = Math.Abs(now - (beat.scheduledTime + timeOffset));
+                if (delta < bestDelta) { bestDelta = delta; nearest = beat; }
+            }
+            if (nearest == null) return;
+
+            // Floor (with fp epsilon) so offbeat/subdivided notes map to their host square.
+            int slot = (int)Math.Floor((nearest.scheduledTime - _current.CallStartTime) / _beatInterval + 1e-6);
+            slot = Mathf.Clamp(slot, 0, CardBeats - 1);
+            OnPlayerHit?.Invoke(slot, quality);
+        }
+
+        /// <summary>Out-of-window tap: resolves the square nearest the tap time and notifies the view.</summary>
+        private void MissCallback(DungeonEnemyType type, InputMatch.MatchQuality quality)
+        {
+            Debug.Log($"[FlashCard] MissTap      | card={_cardIndex} quality={quality}");
+            if (!_running || !_performFired) return;
+            if (GameClock.Instance == null) return;
+
+            double now  = GameClock.Instance.GameTime;
+            int    slot = (int)Math.Floor((now - _current.ResponseStartTime) / _beatInterval);
+            slot = Mathf.Clamp(slot, 0, CardBeats - 1);
+            OnPlayerMissTap?.Invoke(slot);
+        }
         #endregion
 
         #region Private — Card Generation
