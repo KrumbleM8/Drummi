@@ -190,6 +190,7 @@ namespace KrumbleHut.Drummi.UI
         public void GoToDungeonScene()    => TransitionToScene("Dungeon");
         public void GoToGardenScene()     => TransitionToScene("Garden");
         public void GoToFlashCardsScene() => TransitionToScene("FlashCards");
+        public void GoToFlickScene()      => TransitionToScene("Flick");
 
         private void TransitionToScene(string sceneName)
         {
