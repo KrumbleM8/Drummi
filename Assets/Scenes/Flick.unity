@@ -229,7 +229,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 1}
   m_AnchorMax: {x: 0.5, y: 1}
-  m_AnchoredPosition: {x: 0, y: -60}
+  m_AnchoredPosition: {x: 0, y: -110}
   m_SizeDelta: {x: 640, y: 36}
   m_Pivot: {x: 0.5, y: 1}
 --- !u!114 &76773682
@@ -1644,6 +1644,7 @@ MonoBehaviour:
   goodPoints: 100
   highScoreKey: FlickHS
   scoreText: {fileID: 237828936}
+  scorePage: {fileID: 1079231909}
 --- !u!4 &789966915
 Transform:
   m_ObjectHideFlags: 0
@@ -2715,7 +2716,7 @@ Transform:
   m_GameObject: {fileID: 1076628257}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalPosition: {x: 0, y: 0, z: -10}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []

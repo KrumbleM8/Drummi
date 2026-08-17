@@ -65,6 +65,12 @@ namespace KrumbleHut.Drummi.Flick
 
         [Header("HUD")]
         [SerializeField] private TMP_Text scoreText;
+
+        [Tooltip("Score page root, closed when a run starts. UIMenuManager.ShowPageImmediate never " +
+                 "hides the previous page, so after a game over the Score page would otherwise stay " +
+                 "active and its opaque panel would cover the world-space flick rig. FlashCards gets " +
+                 "away with this because its gameplay UI is opaque; Flick cannot.")]
+        [SerializeField] private GameObject scorePage;
         #endregion
 
         #region State
@@ -122,6 +128,10 @@ namespace KrumbleHut.Drummi.Flick
             }
 
             ResetRunState();
+
+            // Runs after the transition cover, so this never pops on screen. See the
+            // scorePage tooltip for why the mode must close it itself.
+            if (scorePage != null) scorePage.SetActive(false);
 
             // BGM: loop from the shared DSP start (dungeon floor pattern).
             if (AudioManager.instance != null)
