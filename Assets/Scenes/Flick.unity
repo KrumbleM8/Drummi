@@ -873,13 +873,13 @@ MonoBehaviour:
   - pageName: Main
     pageTransform: {fileID: 990825035}
     onScreenPosition: {x: 0, y: 0}
-    offScreenLeftPosition: {x: -636.16, y: 0}
-    offScreenRightPosition: {x: 636.16, y: 0}
+    offScreenLeftPosition: {x: -394.76, y: 0}
+    offScreenRightPosition: {x: 394.76, y: 0}
   - pageName: Score
     pageTransform: {fileID: 1079231910}
     onScreenPosition: {x: 0, y: 0}
-    offScreenLeftPosition: {x: -636.16, y: 0}
-    offScreenRightPosition: {x: 636.16, y: 0}
+    offScreenLeftPosition: {x: -394.76, y: 0}
+    offScreenRightPosition: {x: 394.76, y: 0}
   startingPageName: Main
   transitionDuration: 0.3
   transitionCurve:
@@ -1516,6 +1516,7 @@ GameObject:
   m_Component:
   - component: {fileID: 789966915}
   - component: {fileID: 789966914}
+  - component: {fileID: 789966916}
   m_Layer: 0
   m_Name: FlickRig
   m_TagString: Untagged
@@ -1537,14 +1538,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   metronome: {fileID: 736476378}
   beatManager: {fileID: 1232352584}
-  flickReader: {fileID: 1192470080}
-  targetSweep: {fileID: 1029647322}
-  ball: {fileID: 310007531}
-  targetVisual: {fileID: 433050295}
   health: {fileID: 2008608031}
-  flickEnemy: {fileID: 1029647323}
-  baseDamage: 10
-  comboMultiplier: 1.5
+  director: {fileID: 789966916}
   musicTrackIndex: 1
   musicBpm: 105
   leadInBars: 1
@@ -1577,6 +1572,26 @@ Transform:
   - {fileID: 310007533}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &789966916
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 789966913}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3f6608d0731dd1e44b11b55bef4f21f8, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  beatManager: {fileID: 1232352584}
+  flickReader: {fileID: 1192470080}
+  targetSweep: {fileID: 1029647322}
+  ball: {fileID: 310007531}
+  targetVisual: {fileID: 433050295}
+  flickEnemy: {fileID: 1029647323}
+  baseDamage: 10
+  comboMultiplier: 1.5
 --- !u!1 &796775214
 GameObject:
   m_ObjectHideFlags: 0

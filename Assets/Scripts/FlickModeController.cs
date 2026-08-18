@@ -5,23 +5,24 @@ using KrumbleHut.Drummi.Dungeons;
 namespace KrumbleHut.Drummi.Flick
 {
     /// <summary>
-    /// Standalone Flick mode — ENDLESS survival. Hosts the shared flick gameplay core
-    /// (FlickInputReader / FlickBeatManager / FlickTargetSweep / FlickBallController /
-    /// FlickTargetVisual) without forking any evaluation logic: this controller only
-    /// ARMS the stack, keeps score, and ends the run when HP depletes.
+    /// Standalone Flick mode — ENDLESS survival. THIN HOST over the shared flick core:
+    /// this controller only initializes/arms FlickBeatManager, drives the shared
+    /// FlickEncounterDirector (which owns the whole enemy loop), keeps score, and ends
+    /// the run when HP depletes. It never touches the enemy or applies damage itself —
+    /// the dungeon host (RoomController, Phase 5) drives the exact same director.
     ///
     /// Run rules:
     ///   - Endless bar cycle (half-time required beats) until DungeonHealth depletes.
-    ///   - ONE ENEMY PER BAR (FlickEnemy): hits damage it — clean on-beat hits compound
-    ///     a per-enemy combo (baseDamage × comboMultiplier^ComboIndex); off-beat hits
-    ///     deal half base damage and break the combo. Kill it → grace period, no seam
-    ///     attack that bar. Survivors always attack (FlickBeatManager seam), retreat,
-    ///     and a fresh enemy spawns at the next bar. This controller never applies
-    ///     PLAYER damage itself.
+    ///   - ONE ENEMY PER BAR: enemy damage/retreat/respawn is FlickEncounterDirector's
+    ///     job; survivor seam attacks are FlickBeatManager's. This controller never
+    ///     applies PLAYER damage itself.
     ///   - Score v1: consumed beats weighted by grade (Perfect/Good — dungeon
     ///     constants 200/100 as serialized defaults); off-beat bonus hits score at
     ///     half value. High score via PlayerPrefs, following the DungeonEvaluator
     ///     pattern with a Flick-specific key.
+    ///
+    /// Scoring subscribes to the SAME beat-manager events as the director (parallel
+    /// subscription): outcome payloads are immutable structs, so ordering is free.
     ///
     /// Music: serialized AudioManager track index + BPM pair (stand-in until dedicated
     /// tracks exist). BGM loops from the shared DSP start; the accent tick is mixed
@@ -31,29 +32,21 @@ namespace KrumbleHut.Drummi.Flick
     /// AudioManager handle the BGM centrally); the accent is fire-and-forget PlayOneShot.
     ///
     /// INSPECTOR SETUP (Flick scene):
-    ///   metronome, beatManager, flickReader, targetSweep, ball, targetVisual, health,
-    ///   flickEnemy — scene instances. scoreText — gameplay HUD. Play button → StartFromMenu().
-    ///   Register in GameManager.modeControllers.
+    ///   metronome, beatManager, health, director — scene instances (the director
+    ///   carries the rest of the flick stack). scoreText — gameplay HUD. Play button →
+    ///   StartFromMenu(). Register in GameManager.modeControllers.
     /// </summary>
     public class FlickModeController : ModeController
     {
         #region Inspector
         [Header("Flick Systems")]
-        [SerializeField] private Metronome           metronome;
-        [SerializeField] private FlickBeatManager    beatManager;
-        [SerializeField] private FlickInputReader    flickReader;
-        [SerializeField] private FlickTargetSweep    targetSweep;
-        [SerializeField] private FlickBallController ball;
-        [SerializeField] private FlickTargetVisual   targetVisual;
-        [SerializeField] private DungeonHealth       health;
-        [SerializeField] private FlickEnemy          flickEnemy;
+        [SerializeField] private Metronome              metronome;
+        [SerializeField] private FlickBeatManager       beatManager;
+        [SerializeField] private DungeonHealth          health;
 
-        [Header("Enemy Damage")]
-        [Tooltip("Damage of an unboosted hit on the enemy.")]
-        [SerializeField] private int baseDamage = 10;
-
-        [Tooltip("Combo factor: clean on-beat hit N of a streak deals baseDamage * multiplier^(N-1).")]
-        [SerializeField] private float comboMultiplier = 1.5f;
+        [Tooltip("Shared enemy-loop director — owns the rest of the flick stack " +
+                 "(reader, sweep, ball, visual, enemy) and all enemy damage tuning.")]
+        [SerializeField] private FlickEncounterDirector director;
 
         [Header("Music (stand-in until dedicated tracks)")]
         [Tooltip("Index into AudioManager.musicTracks.")]
@@ -134,9 +127,9 @@ namespace KrumbleHut.Drummi.Flick
         {
             Debug.Log("[FlickMode] Starting endless run");
 
-            if (beatManager == null || health == null || targetSweep == null)
+            if (beatManager == null || health == null || director == null)
             {
-                Debug.LogError("[FlickMode] beatManager, health, or targetSweep not assigned — cannot start.");
+                Debug.LogError("[FlickMode] beatManager, health, or director not assigned — cannot start.");
                 return;
             }
 
@@ -156,18 +149,14 @@ namespace KrumbleHut.Drummi.Flick
             double beatInterval = 60.0 / bpm;
             double gradingStart = virtualStartTime + leadInBars * GameConstants.BEATS_PER_LOOP * beatInterval;
 
-            targetSweep.StartSweep(virtualStartTime, beatInterval);
-
             beatManager.Initialize(bpm);
-            beatManager.AimCheck = r => targetSweep.IsThrowOnTarget(r.DragVector, r.StartPosition);
+
+            // Scoring first, director second — preserves the pre-extraction handler
+            // order (score, then damage) within each event dispatch.
             beatManager.OnReleaseResolved += HandleReleaseResolved;
             beatManager.OnBarResolved     += HandleBarResolved;
             health.OnHealthDepleted       += HandleHealthDepleted;
-            if (flickEnemy != null)
-            {
-                flickEnemy.ResetImmediate();
-                flickEnemy.OnDied += HandleEnemyDied;
-            }
+            director.BeginEncounter(virtualStartTime, beatInterval);
 
             _runActive = true;
             beatManager.Arm(gradingStart);
@@ -223,35 +212,14 @@ namespace KrumbleHut.Drummi.Flick
                     return; // Consumed as fizzle — no points, no damage.
             }
             UpdateHud();
-
-            // Enemy damage: off-beat = half base + combo already broken (ComboIndex 0);
-            // clean on-beat = base compounded by the streak position.
-            if (flickEnemy != null)
-            {
-                int dmg = outcome.IsOffBeat
-                    ? Mathf.Max(1, baseDamage / 2)
-                    : Mathf.RoundToInt(baseDamage * Mathf.Pow(comboMultiplier, outcome.ComboIndex));
-                flickEnemy.TakeDamage(dmg);
-            }
+            // Enemy damage for this outcome is FlickEncounterDirector's parallel handler.
         }
 
         private void HandleBarResolved(FlickBarResult result)
         {
             if (!_runActive) return;
             _barsSurvived++;
-
-            if (flickEnemy == null) return;
-            if (!result.Grace) flickEnemy.PlayRetreatDespawn(); // death path already despawned
-            flickEnemy.ResetForSpawn(result.NextBarStartVirtual);
-        }
-
-        // Enemy HP depleted mid-bar: the rest of the bar is a grace period (no grading,
-        // no seam attack); the replacement spawns via HandleBarResolved's grace seam.
-        private void HandleEnemyDied()
-        {
-            if (!_runActive) return;
-            beatManager.NotifyEnemyDefeated();
-            flickEnemy.PlayDeathDespawn();
+            // Enemy retreat/respawn at the seam is FlickEncounterDirector's parallel handler.
         }
 
         private void HandleHealthDepleted()
@@ -266,27 +234,18 @@ namespace KrumbleHut.Drummi.Flick
         #endregion
 
         #region Teardown / Reset
-        // Unsubscribes and disarms everything — safe to call repeatedly, from any
-        // state, including mid-Held (reader track dropped, ball tweens killed).
+        // Unsubscribes the mode's own handlers, then routes the stack shutdown through
+        // the director's single teardown entry point — safe to call repeatedly, from
+        // any state, including mid-Held (reader track dropped, ball tweens killed).
         private void TearDownStack()
         {
             if (beatManager != null)
             {
                 beatManager.OnReleaseResolved -= HandleReleaseResolved;
                 beatManager.OnBarResolved     -= HandleBarResolved;
-                beatManager.StopEncounter();
-                beatManager.AimCheck = null;
             }
             if (health != null) health.OnHealthDepleted -= HandleHealthDepleted;
-            if (flickEnemy != null)
-            {
-                flickEnemy.OnDied -= HandleEnemyDied;
-                flickEnemy.ResetImmediate();
-            }
-            if (targetSweep != null) targetSweep.StopSweep();
-            if (flickReader != null) flickReader.CancelActiveTracking();
-            if (ball != null) ball.ResetToHome();
-            if (targetVisual != null) targetVisual.ResetVisual();
+            if (director != null) director.TeardownEncounter();
         }
 
         private void ResetRunState()
