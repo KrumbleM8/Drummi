@@ -209,6 +209,15 @@ namespace KrumbleHut.Drummi.Dungeons
         /// </summary>
         public event Action OnRequiredBeatCue;
 
+        /// <summary>
+        /// When false, required-beat cues (accent tick + OnRequiredBeatCue) are
+        /// suppressed during lead-in bars and only fire once grading is live. The
+        /// dungeon host sets this false so the get-ready bar is silent until the
+        /// encounter visibly starts; the standalone mode keeps the default (true),
+        /// where lead-in cues preview the half-time grid.
+        /// </summary>
+        public bool CueDuringLeadIn { get; set; } = true;
+
         // ── State ─────────────────────────────────────────────────────────────
 
         private enum State { Uninitialized, Armed, Running }
@@ -229,6 +238,12 @@ namespace KrumbleHut.Drummi.Dungeons
         private State _state = State.Uninitialized;
         private double _beatInterval;
         private double _gradingStartVirtual;
+
+        // Authored (scene-serialized) values captured at Awake so per-room overrides
+        // can be reverted by sentinel (see ApplyRoomOverrides).
+        private float[] _authoredRequiredSlots;
+        private float[] _authoredOffBeatSlots;
+        private int     _authoredSurvivorUnits;
         private int _cleanStreak;   // consecutive cleanly consumed required beats (combo exponent)
         private bool _graceActive;  // enemy died mid-bar — no grading/cues/attack until next bar
         private readonly List<RequiredBeat> _requiredBeats = new();
@@ -238,7 +253,36 @@ namespace KrumbleHut.Drummi.Dungeons
         private double GoodThresholdSeconds    => evaluator.EffectiveGoodWindowBeats    * (60.0 / metronome.bpm);
         private double PerfectThresholdSeconds => evaluator.EffectivePerfectWindowBeats * (60.0 / metronome.bpm);
 
+        private void Awake()
+        {
+            _authoredRequiredSlots = requiredBeatSlots;
+            _authoredOffBeatSlots  = offBeatSlots;
+            _authoredSurvivorUnits = survivorAttackUnits;
+        }
+
         // ── Public API ────────────────────────────────────────────────────────
+
+        /// <summary>
+        /// Per-room tuning hook (dungeon host). Sentinels restore the authored scene
+        /// values, so hosts call this unconditionally each room:
+        ///   requiredSlots null → authored; offSlots null → authored, single NEGATIVE
+        ///   value → off-beats explicitly disabled (empty runtime array);
+        ///   survivorUnits &lt; 0 → authored (0 is meaningful: whiff-on-clean-bar).
+        /// Call before Arm — slots are baked per bar at SetupBar.
+        /// </summary>
+        public void ApplyRoomOverrides(float[] requiredSlots, float[] offSlots, int survivorUnits)
+        {
+            requiredBeatSlots = requiredSlots ?? _authoredRequiredSlots;
+
+            if (offSlots == null)                offBeatSlots = _authoredOffBeatSlots;
+            else if (offSlots.Length > 0 && offSlots[0] < 0f) offBeatSlots = System.Array.Empty<float>();
+            else                                 offBeatSlots = offSlots;
+
+            survivorAttackUnits = survivorUnits < 0 ? _authoredSurvivorUnits : survivorUnits;
+
+            Debug.Log($"[FlickBeatManager] Room overrides — required: [{string.Join(", ", requiredBeatSlots)}], " +
+                      $"off: [{string.Join(", ", offBeatSlots)}], survivorUnits: {survivorAttackUnits}");
+        }
 
         /// <summary>
         /// Prepares the manager for a new session. Mirrors DungeonBeatManager.Initialize:
@@ -363,6 +407,7 @@ namespace KrumbleHut.Drummi.Dungeons
         private void FireRequiredBeatCues()
         {
             if (_graceActive) return; // dead enemy — no parity anchor to cue
+            if (!CueDuringLeadIn && _state != State.Running) return; // silent lead-in (dungeon)
 
             double now = GameClock.Instance.GameTime;
             foreach (var rb in _requiredBeats)

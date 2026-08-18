@@ -26,6 +26,13 @@ public class RoomController : MonoBehaviour
     [SerializeField] private DungeonInputLayoutController   inputLayoutController;
     [SerializeField] private CallAndResponseController       callAndResponseController;
     [SerializeField] private FlashCardController              flashCardController;
+
+    [Header("Flick Room")]
+    [Tooltip("Flick beat manager (the flick rig's own, not DungeonBeatManager) — initialized/armed per flick room.")]
+    [SerializeField] private FlickBeatManager                flickBeatManager;
+
+    [Tooltip("Shared enemy-loop director — the same component the standalone Flick mode drives.")]
+    [SerializeField] private FlickEncounterDirector          flickDirector;
     [SerializeField] private ScreenTransition                screenTransition;
     [SerializeField] private DungeonZoomTransition  dungeonTransition;
     [SerializeField] private DungeonHealth         playerHealth;
@@ -55,6 +62,7 @@ public class RoomController : MonoBehaviour
     private DungeonFloorDefinition _currentFloor;
     private RoomResult            _result;
     private float                 _roomStartTime;
+    private int                   _flickBarsElapsed;
 
     // ── Public API ────────────────────────────────────────────────────────────
 
@@ -137,7 +145,8 @@ public class RoomController : MonoBehaviour
             case RoomState.Entering:
                 modeController.ClearVisuals(_currentDef != null &&
                                             (_currentDef.RoomType == RoomType.CallAndResponse ||
-                                             _currentDef.RoomType == RoomType.FlashCard));
+                                             _currentDef.RoomType == RoomType.FlashCard ||
+                                             _currentDef.RoomType == RoomType.Flick));
                 ApplyBackground();
                 screenTransition.StartReveal();
                 dungeonTransition.StartReveal();
@@ -206,6 +215,63 @@ public class RoomController : MonoBehaviour
                     else
                     {
                         Debug.LogError("[RoomController] FlashCardController not assigned — FlashCard room cannot start.");
+                    }
+                    // Health depletion must route through the same failure path as combat.
+                    playerHealth.OnHealthDepleted += HandleHealthDepleted;
+                }
+                else if (_currentDef != null && _currentDef.RoomType == RoomType.Flick)
+                {
+                    // Flick room: same audio/visual setup as C&R (music scheduling, timing,
+                    // metronome) with DungeonBeatManager suppressed. The shared
+                    // FlickEncounterDirector — the exact component the standalone Flick mode
+                    // drives — owns the enemy loop; this controller only counts graded bars
+                    // up to RoomLengthBars (kill count is score, not completion).
+                    if (doorsUI != null) doorsUI.SetActive(false);
+                    modeController.StartRoomAudioVisual(_currentDef, _currentFloor);
+                    if (flickDirector != null && flickBeatManager != null)
+                    {
+                        // Sentinels restore the flick rig's scene defaults, so overrides are
+                        // applied unconditionally — a vanilla flick room resets any tuning a
+                        // previous flick room left behind.
+                        flickDirector.ApplyRoomOverrides(
+                            _currentDef.FlickRequiredBeatSlots,
+                            _currentDef.FlickOffBeatSlots,
+                            _currentDef.FlickBeatsPerCrossing,
+                            _currentDef.FlickHitboxRadiusWorld,
+                            _currentDef.FlickEnemyMaxHP,
+                            _currentDef.FlickSurvivorAttackUnits);
+
+                        // Same metronome/TimingCoordinator grid StartRoomAudioVisual set up;
+                        // Initialize just re-derives the beat interval from the same BPM.
+                        flickBeatManager.Initialize(modeController.CurrentRoomBpm);
+                        flickDirector.SetSuiteVisible(true);
+
+                        // Grading starts at EncounterStartVirtualTime — the same ramp policy
+                        // every room type uses: first room of a floor gets the floor's
+                        // musical lead-in bars, mid-floor rooms start on the next bar seam.
+                        double flickGradingStart = modeController.EncounterStartVirtualTime;
+
+                        // NOTHING runs before the grading start: cues are gated below, the
+                        // sweep origin is the grading start (it holds at the left anchor
+                        // until then), and the enemy pops in exactly at the grading start —
+                        // the whole encounter starts together on the bar.
+                        flickBeatManager.CueDuringLeadIn = false;
+                        flickDirector.BeginEncounter(
+                            flickGradingStart,
+                            60.0 / modeController.CurrentRoomBpm,
+                            flickGradingStart);
+
+                        _flickBarsElapsed = 0;
+                        // Subscribe AFTER BeginEncounter so the director's seam handler
+                        // (retreat + ResetForSpawn) precedes the bar counter in multicast
+                        // order — room-end teardown then cancels the just-scheduled spawn.
+                        flickBeatManager.OnBarResolved += HandleFlickBarResolved;
+
+                        flickBeatManager.Arm(flickGradingStart);
+                    }
+                    else
+                    {
+                        Debug.LogError("[RoomController] flickDirector/flickBeatManager not assigned — Flick room cannot start.");
                     }
                     // Health depletion must route through the same failure path as combat.
                     playerHealth.OnHealthDepleted += HandleHealthDepleted;
@@ -283,6 +349,8 @@ public class RoomController : MonoBehaviour
             callAndResponseController.OnEncounterComplete      -= HandleCarEncounterComplete;
         if (flashCardController != null)
             flashCardController.OnEncounterComplete            -= HandleFlashCardEncounterComplete;
+        if (flickBeatManager != null)
+            flickBeatManager.OnBarResolved                     -= HandleFlickBarResolved;
     }
 
     private void HandleModeComplete()
@@ -303,6 +371,16 @@ public class RoomController : MonoBehaviour
         callAndResponseController?.StopEncounter();
         if (flashCardController != null && flashCardController.IsRunning)
             flashCardController.StopEncounter();
+        // Full flick teardown through the shared single entry point — unsubscribes the
+        // enemy loop, stops FlickBeatManager (gating the reader off), drops any active
+        // touch track, and resets ball/visual/enemy. Then the rig goes dormant and the
+        // pads' touch handler is restored (game-over routing never calls SwitchLayout).
+        if (_currentDef != null && _currentDef.RoomType == RoomType.Flick)
+        {
+            flickDirector?.TeardownEncounter();
+            flickDirector?.SetSuiteVisible(false);
+            inputLayoutController?.RestorePadTouch();
+        }
         // Stop the beat manager immediately so it cannot fire OnSongComplete later and
         // trigger a second ShowResultsSequence after the run has already handled routing.
         modeController.Cleanup();
@@ -331,6 +409,30 @@ public class RoomController : MonoBehaviour
         _state = RoomState.Evaluating;
         // Full unsubscribe (not just this handler) — same rationale as the C&R handler.
         UnsubscribeEvents();
+        BuildResult(survived: true);
+        SetState(RoomState.Exiting);
+    }
+
+    /// <summary>
+    /// Counts graded flick bars up to RoomLengthBars, then completes the room via the
+    /// same path as C&R. Grace bars (enemy killed mid-bar) COUNT — a kill shortens
+    /// the danger, not the room. Lead-in bars never fire OnBarResolved, so only
+    /// graded bars are counted.
+    /// </summary>
+    private void HandleFlickBarResolved(FlickBarResult result)
+    {
+        if (_state != RoomState.Playing) return;
+
+        _flickBarsElapsed++;
+        int roomBars = Mathf.Max(1, _currentDef != null ? _currentDef.RoomLengthBars : 1);
+        if (_flickBarsElapsed < roomBars) return;
+
+        _state = RoomState.Evaluating;
+        UnsubscribeEvents();
+        // Single teardown entry point (also cancels the spawn the director just
+        // scheduled for the next bar), then the rig sleeps until the next flick room.
+        flickDirector?.TeardownEncounter();
+        flickDirector?.SetSuiteVisible(false);
         BuildResult(survived: true);
         SetState(RoomState.Exiting);
     }

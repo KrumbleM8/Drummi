@@ -59,21 +59,38 @@ namespace KrumbleHut.Drummi.Dungeons
 
         [Tooltip("Combo factor: clean on-beat hit N of a streak deals baseDamage * multiplier^(N-1).")]
         [SerializeField] private float comboMultiplier = 1.5f;
+
+        [Header("Dormancy")]
+        [Tooltip("Hide the flick suite (enemy + ball renderers) on Start. TRUE only on the " +
+                 "dungeon instance, where the rig sleeps between flick rooms; the standalone " +
+                 "scene leaves it false. Start, not Awake — FlickEnemy captures its base pose " +
+                 "in Awake and hiding earlier would bake a zeroed pose.")]
+        [SerializeField] private bool dormantOnStart;
         #endregion
 
         private bool _active;
 
+        private void Start()
+        {
+            if (dormantOnStart) SetSuiteVisible(false);
+        }
+
         #region Public API
         /// <summary>
         /// Starts the enemy loop: assigns the beat manager's aim check, subscribes the
-        /// damage/bar-cycle/death handlers, resets the enemy to a fresh full-HP spawn,
-        /// and starts the sweep. Idempotent via teardown-first. The host must call
-        /// FlickBeatManager.Initialize before this and Arm after it.
+        /// damage/bar-cycle/death handlers, brings in the enemy, and starts the sweep.
+        /// Idempotent via teardown-first. The host must call FlickBeatManager.Initialize
+        /// before this and Arm after it.
         /// </summary>
         /// <param name="sweepOriginVirtual">Virtual time of sweep phase 0 — hosts pass their
         /// session/room start so the sweep is live during any lead-in.</param>
         /// <param name="beatInterval">Seconds per beat (60 / bpm).</param>
-        public void BeginEncounter(double sweepOriginVirtual, double beatInterval)
+        /// <param name="firstEnemySpawnVirtual">Non-negative = the enemy stays hidden and
+        /// pops in at this virtual time (normally the grading start, which may equal the
+        /// sweep origin) — making the ungraded lead-in READABLE as a get-ready phase.
+        /// Negative (default) = enemy present immediately, the standalone mode's behavior.</param>
+        public void BeginEncounter(double sweepOriginVirtual, double beatInterval,
+                                   double firstEnemySpawnVirtual = -1.0)
         {
             if (_active) TeardownEncounter();
 
@@ -88,13 +105,25 @@ namespace KrumbleHut.Drummi.Dungeons
             beatManager.OnBarResolved     += HandleBarResolved;
             if (flickEnemy != null)
             {
-                flickEnemy.ResetImmediate();
+                if (firstEnemySpawnVirtual >= 0.0)
+                {
+                    // Empty stage through the lead-in; the pop-in IS the "grading is
+                    // live" signal (FlickEnemy polls GameClock for the spawn moment —
+                    // a spawn time at/before "now" simply spawns on the next frame).
+                    flickEnemy.HideImmediate();
+                    flickEnemy.ResetForSpawn(firstEnemySpawnVirtual);
+                }
+                else
+                {
+                    flickEnemy.ResetImmediate();
+                }
                 flickEnemy.OnDied += HandleEnemyDied;
             }
 
             targetSweep.StartSweep(sweepOriginVirtual, beatInterval);
             _active = true;
-            Debug.Log($"[FlickDirector] Encounter began — sweep origin vt={sweepOriginVirtual:F4}");
+            Debug.Log($"[FlickDirector] Encounter began — sweep origin vt={sweepOriginVirtual:F4}, " +
+                      $"first enemy {(firstEnemySpawnVirtual >= 0.0 ? $"spawns vt={firstEnemySpawnVirtual:F4}" : "immediate")}");
         }
 
         /// <summary>
@@ -123,6 +152,42 @@ namespace KrumbleHut.Drummi.Dungeons
             if (targetVisual != null) targetVisual.ResetVisual();
             _active = false;
             Debug.Log("[FlickDirector] Encounter torn down");
+        }
+
+        /// <summary>
+        /// Renderer-level show/hide for the whole flick suite — dungeon dormancy
+        /// between flick rooms. Never SetActive: subscriptions, sweep polling, and
+        /// spawn polling must stay alive (FlickTargetVisual convention). Show restores
+        /// a fresh full-HP enemy; hide freezes everything invisibly in place.
+        /// </summary>
+        public void SetSuiteVisible(bool visible)
+        {
+            if (flickEnemy != null)
+            {
+                if (visible) flickEnemy.ResetImmediate();
+                else         flickEnemy.HideImmediate();
+            }
+            if (ball != null) ball.SetVisible(visible);
+        }
+
+        /// <summary>
+        /// Per-room tuning (dungeon host) — delegates to the stack's own override
+        /// hooks, whose sentinels restore authored scene defaults. Call this
+        /// unconditionally per flick room, BEFORE BeginEncounter/Arm. The standalone
+        /// mode never calls it, so authored defaults always apply there.
+        /// </summary>
+        /// <param name="requiredSlots">Required-beat slots, or null for authored default.</param>
+        /// <param name="offSlots">Off-beat slots; null = authored, single negative value = none.</param>
+        /// <param name="beatsPerCrossing">Sweep crossing beats; 0 = authored default.</param>
+        /// <param name="hitboxRadiusWorld">Aim hitbox radius (world units); 0 = authored default.</param>
+        /// <param name="enemyMaxHP">Enemy hit points; 0 = authored default.</param>
+        /// <param name="survivorAttackUnits">Seam attack units; -1 = authored default (0 is meaningful).</param>
+        public void ApplyRoomOverrides(float[] requiredSlots, float[] offSlots,
+            float beatsPerCrossing, float hitboxRadiusWorld, int enemyMaxHP, int survivorAttackUnits)
+        {
+            if (beatManager != null) beatManager.ApplyRoomOverrides(requiredSlots, offSlots, survivorAttackUnits);
+            if (targetSweep != null) targetSweep.ApplyRoomOverrides(beatsPerCrossing, hitboxRadiusWorld);
+            if (flickEnemy != null)  flickEnemy.ApplyRoomOverrides(enemyMaxHP);
         }
         #endregion
 

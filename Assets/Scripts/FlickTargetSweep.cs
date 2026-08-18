@@ -37,6 +37,30 @@ namespace KrumbleHut.Drummi.Dungeons
         private double _secondsPerCrossing;
         private bool _running;
 
+        // Authored (scene-serialized) values captured at Awake so per-room overrides
+        // can be reverted by sentinel (see ApplyRoomOverrides).
+        private float _authoredBeatsPerCrossing;
+        private float _authoredHitboxRadius;
+
+        private void Awake()
+        {
+            _authoredBeatsPerCrossing = beatsPerCrossing;
+            _authoredHitboxRadius     = hitboxRadiusWorld;
+        }
+
+        /// <summary>
+        /// Per-room tuning hook (dungeon host). Values &lt;= 0 restore the authored
+        /// scene defaults, so hosts call this unconditionally each room. Call before
+        /// StartSweep — the crossing duration is derived there.
+        /// </summary>
+        public void ApplyRoomOverrides(float newBeatsPerCrossing, float newHitboxRadiusWorld)
+        {
+            beatsPerCrossing  = newBeatsPerCrossing  > 0f ? newBeatsPerCrossing  : _authoredBeatsPerCrossing;
+            hitboxRadiusWorld = newHitboxRadiusWorld > 0f ? newHitboxRadiusWorld : _authoredHitboxRadius;
+            Debug.Log($"[FlickTargetSweep] Room overrides — beatsPerCrossing: {beatsPerCrossing}, " +
+                      $"hitboxRadius: {hitboxRadiusWorld}wu");
+        }
+
         /// <summary>
         /// Starts the sweep on the session's virtual-time grid.
         /// </summary>
@@ -63,7 +87,13 @@ namespace KrumbleHut.Drummi.Dungeons
             if (!_running || _secondsPerCrossing <= 0 || leftAnchor == null || rightAnchor == null)
                 return transform.position;
 
-            float phase = Mathf.PingPong((float)((virtualTime - _sweepOriginTime) / _secondsPerCrossing), 1f);
+            // Before the origin the sweep HOLDS at phase 0 (left anchor) — hosts may
+            // start the sweep with a future origin (dungeon lead-in), and PingPong of a
+            // negative phase would otherwise mirror into backwards motion.
+            double elapsed = virtualTime - _sweepOriginTime;
+            if (elapsed < 0) elapsed = 0;
+
+            float phase = Mathf.PingPong((float)(elapsed / _secondsPerCrossing), 1f);
             return Vector3.Lerp(leftAnchor.position, rightAnchor.position, phase);
         }
 

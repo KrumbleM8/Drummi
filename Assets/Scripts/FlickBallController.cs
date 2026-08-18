@@ -86,6 +86,17 @@ namespace KrumbleHut.Drummi.Dungeons
         }
 
         /// <summary>
+        /// Dormancy hook (dungeon host): renderer-level show/hide, never SetActive —
+        /// subscriptions and respawn polling stay alive (FlickTargetVisual convention).
+        /// While the encounter is gated off (FlickInputReader.EncounterActive false)
+        /// nothing re-enables the renderer, so a hidden ball stays hidden.
+        /// </summary>
+        public void SetVisible(bool visible)
+        {
+            if (_sr != null) _sr.enabled = visible;
+        }
+
+        /// <summary>
         /// Host cleanup hook: hard-resets the ball to Idle at home from ANY state —
         /// including mid-Held or mid-flight. Kills the tracked animation without
         /// completing it (no OnComplete side effects), restores scale/visibility.

@@ -53,6 +53,36 @@ public class RoomDefinition : ScriptableObject
              "Without Rest, every square is note-bearing. Only meaningful when RoomType == FlashCard.")]
     [SerializeField] private FlashCardVocab flashCardVocabulary = FlashCardVocab.None;
 
+    [Header("Flick Config")]
+    [Tooltip("Required release slots within the 8-beat bar (0-based; slot 0 = musical beat 1). " +
+             "Empty = use FlickBeatManager scene defaults ({0,2,4,6} — half-time). " +
+             "Only meaningful when RoomType == Flick.")]
+    [SerializeField] private float[] flickRequiredBeatSlots;
+
+    [Tooltip("Optional off-beat bonus slots within the 8-beat bar. " +
+             "Empty = use FlickBeatManager scene defaults ({1,3,5,7}). " +
+             "A single NEGATIVE value (e.g. {-1}) = explicitly NO off-beats — needed because the " +
+             "core treats an empty runtime array as 'disabled', so empty here must mean 'default'. " +
+             "Only meaningful when RoomType == Flick.")]
+    [SerializeField] private float[] flickOffBeatSlots;
+
+    [Tooltip("Beats per full sweep crossing (left→right). 0 = use FlickTargetSweep scene default (4). " +
+             "Only meaningful when RoomType == Flick.")]
+    [SerializeField, Min(0)] private float flickBeatsPerCrossing;
+
+    [Tooltip("Generous hitbox radius around the flick target, in world units. " +
+             "0 = use FlickTargetSweep scene default (1.2). Only meaningful when RoomType == Flick.")]
+    [SerializeField, Min(0)] private float flickHitboxRadiusWorld;
+
+    [Tooltip("Hit points per flick enemy. 0 = use FlickEnemy scene default (60). " +
+             "Only meaningful when RoomType == Flick.")]
+    [SerializeField, Min(0)] private int flickEnemyMaxHP;
+
+    [Tooltip("Flat attack strength (in damagePerMiss units) a SURVIVING flick enemy always lands " +
+             "at the seam, on top of per-fizzle scaling. -1 = use FlickBeatManager scene default (1). " +
+             "0 is meaningful: whiff-on-clean-bar. Only meaningful when RoomType == Flick.")]
+    [SerializeField, Min(-1)] private int flickSurvivorAttackUnits = -1;
+
     [Header("Input Layout")]
     [Tooltip("Pad rig shown during this room. ThreePad = standard combat (L/C/R buttons). SingleDrum = one wide drum (C&R encounters).")]
     [SerializeField] private InputLayoutType inputLayout = InputLayoutType.ThreePad;
@@ -122,6 +152,40 @@ public class RoomDefinition : ScriptableObject
     /// </summary>
     public FlashCardVocab FlashCardVocabulary => flashCardVocabulary;
 
+    /// <summary>
+    /// Authored required-beat slots for a Flick room, or null (empty sentinel) to use
+    /// FlickBeatManager scene defaults. Only meaningful when <see cref="RoomType"/> is
+    /// <see cref="RoomType.Flick"/>.
+    /// </summary>
+    public float[] FlickRequiredBeatSlots => (flickRequiredBeatSlots != null && flickRequiredBeatSlots.Length > 0)
+        ? flickRequiredBeatSlots
+        : null;
+
+    /// <summary>
+    /// Authored off-beat bonus slots for a Flick room, or null (empty sentinel) to use
+    /// FlickBeatManager scene defaults. A single negative value means "explicitly no
+    /// off-beats" — consumers map it to an empty runtime array. Only meaningful when
+    /// <see cref="RoomType"/> is <see cref="RoomType.Flick"/>.
+    /// </summary>
+    public float[] FlickOffBeatSlots => (flickOffBeatSlots != null && flickOffBeatSlots.Length > 0)
+        ? flickOffBeatSlots
+        : null;
+
+    /// <summary>Beats per sweep crossing for a Flick room. 0 = use FlickTargetSweep scene default.</summary>
+    public float FlickBeatsPerCrossing => flickBeatsPerCrossing;
+
+    /// <summary>Flick hitbox radius in world units. 0 = use FlickTargetSweep scene default.</summary>
+    public float FlickHitboxRadiusWorld => flickHitboxRadiusWorld;
+
+    /// <summary>Flick enemy hit points. 0 = use FlickEnemy scene default.</summary>
+    public int FlickEnemyMaxHP => flickEnemyMaxHP;
+
+    /// <summary>
+    /// Survivor seam-attack units for a Flick room. -1 = use FlickBeatManager scene
+    /// default; 0 is meaningful (whiff-on-clean-bar).
+    /// </summary>
+    public int FlickSurvivorAttackUnits => flickSurvivorAttackUnits;
+
     /// <summary>Track index this room overrides the floor BGM with, or -1 for no override.</summary>
     public int BgmTrackOverride => bgmTrackOverride;
 
@@ -170,6 +234,12 @@ public enum InputLayoutType
 
     /// <summary>Bongo-style two-pad rig (Left / Right only). Used for CombatTwoPad rooms.</summary>
     TwoPad,
+
+    /// <summary>
+    /// No pad rig at all — pads collapse and DrumPadTouch is disabled so the flick
+    /// gesture reader owns the whole screen. Used for Flick rooms.
+    /// </summary>
+    Flick,
 }
 
 /// <summary>Room archetype — determines the gameplay flow inside the room.</summary>
@@ -196,4 +266,11 @@ public enum RoomType
     /// Driven by FlashCardController; DungeonBeatManager is suppressed.
     /// </summary>
     FlashCard,
+
+    /// <summary>
+    /// Flick encounter: the shared flick core (FlickBeatManager + FlickEncounterDirector)
+    /// hosts a per-bar enemy the player flicks a ball at on required beats.
+    /// DungeonBeatManager is suppressed; room length comes from RoomLengthBars.
+    /// </summary>
+    Flick,
 }

@@ -22,6 +22,14 @@ namespace KrumbleHut.Drummi.Dungeons
     ///                OverrideCenterPad/RestoreCenterPad (C&R retags all input anyway).
     ///                SingleDrumPad itself stays purely visual — its BounceOnBeat scale
     ///                animation would make the touch area pulse; HitZone is a static sibling.
+    ///   Flick      — NO rig: every pad rig collapses and the DrumPadTouch COMPONENT is
+    ///                disabled so the flick gesture reader owns the whole screen. The
+    ///                component-disable matters beyond touch zones: DrumPadTouch's
+    ///                editor-only TouchSimulation kills the Mouse device (breaking
+    ///                FlickInputReader's in-editor mouse fallback) and its keyboard
+    ///                Update loop would bypass the collapsed pads entirely — OnDisable
+    ///                tears both down. Device touch is unaffected (FlickInputReader
+    ///                holds its own ref-counted EnhancedTouchSupport.Enable).
     ///
     /// INSPECTOR SETUP:
     ///   threePadRig       — CanvasGroup on OverlayCanvas/ThreePadRig
@@ -117,6 +125,11 @@ namespace KrumbleHut.Drummi.Dungeons
             {
                 drumPadTouch?.RestoreCenterPad();
             }
+            else if (_current == InputLayoutType.Flick)
+            {
+                // Restore pad touch (re-enables editor TouchSimulation + keyboard).
+                if (drumPadTouch != null) drumPadTouch.enabled = true;
+            }
 
             // Before the first switch (_current == null) the visible rig is the bongo
             // rig from Awake — animate it out like any other outgoing layout.
@@ -139,6 +152,13 @@ namespace KrumbleHut.Drummi.Dungeons
                 // via DungeonInputReader.SingleDrumEchoConstant.
                 drumPadTouch?.OverrideCenterPad(singleDrumPad);
             }
+            else if (target == InputLayoutType.Flick)
+            {
+                // Whole-screen flick gestures: kill pad touch entirely. OnDisable tears
+                // down the editor-only TouchSimulation (restoring Mouse.current for
+                // FlickInputReader) and stops the keyboard Update loop.
+                if (drumPadTouch != null) drumPadTouch.enabled = false;
+            }
 
             _outTween?.Kill();
             _inTween?.Kill();
@@ -146,7 +166,8 @@ namespace KrumbleHut.Drummi.Dungeons
             // Outgoing: squash Y to zero + fade out simultaneously. Skipped when the
             // outgoing rig IS the incoming rig (first switch into TwoPad: the bongo rig
             // is already showing) — the in-tween below owns the animation then.
-            if (outRig != inRig)
+            // outRig is null when leaving the rig-less Flick layout (nothing to hide).
+            if (outRig != null && outRig != inRig)
             {
                 _outTween = DOTween.Sequence()
                     .Append(outRig.DOFade(0f, transitionDuration).SetEase(Ease.InQuad))
@@ -155,13 +176,28 @@ namespace KrumbleHut.Drummi.Dungeons
             }
 
             // Incoming: start squashed/invisible, expand + fade in simultaneously.
-            Vector3 inScale = inRig.transform.localScale;
-            inRig.transform.localScale = new Vector3(inScale.x, 0f, inScale.z);
-            inRig.alpha = 0f;
-            _inTween = DOTween.Sequence()
-                .Append(inRig.DOFade(1f, transitionDuration).SetEase(Ease.OutQuad))
-                .Join(inRig.transform.DOScaleY(1f, transitionDuration).SetEase(Ease.OutBack))
-                .SetLink(gameObject);
+            // inRig is null when entering the rig-less Flick layout (nothing to show).
+            if (inRig != null)
+            {
+                Vector3 inScale = inRig.transform.localScale;
+                inRig.transform.localScale = new Vector3(inScale.x, 0f, inScale.z);
+                inRig.alpha = 0f;
+                _inTween = DOTween.Sequence()
+                    .Append(inRig.DOFade(1f, transitionDuration).SetEase(Ease.OutQuad))
+                    .Join(inRig.transform.DOScaleY(1f, transitionDuration).SetEase(Ease.OutBack))
+                    .SetLink(gameObject);
+            }
+        }
+
+        /// <summary>
+        /// Re-enables DrumPadTouch after a flick room ends through a path that never
+        /// calls SwitchLayout (player death → game-over routing). Without this the
+        /// component would stay disabled into the results/menu flow and the next run's
+        /// first room. Safe to call any time.
+        /// </summary>
+        public void RestorePadTouch()
+        {
+            if (drumPadTouch != null) drumPadTouch.enabled = true;
         }
 
         // ── Private ──────────────────────────────────────────────────────────────
@@ -171,6 +207,7 @@ namespace KrumbleHut.Drummi.Dungeons
             InputLayoutType.ThreePad   => threePadRig,
             InputLayoutType.SingleDrum => singleDrumRig,
             InputLayoutType.TwoPad     => bongoRig,
+            InputLayoutType.Flick      => null, // rig-less — flick gestures own the screen
             _                          => threePadRig,
         };
 

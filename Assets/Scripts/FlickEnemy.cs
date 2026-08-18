@@ -58,6 +58,7 @@ namespace KrumbleHut.Drummi.Dungeons
         public bool IsAlive { get; private set; }
 
         private int _currentHP;
+        private int _authoredMaxHP; // scene-serialized value, restorable by sentinel override
         private bool _spawnScheduled;
         private double _spawnAtVirtual;
         private Tween _visualAnim; // active death/retreat/pop-in — Sequences are not reachable via transform.DOKill
@@ -69,6 +70,7 @@ namespace KrumbleHut.Drummi.Dungeons
 
         private void Awake()
         {
+            _authoredMaxHP = maxHP;
             if (fillPivot != null) _fillBaseScale = fillPivot.localScale;
             if (visual != null)
             {
@@ -83,6 +85,32 @@ namespace KrumbleHut.Drummi.Dungeons
         }
 
         // ── Public API ────────────────────────────────────────────────────────
+
+        /// <summary>
+        /// Per-room tuning hook (dungeon host). Values &lt;= 0 restore the authored
+        /// scene default, so hosts call this unconditionally each room. Takes effect
+        /// on the next spawn/reset — current HP is untouched.
+        /// </summary>
+        public void ApplyRoomOverrides(int newMaxHP)
+        {
+            maxHP = newMaxHP > 0 ? newMaxHP : _authoredMaxHP;
+            Debug.Log($"[FlickEnemy] Room override — maxHP: {maxHP}");
+        }
+
+        /// <summary>
+        /// Dormancy hook (dungeon host): kills tweens, cancels any scheduled spawn,
+        /// restores the base pose, and hides visual + bar immediately. Renderer-level
+        /// only — the object stays active so subscriptions and polling survive
+        /// (project convention: never SetActive on the flick target).
+        /// </summary>
+        public void HideImmediate()
+        {
+            _spawnScheduled = false;
+            KillTweens();
+            RestoreBasePose();
+            IsAlive = false;
+            HideAll();
+        }
 
         /// <summary>Applies hit damage; fires OnDied once when HP depletes.</summary>
         public void TakeDamage(int amount)

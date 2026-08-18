@@ -101,6 +101,14 @@ public class DungeonModeController : ModeController
     /// </summary>
     public double EncounterStartVirtualTime { get; private set; }
 
+    /// <summary>
+    /// Effective BPM resolved for the most recently started room (room override,
+    /// else floor, else the running metronome). Set by StartRoom() before either
+    /// branch runs. Read by RoomController to initialize the flick rig's
+    /// FlickBeatManager on the same grid.
+    /// </summary>
+    public int CurrentRoomBpm { get; private set; }
+
     #region ModeController — Lifecycle
     public override int CalculateTotalBeats(int bpm)
     {
@@ -274,6 +282,7 @@ public class DungeonModeController : ModeController
         int effectiveBpm = def.HasBpmOverride
             ? def.BpmOverride
             : (floor != null && floor.Bpm > 0 ? floor.Bpm : currentBpm);
+        CurrentRoomBpm           = effectiveBpm;
         _pendingPatternDurations = def.PatternDurations;
         _pendingAllowedTypes     = def.RoomType == RoomType.CombatTwoPad
             ? new[] { DungeonEnemyType.Left, DungeonEnemyType.Right }
