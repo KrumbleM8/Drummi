@@ -10,9 +10,13 @@ namespace KrumbleHut.Drummi.Dungeons
     /// convention). DOTween cosmetic only; nothing graded reads from this.
     ///
     /// Reads:
-    ///   HitPop        — ball lock-on landed on the target.
-    ///   Attack LANDS  — red wind-up flash + downward lunge (bar had fizzles).
-    ///   Attack WHIFFS — desaturated flash + limp wobble (clean bar).
+    ///   HitPop       — ball lock-on landed on the target.
+    ///   Attack LANDS — red flash, color only (surviving enemies always attack; the
+    ///                  retreat despawn owns transform motion at the seam; grace
+    ///                  seams — enemy died mid-bar — play nothing).
+    ///   SetVisible   — FlickEnemy hides/shows the sprite across despawn/spawn
+    ///                  (renderer toggle, never SetActive — subscriptions + tween
+    ///                  links must stay alive).
     /// </summary>
     public class FlickTargetVisual : MonoBehaviour
     {
@@ -30,15 +34,14 @@ namespace KrumbleHut.Drummi.Dungeons
         [Tooltip("Color flashed when the enemy attack lands.")]
         [SerializeField] private Color attackColor = new Color(1f, 0.25f, 0.2f);
 
-        [Tooltip("Color flashed when the enemy attack whiffs.")]
-        [SerializeField] private Color whiffColor = new Color(0.6f, 0.6f, 0.6f);
-
         [Tooltip("Punch scale magnitude (fraction of base scale) for the required-beat pulse.")]
         [SerializeField] private float beatPulseScale = 0.15f;
 
         private Color _baseColor;
         private Vector3 _baseScale;
         private Vector3 _baseLocalPos;
+        private bool _hidden;
+        private bool _feedbackMuted;
 
         private void Awake()
         {
@@ -70,7 +73,7 @@ namespace KrumbleHut.Drummi.Dungeons
         // hit pop or attack telegraph is animating so it never fights those tweens.
         private void HandleRequiredBeatCue()
         {
-            if (DOTween.IsTweening(transform)) return;
+            if (_hidden || _feedbackMuted || DOTween.IsTweening(transform)) return;
             transform.DOPunchScale(_baseScale * beatPulseScale, 0.18f, vibrato: 1)
                      .SetLink(gameObject);
         }
@@ -90,11 +93,36 @@ namespace KrumbleHut.Drummi.Dungeons
                 spriteRenderer.DOKill();
                 spriteRenderer.color = _baseColor;
             }
+            _feedbackMuted = false;
+            SetVisible(true);
+        }
+
+        /// <summary>
+        /// FlickEnemy despawn/spawn hook: toggles the renderer (never SetActive — event
+        /// subscriptions and tween SetLinks must survive). Hidden also mutes the beat
+        /// pulse and hit pop.
+        /// </summary>
+        public void SetVisible(bool visible)
+        {
+            _hidden = !visible;
+            if (visible) _feedbackMuted = false; // fresh enemy — pops live again
+            if (spriteRenderer != null) spriteRenderer.enabled = visible;
+        }
+
+        /// <summary>
+        /// FlickEnemy despawn hook: mutes the hit pop and beat pulse while a death or
+        /// retreat tween owns this transform (a late-landing ball's HitPop would fight
+        /// it and snap the scale). Cleared by SetVisible(true) / ResetVisual.
+        /// </summary>
+        public void MuteFeedback()
+        {
+            _feedbackMuted = true;
         }
 
         /// <summary>Cosmetic pop when the ball's lock-on flight lands on the target.</summary>
         public void HitPop()
         {
+            if (_hidden || _feedbackMuted) return;
             transform.DOKill(complete: true);
             transform.DOPunchScale(_baseScale * hitPopScale, 0.2f, vibrato: 4)
                      .SetLink(gameObject);
@@ -107,35 +135,20 @@ namespace KrumbleHut.Drummi.Dungeons
             }
         }
 
-        private void HandleBarResolved(int fizzleCount)
+        private void HandleBarResolved(FlickBarResult result)
         {
-            transform.DOKill(complete: true);
-            if (spriteRenderer != null) spriteRenderer.DOKill();
+            // Grace seam = the enemy died mid-bar; nothing left to telegraph. Hidden =
+            // FlickEnemy already despawned this sprite.
+            if (result.Grace || _hidden) return;
 
-            if (fizzleCount > 0)
+            // Attack LANDS (survivors always attack): red flash. COLOR ONLY — the
+            // retreat despawn (FlickEnemy) owns this transform's motion at the seam,
+            // so the old scale/lunge sequence would fight it.
+            if (spriteRenderer != null)
             {
-                // Attack LANDS: red flash + sharp downward lunge.
-                if (spriteRenderer != null)
-                {
-                    spriteRenderer.color = attackColor;
-                    spriteRenderer.DOColor(_baseColor, 0.5f).SetLink(gameObject);
-                }
-                DOTween.Sequence()
-                       .Append(transform.DOScale(_baseScale * 1.35f, 0.1f).SetEase(Ease.OutQuad))
-                       .Append(transform.DOPunchPosition(Vector3.down * 0.6f, 0.3f, vibrato: 1))
-                       .Append(transform.DOScale(_baseScale, 0.15f))
-                       .SetLink(gameObject);
-            }
-            else
-            {
-                // Attack WHIFFS: desaturated flash + limp wobble.
-                if (spriteRenderer != null)
-                {
-                    spriteRenderer.color = whiffColor;
-                    spriteRenderer.DOColor(_baseColor, 0.4f).SetLink(gameObject);
-                }
-                transform.DOPunchRotation(new Vector3(0f, 0f, 20f), 0.4f, vibrato: 3)
-                         .SetLink(gameObject);
+                spriteRenderer.DOKill();
+                spriteRenderer.color = attackColor;
+                spriteRenderer.DOColor(_baseColor, 0.5f).SetLink(gameObject);
             }
         }
     }

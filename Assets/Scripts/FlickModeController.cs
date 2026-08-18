@@ -12,11 +12,16 @@ namespace KrumbleHut.Drummi.Flick
     ///
     /// Run rules:
     ///   - Endless bar cycle (half-time required beats) until DungeonHealth depletes.
-    ///   - Each bar's fizzles land as the enemy seam attack (FlickBeatManager); this
-    ///     controller never applies damage itself.
+    ///   - ONE ENEMY PER BAR (FlickEnemy): hits damage it — clean on-beat hits compound
+    ///     a per-enemy combo (baseDamage × comboMultiplier^ComboIndex); off-beat hits
+    ///     deal half base damage and break the combo. Kill it → grace period, no seam
+    ///     attack that bar. Survivors always attack (FlickBeatManager seam), retreat,
+    ///     and a fresh enemy spawns at the next bar. This controller never applies
+    ///     PLAYER damage itself.
     ///   - Score v1: consumed beats weighted by grade (Perfect/Good — dungeon
-    ///     constants 200/100 as serialized defaults). High score via PlayerPrefs,
-    ///     following the DungeonEvaluator pattern with a Flick-specific key.
+    ///     constants 200/100 as serialized defaults); off-beat bonus hits score at
+    ///     half value. High score via PlayerPrefs, following the DungeonEvaluator
+    ///     pattern with a Flick-specific key.
     ///
     /// Music: serialized AudioManager track index + BPM pair (stand-in until dedicated
     /// tracks exist). BGM loops from the shared DSP start; the accent tick is mixed
@@ -26,8 +31,8 @@ namespace KrumbleHut.Drummi.Flick
     /// AudioManager handle the BGM centrally); the accent is fire-and-forget PlayOneShot.
     ///
     /// INSPECTOR SETUP (Flick scene):
-    ///   metronome, beatManager, flickReader, targetSweep, ball, targetVisual, health —
-    ///   scene instances. scoreText — gameplay HUD. Play button → StartFromMenu().
+    ///   metronome, beatManager, flickReader, targetSweep, ball, targetVisual, health,
+    ///   flickEnemy — scene instances. scoreText — gameplay HUD. Play button → StartFromMenu().
     ///   Register in GameManager.modeControllers.
     /// </summary>
     public class FlickModeController : ModeController
@@ -41,6 +46,14 @@ namespace KrumbleHut.Drummi.Flick
         [SerializeField] private FlickBallController ball;
         [SerializeField] private FlickTargetVisual   targetVisual;
         [SerializeField] private DungeonHealth       health;
+        [SerializeField] private FlickEnemy          flickEnemy;
+
+        [Header("Enemy Damage")]
+        [Tooltip("Damage of an unboosted hit on the enemy.")]
+        [SerializeField] private int baseDamage = 10;
+
+        [Tooltip("Combo factor: clean on-beat hit N of a streak deals baseDamage * multiplier^(N-1).")]
+        [SerializeField] private float comboMultiplier = 1.5f;
 
         [Header("Music (stand-in until dedicated tracks)")]
         [Tooltip("Index into AudioManager.musicTracks.")]
@@ -150,6 +163,11 @@ namespace KrumbleHut.Drummi.Flick
             beatManager.OnReleaseResolved += HandleReleaseResolved;
             beatManager.OnBarResolved     += HandleBarResolved;
             health.OnHealthDepleted       += HandleHealthDepleted;
+            if (flickEnemy != null)
+            {
+                flickEnemy.ResetImmediate();
+                flickEnemy.OnDied += HandleEnemyDied;
+            }
 
             _runActive = true;
             beatManager.Arm(gradingStart);
@@ -191,25 +209,49 @@ namespace KrumbleHut.Drummi.Flick
         {
             if (!_runActive || !outcome.Consumed) return;
 
+            // Off-beat bonus slots score at half value.
             switch (outcome.Grade)
             {
                 case InputMatch.MatchQuality.Perfect:
-                    _score += perfectPoints;
+                    _score += outcome.IsOffBeat ? perfectPoints / 2 : perfectPoints;
                     _perfectHits++;
                     break;
                 case InputMatch.MatchQuality.Good:
-                    _score += goodPoints;
+                    _score += outcome.IsOffBeat ? goodPoints / 2 : goodPoints;
                     break;
                 default:
-                    return; // Consumed as fizzle — no points.
+                    return; // Consumed as fizzle — no points, no damage.
             }
             UpdateHud();
+
+            // Enemy damage: off-beat = half base + combo already broken (ComboIndex 0);
+            // clean on-beat = base compounded by the streak position.
+            if (flickEnemy != null)
+            {
+                int dmg = outcome.IsOffBeat
+                    ? Mathf.Max(1, baseDamage / 2)
+                    : Mathf.RoundToInt(baseDamage * Mathf.Pow(comboMultiplier, outcome.ComboIndex));
+                flickEnemy.TakeDamage(dmg);
+            }
         }
 
-        private void HandleBarResolved(int fizzleCount)
+        private void HandleBarResolved(FlickBarResult result)
         {
             if (!_runActive) return;
             _barsSurvived++;
+
+            if (flickEnemy == null) return;
+            if (!result.Grace) flickEnemy.PlayRetreatDespawn(); // death path already despawned
+            flickEnemy.ResetForSpawn(result.NextBarStartVirtual);
+        }
+
+        // Enemy HP depleted mid-bar: the rest of the bar is a grace period (no grading,
+        // no seam attack); the replacement spawns via HandleBarResolved's grace seam.
+        private void HandleEnemyDied()
+        {
+            if (!_runActive) return;
+            beatManager.NotifyEnemyDefeated();
+            flickEnemy.PlayDeathDespawn();
         }
 
         private void HandleHealthDepleted()
@@ -236,6 +278,11 @@ namespace KrumbleHut.Drummi.Flick
                 beatManager.AimCheck = null;
             }
             if (health != null) health.OnHealthDepleted -= HandleHealthDepleted;
+            if (flickEnemy != null)
+            {
+                flickEnemy.OnDied -= HandleEnemyDied;
+                flickEnemy.ResetImmediate();
+            }
             if (targetSweep != null) targetSweep.StopSweep();
             if (flickReader != null) flickReader.CancelActiveTracking();
             if (ball != null) ball.ResetToHome();
