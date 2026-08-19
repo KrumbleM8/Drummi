@@ -1,5 +1,4 @@
 using DG.Tweening;
-using System;
 using UnityEngine;
 
 namespace KrumbleHut.Drummi.Dungeons
@@ -8,8 +7,9 @@ namespace KrumbleHut.Drummi.Dungeons
     /// Persistent flick ball. State machine:
     ///   Idle (at home) → Held (press summons the ball to the finger; follows the
     ///   pointer until release) → Resolving (on release outcome: aim-driven flight or
-    ///   fizzle drop) → AwaitingRespawn → Idle (reappears at home ON THE NEXT BEAT,
-    ///   polled from GameClock virtual time — never tween timing).
+    ///   fizzle drop) → AwaitingRespawn → Idle (reappears at home after a SHORT FIXED
+    ///   delay — deliberately not beat-synced, players wind up the next throw well
+    ///   before the next beat — polled from GameClock virtual time, never tween timing).
     ///
     /// A new press ALWAYS summons the ball — any in-flight animation is completed
     /// instantly (its OnComplete still fires) so the ball can never be invisible while
@@ -34,9 +34,6 @@ namespace KrumbleHut.Drummi.Dungeons
 
         [Tooltip("Target visual to pop when a lock-on flight lands.")]
         [SerializeField] private FlickTargetVisual targetVisual;
-
-        [Tooltip("Metronome — its beat grid schedules the respawn moment.")]
-        [SerializeField] private Metronome metronome;
 
         [Tooltip("World-space home position anchor.")]
         [SerializeField] private Transform homeAnchor;
@@ -67,6 +64,11 @@ namespace KrumbleHut.Drummi.Dungeons
 
         [Tooltip("Seconds for the fall.")]
         [SerializeField] private float fizzleFallTime = 0.35f;
+
+        [Header("Respawn")]
+        [Tooltip("Seconds (virtual time) between the ball despawning and reappearing at home. " +
+                 "Kept short so the ball is back before the player winds up the next throw.")]
+        [SerializeField] private float respawnDelaySeconds = 0.15f;
 
         private enum State { Idle, Held, Resolving, AwaitingRespawn }
 
@@ -148,7 +150,7 @@ namespace KrumbleHut.Drummi.Dungeons
 
             if (_state != State.AwaitingRespawn) return;
 
-            // Respawn ON the next beat — polled from virtual time, not tween timing.
+            // Respawn after the short delay — polled from virtual time, not tween timing.
             if (GameClock.Instance.GameTime >= _respawnAtVirtual)
             {
                 transform.position = homeAnchor != null ? homeAnchor.position : transform.position;
@@ -159,7 +161,7 @@ namespace KrumbleHut.Drummi.Dungeons
                 // Cosmetic spawn pop.
                 _anim = transform.DOPunchScale(_baseScale * 0.25f, 0.15f, vibrato: 1)
                                  .SetLink(gameObject);
-                Debug.Log($"[FlickBall] Respawned at beat vt={_respawnAtVirtual:F4}");
+                Debug.Log($"[FlickBall] Respawned at vt={_respawnAtVirtual:F4}");
             }
         }
 
@@ -267,20 +269,11 @@ namespace KrumbleHut.Drummi.Dungeons
 
         private void ScheduleRespawn()
         {
-            if (GameClock.Instance == null || metronome == null || metronome.bpm <= 0)
-            {
-                _respawnAtVirtual = 0;
-                _state = State.AwaitingRespawn;
-                return;
-            }
-
-            double now = GameClock.Instance.GameTime;
-            double interval = 60.0 / metronome.bpm;
-            double gridOriginVirtual = GameClock.Instance.RealDspToVirtual(metronome.startTick);
-            double beatsElapsed = (now - gridOriginVirtual) / interval;
-            _respawnAtVirtual = gridOriginVirtual + Math.Ceiling(beatsElapsed + 1e-6) * interval;
+            _respawnAtVirtual = GameClock.Instance != null
+                ? GameClock.Instance.GameTime + respawnDelaySeconds
+                : 0;
             _state = State.AwaitingRespawn;
-            Debug.Log($"[FlickBall] Respawn scheduled for vt={_respawnAtVirtual:F4} (now={now:F4})");
+            Debug.Log($"[FlickBall] Respawn scheduled for vt={_respawnAtVirtual:F4}");
         }
     }
 }
