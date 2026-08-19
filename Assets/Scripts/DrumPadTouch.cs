@@ -133,7 +133,7 @@ public class DrumPadTouch : MonoBehaviour
         if (kb == null) return;
 
         if (kb[leftKey].wasPressedThisFrame)                        FireHit(false);
-        if (CenterPadEnabled && kb[centerKey].wasPressedThisFrame) OnCenterHit?.Invoke();
+        if (CenterPadEnabled && centerPad != null && kb[centerKey].wasPressedThisFrame) OnCenterHit?.Invoke();
         if (kb[rightKey].wasPressedThisFrame)                       FireHit(true);
     }
 

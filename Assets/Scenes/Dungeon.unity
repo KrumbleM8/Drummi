@@ -1479,18 +1479,18 @@ MonoBehaviour:
   - pageName: Main
     pageTransform: {fileID: 1943619380}
     onScreenPosition: {x: 0, y: 0}
-    offScreenLeftPosition: {x: -1136, y: 0}
-    offScreenRightPosition: {x: 1136, y: 0}
+    offScreenLeftPosition: {x: -41680, y: 0}
+    offScreenRightPosition: {x: 41680, y: 0}
   - pageName: Customize
     pageTransform: {fileID: 1312737091}
     onScreenPosition: {x: 0, y: 0}
-    offScreenLeftPosition: {x: -1136, y: 0}
-    offScreenRightPosition: {x: 1136, y: 0}
+    offScreenLeftPosition: {x: -41680, y: 0}
+    offScreenRightPosition: {x: 41680, y: 0}
   - pageName: Score
     pageTransform: {fileID: 1848881446}
     onScreenPosition: {x: 0, y: 0}
-    offScreenLeftPosition: {x: -1136, y: 0}
-    offScreenRightPosition: {x: 1136, y: 0}
+    offScreenLeftPosition: {x: -41680, y: 0}
+    offScreenRightPosition: {x: 41680, y: 0}
   startingPageName: Main
   transitionDuration: 0.5
   transitionCurve:
@@ -13694,6 +13694,7 @@ MonoBehaviour:
   - {fileID: 11400000, guid: 879138b4b8ae51d458b53dd7042a5254, type: 2}
   - {fileID: 11400000, guid: 34c46a7da56b75742bce386f68fd03e4, type: 2}
   - {fileID: 11400000, guid: 1474bf15f832f0743a2b190384bbb778, type: 2}
+  - {fileID: 11400000, guid: 1bf8aeaee15ae1841a192ae1703ad4a5, type: 2}
   floorTransition: {fileID: 2008353642}
   floorMusicFadeSeconds: 1.5
   effectsController: {fileID: 2008353640}

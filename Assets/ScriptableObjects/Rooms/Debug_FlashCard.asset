@@ -11,14 +11,18 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: ea5ec1b63ae23264888354a3f6a9a036, type: 3}
   m_Name: Debug_FlashCard
-  m_EditorClassIdentifier:
+  m_EditorClassIdentifier: 
   roomName: Flash Card Debug
   tier: 0
-  patternDurations: []
+  patternDurations:
+  - 1
+  - 0
   backgroundSprite: {fileID: 0}
-  artOverrideKey:
+  artOverrideKey: 
   roomType: 4
-  callResponsePhraseLengths:
+  callResponsePhraseLengths: 
+  flashCardNoteRange: {x: 0, y: 0}
+  flashCardVocabulary: -1
   inputLayout: 1
   bgmTrackOverride: -1
   bpmOverride: -1

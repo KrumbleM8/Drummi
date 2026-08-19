@@ -19,5 +19,6 @@ MonoBehaviour:
   bpm: 105
   backgroundSprite: {fileID: 21300000, guid: acf087d741353c04fa3a41cf8d11689c, type: 3}
   rooms:
-  - {fileID: 11400000, guid: 481bf43098bb806498a9e77a26e052a1, type: 2}
-  - {fileID: 11400000, guid: 481bf43098bb806498a9e77a26e052a1, type: 2}
+  - {fileID: 11400000, guid: f43bfcc1e67b93748808781853b69d32, type: 2}
+  - {fileID: 11400000, guid: 3905935369c11e44ca14e48c4ee38604, type: 2}
+  - {fileID: 11400000, guid: a93203b2b43050e4aae958dc430e519c, type: 2}

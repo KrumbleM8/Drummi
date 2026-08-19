@@ -14,11 +14,14 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   floorName: Floor 1
   floorIndex: 0
+  isTutorialFloor: 0
   bgmTrackIndex: 1
   bpm: 105
   backgroundSprite: {fileID: 21300000, guid: acf087d741353c04fa3a41cf8d11689c, type: 3}
   rooms:
-  - {fileID: 11400000, guid: 1e498fc390733164eafae723010ff677, type: 2}
+  - {fileID: 11400000, guid: 9329f4c7445b3c34a8cde7227ecc8013, type: 2}
+  - {fileID: 11400000, guid: 9329f4c7445b3c34a8cde7227ecc8013, type: 2}
+  - {fileID: 11400000, guid: 7d6b9e91304ca129012ad5426d79c57e, type: 2}
   - {fileID: 11400000, guid: 5f8bc063818f3594fb28f60a497d1675, type: 2}
   - {fileID: 11400000, guid: 5ea77e9fc5953ba4198537a941df212e, type: 2}
   - {fileID: 11400000, guid: 5f8bc063818f3594fb28f60a497d1675, type: 2}
