@@ -34,7 +34,9 @@ namespace KrumbleHut.Drummi.FlashCards
     ///   strikePips (3 Images), streakText — HUD. bestStreakText,
     ///   cardsClearedText — texts on the Score page (written at run end,
     ///   before GameManager shows results; DisplayScore does not touch them).
-    ///   Play button → StartFromMenu(). Register in GameManager.modeControllers.
+    ///   Play button → StartFromMenu(). Double Time button → StartFromMenuDoubleTime().
+    ///   Again button (results) → RestartFromResults() so retries keep the variant.
+    ///   Register in GameManager.modeControllers.
     /// </summary>
     public class FlashCardsModeController : ModeController
     {
@@ -69,6 +71,9 @@ namespace KrumbleHut.Drummi.FlashCards
         [Tooltip("Bars (8 beats) of music before the first reveal bar — same idea as the dungeon lead-in.")]
         [SerializeField, Min(0)] private int leadInBars = 1;
 
+        [Tooltip("Beat-grid multiplier for Double Time. The BGM plays unchanged; only the metronome/card grid speeds up. Keep musicBpm * multiplier a whole number (GameManager plumbs bpm as int).")]
+        [SerializeField, Min(1f)] private float doubleTimeMultiplier = 2f;
+
         [Header("Run Rules")]
         [Tooltip("Failed cards allowed before the run ends.")]
         [SerializeField, Min(1)] private int maxStrikes = 3;
@@ -100,6 +105,11 @@ namespace KrumbleHut.Drummi.FlashCards
         // any plausible run (~100k beats ≈ 16 h at 105 BPM).
         private const int EndlessTotalBeats = 100_000;
 
+        // Active beat-grid multiplier for the current/last run (1 = normal,
+        // doubleTimeMultiplier = Double Time). Set by BeginRun; read by
+        // RestartFromResults so a retry preserves the chosen variant.
+        private float _activeTempoMultiplier = 1f;
+
         private bool _runActive;
         private int  _cardsCleared;
         private int  _strikes;
@@ -117,14 +127,27 @@ namespace KrumbleHut.Drummi.FlashCards
         #endregion
 
         #region Menu Entry
+        /// <summary>Play-button entry point: normal speed (1x grid).</summary>
+        public void StartFromMenu() => BeginRun(1f);
+
+        /// <summary>Double Time button entry point: 2x beat grid over the same music.</summary>
+        public void StartFromMenuDoubleTime() => BeginRun(doubleTimeMultiplier);
+
+        /// <summary>Again-button entry point: restarts at whatever speed the last run used.</summary>
+        public void RestartFromResults() => BeginRun(_activeTempoMultiplier);
+
         /// <summary>
-        /// Play-button entry point: applies the mode's music selection (track +
-        /// BPM) BEFORE StartGame so GameManager reads the right metronome.bpm —
-        /// the same set-music-then-start contract Bongo's carousel follows.
+        /// Applies the mode's music selection (track + BPM, scaled by the beat-grid
+        /// multiplier) BEFORE StartGame so GameManager reads the right metronome.bpm —
+        /// the same set-music-then-start contract Bongo's carousel follows. The BGM
+        /// track itself is untouched; an integer multiplier keeps the faster grid
+        /// aligned with the music (e.g. 210 vs 105).
         /// </summary>
-        public void StartFromMenu()
+        private void BeginRun(float tempoMultiplier)
         {
-            if (metronome != null) metronome.bpm = musicBpm;
+            _activeTempoMultiplier = tempoMultiplier;
+            if (metronome != null) metronome.bpm = musicBpm * tempoMultiplier;
+            if (evaluator != null) evaluator.SetHighScoreKey(tempoMultiplier > 1f ? "FlashCardsDoubleHS" : "FlashCardsHS");
             if (AudioManager.instance != null) AudioManager.instance.selectedSongIndex = musicTrackIndex;
             GameManager.instance.StartGame();
         }
@@ -165,8 +188,12 @@ namespace KrumbleHut.Drummi.FlashCards
             // whole-bar lead-in keeps the start on the grid (snap is a no-op).
             var step = ResolveStep(0);
             _appliedStep = StepIndexFor(0);
+            // Scale lead-in bars by the tempo multiplier so the real-time lead-in
+            // matches 1x and the first reveal still lands on a real BGM bar
+            // boundary (2 doubled bars = 1 real bar). Integer multipliers only.
+            int effectiveLeadInBars = leadInBars * Mathf.Max(1, Mathf.RoundToInt(_activeTempoMultiplier));
             double barDuration = GameConstants.BEATS_PER_LOOP * (60.0 / bpm);
-            double start       = virtualStartTime + leadInBars * barDuration;
+            double start       = virtualStartTime + effectiveLeadInBars * barDuration;
             cardController.StartEndless(start, virtualStartTime, step.vocab, step.noteRange);
         }
 

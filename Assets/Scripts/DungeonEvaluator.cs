@@ -304,6 +304,14 @@ public class DungeonEvaluator : MonoBehaviour
     #endregion
 
     #region Score Management
+    /// <summary>
+    /// Overrides the serialized PlayerPrefs high-score key. Used by mode variants
+    /// that share one evaluator but keep separate boards (e.g. Flash Cards normal
+    /// vs Double Time). Call BEFORE ResetScore so IsNewHighScore compares against
+    /// the right board.
+    /// </summary>
+    public void SetHighScoreKey(string key) => highScoreKey = key;
+
     public void SaveHighScore()
     {
         int saved = PlayerPrefs.GetInt(highScoreKey, 0);
