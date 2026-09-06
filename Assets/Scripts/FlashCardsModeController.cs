@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -35,6 +36,8 @@ namespace KrumbleHut.Drummi.FlashCards
     ///   cardsClearedText — texts on the Score page (written at run end,
     ///   before GameManager shows results; DisplayScore does not touch them).
     ///   Play button → StartFromMenu(). Double Time button → StartFromMenuDoubleTime().
+    ///   (Both are legacy paths — arrivals from the FlashCardsMenu signpost scene
+    ///   auto-start via PendingDefinition and never see the in-scene menu.)
     ///   Again button (results) → RestartFromResults() so retries keep the variant.
     ///   Register in GameManager.modeControllers.
     /// </summary>
@@ -110,6 +113,18 @@ namespace KrumbleHut.Drummi.FlashCards
         // RestartFromResults so a retry preserves the chosen variant.
         private float _activeTempoMultiplier = 1f;
 
+        // High-score key of the current/last run — kept alongside the multiplier
+        // so RestartFromResults preserves the full variant identity.
+        private string _activeHighScoreKey = "FlashCardsHS";
+
+        /// <summary>
+        /// Variant handoff from the FlashCardsMenu signpost scene. Set before
+        /// loading the FlashCards scene; consumed (and cleared) by Start(),
+        /// which auto-starts the run — bypassing the in-scene Play buttons.
+        /// Safe as a static: it references an asset, not scene state.
+        /// </summary>
+        public static FlashCardsModeDefinition PendingDefinition;
+
         private bool _runActive;
         private int  _cardsCleared;
         private int  _strikes;
@@ -127,14 +142,56 @@ namespace KrumbleHut.Drummi.FlashCards
         #endregion
 
         #region Menu Entry
+        private void Awake()
+        {
+            // Arrivals from the signpost menu must keep the screen covered.
+            // The scene transition auto-reveals on Start; our auto-start fires a
+            // frame later, and StartGameSequence's StartCover() is a no-op while
+            // a reveal is mid-flight — IsScreenCovered then never becomes true
+            // and the sequence stalls forever. Cancelling the auto-reveal here
+            // (Awake runs before any Start) keeps the cover in place, so the
+            // cover-wait passes immediately and the sequence reveals straight
+            // into gameplay with no menu flash.
+            if (PendingDefinition == null) return;
+
+            foreach (var st in FindObjectsByType<ScreenTransition>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+                if (st.gameObject.scene == gameObject.scene)
+                    st.autoRevealOnStart = false;
+        }
+
+        private void Start()
+        {
+            if (PendingDefinition != null)
+                StartCoroutine(AutoStartFromPendingDefinition());
+        }
+
+        /// <summary>
+        /// Auto-start path for arrivals from the FlashCardsMenu scene. Waits one
+        /// frame so GameManager.Start() has run (registry built, defaultModeId
+        /// applied), then starts the run with the pending definition's config.
+        /// </summary>
+        private IEnumerator AutoStartFromPendingDefinition()
+        {
+            yield return null;
+
+            FlashCardsModeDefinition def = PendingDefinition;
+            PendingDefinition = null;
+            if (def == null) yield break;
+
+            // Defensive — the scene's GameManager should already default to this
+            // mode, but SetMode is idempotent and cheap.
+            GameManager.instance.SetMode(ModeId);
+            BeginRun(def.tempoMultiplier, def.highScoreKey);
+        }
+
         /// <summary>Play-button entry point: normal speed (1x grid).</summary>
-        public void StartFromMenu() => BeginRun(1f);
+        public void StartFromMenu() => BeginRun(1f, "FlashCardsHS");
 
         /// <summary>Double Time button entry point: 2x beat grid over the same music.</summary>
-        public void StartFromMenuDoubleTime() => BeginRun(doubleTimeMultiplier);
+        public void StartFromMenuDoubleTime() => BeginRun(doubleTimeMultiplier, "FlashCardsDoubleHS");
 
         /// <summary>Again-button entry point: restarts at whatever speed the last run used.</summary>
-        public void RestartFromResults() => BeginRun(_activeTempoMultiplier);
+        public void RestartFromResults() => BeginRun(_activeTempoMultiplier, _activeHighScoreKey);
 
         /// <summary>
         /// Applies the mode's music selection (track + BPM, scaled by the beat-grid
@@ -143,11 +200,12 @@ namespace KrumbleHut.Drummi.FlashCards
         /// track itself is untouched; an integer multiplier keeps the faster grid
         /// aligned with the music (e.g. 210 vs 105).
         /// </summary>
-        private void BeginRun(float tempoMultiplier)
+        private void BeginRun(float tempoMultiplier, string highScoreKey)
         {
             _activeTempoMultiplier = tempoMultiplier;
+            _activeHighScoreKey    = highScoreKey;
             if (metronome != null) metronome.bpm = musicBpm * tempoMultiplier;
-            if (evaluator != null) evaluator.SetHighScoreKey(tempoMultiplier > 1f ? "FlashCardsDoubleHS" : "FlashCardsHS");
+            if (evaluator != null) evaluator.SetHighScoreKey(highScoreKey);
             if (AudioManager.instance != null) AudioManager.instance.selectedSongIndex = musicTrackIndex;
             GameManager.instance.StartGame();
         }
