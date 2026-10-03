@@ -9,6 +9,9 @@ EditorBuildSettings:
     path: Assets/Scenes/Bootstrap.unity
     guid: f26b264ab665dbc48968be091b7d6ac0
   - enabled: 1
+    path: Assets/Scenes/FlashCardsMenu.unity
+    guid: 06f5e469da511634896ff13ca3ec47cc
+  - enabled: 1
     path: Assets/Scenes/New_Home.unity
     guid: f8b45c592748d6141b091baf611400a8
   - enabled: 1
@@ -24,14 +27,8 @@ EditorBuildSettings:
     path: Assets/Scenes/Garden.unity
     guid: 49186dd5cab02004886db46150d06dcc
   - enabled: 1
-    path: Assets/Scenes/FlashCards.unity
-    guid: 943e1e362f895a94ab55155fbb81042f
-  - enabled: 1
     path: Assets/Scenes/Flick.unity
     guid: 56d42053a74fae54183dc07a9512f92f
-  - enabled: 1
-    path: Assets/Scenes/FlashCardsMenu.unity
-    guid: 06f5e469da511634896ff13ca3ec47cc
   m_configObjects:
     com.unity.input.settings: {fileID: 11400000, guid: df05089c8fa96714abe6ebf496a8e995, type: 2}
     com.unity.input.settings.actions: {fileID: -944628639613478452, guid: 2bcd2660ca9b64942af0de543d8d7100, type: 3}

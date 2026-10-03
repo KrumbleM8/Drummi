@@ -9,20 +9,25 @@ using KrumbleHut.Drummi.UI;
 namespace KrumbleHut.Drummi.FlashCards
 {
     /// <summary>
-    /// Signpost menu for the FlashCardsMenu scene. The camera snaps between the
-    /// authored anchors of an ordered list of MenuSignNodes via chevron buttons;
-    /// tapping the focused sign launches the Flash Cards mode with that sign's
-    /// definition (handed off through FlashCardsModeController.PendingDefinition).
+    /// Signpost menu for the FlashCardsMenu scene — the game's main scene, which
+    /// also contains the Flash Cards gameplay systems. The camera snaps between
+    /// the authored anchors of an ordered list of MenuSignNodes via chevron
+    /// buttons; tapping the focused sign hides the menu objects, shows the
+    /// gameplay objects, and starts the run in-scene via
+    /// FlashCardsModeController.StartRun (no scene load).
     ///
     /// All camera motion is DOTween (no Time.time animation). Tweens are
     /// interruptible: a chevron tap mid-tween DOKills the camera and retargets.
     ///
     /// INSPECTOR SETUP (FlashCardsMenu scene):
-    ///   nodes — sign nodes in path order. menuCamera — the scene camera.
+    ///   nodes — sign nodes in path order. menuCamera — the menu camera.
     ///   nextButton / prevButton — overlay chevrons (wired to Next()/Prev()).
     ///   backButton — overlay back-to-home (wired to BackToHome()).
-    ///   screenTransitioner — optional scene-local cover; falls back to a direct
-    ///   scene load when absent (e.g. entering the scene directly in the editor).
+    ///   screenTransitioner — the shared OverlayUtilCanvas TransitionScreen (the
+    ///   SAME ScreenTransition GameManager reveals after StartGame — a separate
+    ///   menu panel would stay covered forever).
+    ///   modeController — the scene's FlashCardsModeController.
+    ///   menuObjects / gameplayObjects — roots toggled by the menu↔gameplay swap.
     /// </summary>
     public class FlashCardsMenuController : MonoBehaviour
     {
@@ -42,7 +47,19 @@ namespace KrumbleHut.Drummi.FlashCards
         [Header("Transitions (optional)")]
         [SerializeField] private ScreenTransition screenTransitioner;
 
+        [Header("Gameplay (same scene)")]
+        [SerializeField] private FlashCardsModeController modeController;
+
+        [Tooltip("Active only while the signpost menu shows: menu camera, landscape, signs, chevron canvas.")]
+        [SerializeField] private List<GameObject> menuObjects = new();
+
+        [Tooltip("Active only during a run: FlashCardsCanvas, FlashCardSystems, GameplayCamera.")]
+        [SerializeField] private List<GameObject> gameplayObjects = new();
+
         private int  _index;
+
+        // Latched while leaving the menu (gameplay running or scene transition
+        // out) — blocks Step/select; cleared by ReturnToMenuRoutine.
         private bool _leaving;
 
         private void Start()
@@ -118,8 +135,54 @@ namespace KrumbleHut.Drummi.FlashCards
             if (_leaving || node.Definition == null) return;
             _leaving = true;
 
-            FlashCardsModeController.PendingDefinition = node.Definition;
-            StartCoroutine(TransitionToScene("FlashCards"));
+            StartCoroutine(LaunchRun(node.Definition));
+        }
+
+        /// <summary>
+        /// In-scene launch: cover the screen, swap menu→gameplay objects, start
+        /// the run. GameManager's StartGameSequence sees the screen already
+        /// covered (StartCover is a no-op then) and reveals into gameplay.
+        /// </summary>
+        private IEnumerator LaunchRun(FlashCardsModeDefinition definition)
+        {
+            if (screenTransitioner != null)
+            {
+                screenTransitioner.StartCover();
+                while (!screenTransitioner.IsScreenCovered) yield return null;
+            }
+
+            SetMenuShown(false);
+            modeController.StartRun(definition);
+        }
+
+        /// <summary>
+        /// Results-page "Menu" button (after GameManager.ResetGameValues): cover,
+        /// swap gameplay→menu objects, restore the focused sign, reveal.
+        /// </summary>
+        public void ReturnToMenuFromResults() => StartCoroutine(ReturnToMenuRoutine());
+
+        private IEnumerator ReturnToMenuRoutine()
+        {
+            if (screenTransitioner != null)
+            {
+                screenTransitioner.StartCover();
+                while (!screenTransitioner.IsScreenCovered) yield return null;
+            }
+
+            SetMenuShown(true);
+            SnapToCurrent();
+            UpdateChrome();
+            _leaving = false;
+
+            if (screenTransitioner != null) screenTransitioner.StartReveal();
+        }
+
+        private void SetMenuShown(bool menuShown)
+        {
+            foreach (GameObject go in menuObjects)
+                if (go != null) go.SetActive(menuShown);
+            foreach (GameObject go in gameplayObjects)
+                if (go != null) go.SetActive(!menuShown);
         }
 
         /// <summary>Back button: return to the home menu, skipping its intro.</summary>

@@ -1,5 +1,4 @@
 using System;
-using System.Collections;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -30,14 +29,14 @@ namespace KrumbleHut.Drummi.FlashCards
     /// have no rescheduling obligations (PauseHandler + AudioManager handle
     /// the BGM centrally).
     ///
-    /// INSPECTOR SETUP (FlashCards scene):
+    /// INSPECTOR SETUP (FlashCardsMenu scene):
     ///   metronome, cardController, evaluator — scene instances.
     ///   strikePips (3 Images), streakText — HUD. bestStreakText,
     ///   cardsClearedText — texts on the Score page (written at run end,
     ///   before GameManager shows results; DisplayScore does not touch them).
     ///   Play button → StartFromMenu(). Double Time button → StartFromMenuDoubleTime().
-    ///   (Both are legacy paths — arrivals from the FlashCardsMenu signpost scene
-    ///   auto-start via PendingDefinition and never see the in-scene menu.)
+    ///   (Both are legacy paths — the signpost menu in this scene starts runs
+    ///   via StartRun(definition) and never shows the in-scene menu page.)
     ///   Again button (results) → RestartFromResults() so retries keep the variant.
     ///   Register in GameManager.modeControllers.
     /// </summary>
@@ -101,6 +100,9 @@ namespace KrumbleHut.Drummi.FlashCards
         [Header("Results (texts on the Score page)")]
         [SerializeField] private TMP_Text bestStreakText;
         [SerializeField] private TMP_Text cardsClearedText;
+
+        [Tooltip("The Score page root. Hidden at run start — UIMenuManager never deactivates it, so without this it lingers behind GameplayUI on restarts.")]
+        [SerializeField] private GameObject scorePage;
         #endregion
 
         #region State
@@ -116,14 +118,6 @@ namespace KrumbleHut.Drummi.FlashCards
         // High-score key of the current/last run — kept alongside the multiplier
         // so RestartFromResults preserves the full variant identity.
         private string _activeHighScoreKey = "FlashCardsHS";
-
-        /// <summary>
-        /// Variant handoff from the FlashCardsMenu signpost scene. Set before
-        /// loading the FlashCards scene; consumed (and cleared) by Start(),
-        /// which auto-starts the run — bypassing the in-scene Play buttons.
-        /// Safe as a static: it references an asset, not scene state.
-        /// </summary>
-        public static FlashCardsModeDefinition PendingDefinition;
 
         private bool _runActive;
         private int  _cardsCleared;
@@ -142,46 +136,23 @@ namespace KrumbleHut.Drummi.FlashCards
         #endregion
 
         #region Menu Entry
-        private void Awake()
-        {
-            // Arrivals from the signpost menu must keep the screen covered.
-            // The scene transition auto-reveals on Start; our auto-start fires a
-            // frame later, and StartGameSequence's StartCover() is a no-op while
-            // a reveal is mid-flight — IsScreenCovered then never becomes true
-            // and the sequence stalls forever. Cancelling the auto-reveal here
-            // (Awake runs before any Start) keeps the cover in place, so the
-            // cover-wait passes immediately and the sequence reveals straight
-            // into gameplay with no menu flash.
-            if (PendingDefinition == null) return;
-
-            foreach (var st in FindObjectsByType<ScreenTransition>(FindObjectsInactive.Include, FindObjectsSortMode.None))
-                if (st.gameObject.scene == gameObject.scene)
-                    st.autoRevealOnStart = false;
-        }
-
-        private void Start()
-        {
-            if (PendingDefinition != null)
-                StartCoroutine(AutoStartFromPendingDefinition());
-        }
-
         /// <summary>
-        /// Auto-start path for arrivals from the FlashCardsMenu scene. Waits one
-        /// frame so GameManager.Start() has run (registry built, defaultModeId
-        /// applied), then starts the run with the pending definition's config.
+        /// Signpost-menu entry point: starts a run with the given variant.
+        /// Called by FlashCardsMenuController after the menu objects are hidden
+        /// and the screen is covered (same scene — no load, no static handoff).
         /// </summary>
-        private IEnumerator AutoStartFromPendingDefinition()
+        public void StartRun(FlashCardsModeDefinition definition)
         {
-            yield return null;
-
-            FlashCardsModeDefinition def = PendingDefinition;
-            PendingDefinition = null;
-            if (def == null) yield break;
+            if (definition == null)
+            {
+                Debug.LogError("[FlashCardsMode] StartRun called with a null definition.");
+                return;
+            }
 
             // Defensive — the scene's GameManager should already default to this
             // mode, but SetMode is idempotent and cheap.
             GameManager.instance.SetMode(ModeId);
-            BeginRun(def.tempoMultiplier, def.highScoreKey);
+            BeginRun(definition.tempoMultiplier, definition.highScoreKey);
         }
 
         /// <summary>Play-button entry point: normal speed (1x grid).</summary>
@@ -223,6 +194,10 @@ namespace KrumbleHut.Drummi.FlashCards
                 Debug.LogError("[FlashCardsMode] cardController or evaluator not assigned — cannot start.");
                 return;
             }
+
+            // Hide the previous run's results page (happens behind the cover).
+            // GameManager's ShowPageImmediate reactivates it at the next run end.
+            if (scorePage != null) scorePage.SetActive(false);
 
             evaluator.ResetScore();
             _runActive    = true;
