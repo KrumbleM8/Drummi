@@ -79,6 +79,17 @@ namespace KrumbleHut.Drummi.Dungeons
             || t == SquareTemplate.SixteenthQuad
             || t == SquareTemplate.Triplet;
 
+        /// <summary>Number of tappable notes in the template (expected taps per square).</summary>
+        public static int NoteCount(this SquareTemplate t) => t switch
+        {
+            SquareTemplate.Quarter       => 1,
+            SquareTemplate.EighthPair    => 2,
+            SquareTemplate.OffbeatEighth => 1,
+            SquareTemplate.SixteenthQuad => 4,
+            SquareTemplate.Triplet       => 3,
+            _                            => 0,
+        };
+
         /// <summary>Single-char notation for pattern logs: Q / E / O / S / T / '.'</summary>
         public static char ToLogChar(this SquareTemplate t) => t switch
         {

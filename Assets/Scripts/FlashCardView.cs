@@ -6,14 +6,14 @@ namespace KrumbleHut.Drummi.Dungeons
 {
     /// <summary>
     /// Renders the Flash Card: a 2x4 grid of squares (beats 1–4 top row, 5–8 bottom,
-    /// reading order top-left → bottom-right) that flip face-up on their beats during
+    /// reading order top-left → bottom-right) that pop in from scale 0 on their beats during
     /// the reveal bar and stay visible through the perform bar.
     ///
     /// TIMING CONTRACT: which square reveals, and when, is driven entirely by
     /// FlashCardController's GameClock-polled events (OnCardRevealStart /
     /// OnSquareReveal / OnPerformStart / OnCardEvaluated) — beat accuracy lives in
     /// the controller, matching the CRIndicator convention. DOTween here is cosmetic
-    /// only (flip/pop), with SetLink + kill-before-reuse. The perform-bar beat cursor
+    /// only (reveal pop/hit pop), with SetLink + kill-before-reuse. The perform-bar beat cursor
     /// is the one locally polled piece: a pure function of GameClock.GameTime against
     /// the controller's PhraseTiming — no coroutines, no Time.time.
     ///
@@ -38,7 +38,7 @@ namespace KrumbleHut.Drummi.Dungeons
         [System.Serializable]
         public class Square
         {
-            [Tooltip("Square root — flip tween scales this on X.")]
+            [Tooltip("Square root — reveal pop tween scales this from 0.")]
             public RectTransform root;
             [Tooltip("Card-back / face background image on the root.")]
             public Image back;
@@ -77,29 +77,40 @@ namespace KrumbleHut.Drummi.Dungeons
         [SerializeField] private Color gradePassableColor   = new Color(0.95f, 0.60f, 0.20f, 1f);
         [SerializeField] private Color gradeFailedColor     = new Color(0.90f, 0.25f, 0.25f, 1f);
 
-        [Header("Flip (cosmetic)")]
-        [SerializeField] private float flipHalfDuration = 0.07f;
+        [Header("Reveal Pop (cosmetic)")]
+        [Tooltip("Duration of the scale-from-0 pop when a square reveals on its beat. Kept fast/snappy.")]
+        [SerializeField] private float revealPopDuration = 0.12f;
 
-        [Header("Hit Pop (cosmetic per-tap feedback)")]
-        [Tooltip("Peak scale of the square pop on a confirmed hit (UIQuickSpawnEffect-style grow).")]
-        [SerializeField] private float popGrowScale = 1.22f;
-        [Tooltip("Random ± Z tilt during the grow, in degrees.")]
-        [SerializeField] private float popRotateAngle = 10f;
-        [Tooltip("Grow duration. Kept fast — subdivided taps can be ~0.25s apart.")]
-        [SerializeField] private float popGrowDuration = 0.08f;
-        [Tooltip("Recoil scale (dips below 1 before settling, like UIQuickSpawnEffect).")]
-        [SerializeField] private float popRecoilScale = 0.95f;
-        [SerializeField] private float popRecoilDuration = 0.06f;
-        [SerializeField] private float popSettleDuration = 0.06f;
-        [Tooltip("Face tint on a Perfect hit; fades back to the note/rest face color.")]
+        [Header("Hit Feedback (cosmetic per-tap)")]
+        [Tooltip("Quality tint on a Perfect hit — colors the chip flash, destroy flash, and shards.")]
         [SerializeField] private Color hitPerfectColor = new Color(1f, 0.85f, 0.30f, 1f);
-        [Tooltip("Face tint on a Good hit; fades back to the note/rest face color.")]
+        [Tooltip("Quality tint on a Good hit — colors the chip flash, destroy flash, and shards.")]
         [SerializeField] private Color hitGoodColor = new Color(0.35f, 0.90f, 0.40f, 1f);
         [SerializeField] private float hitTintFadeDuration = 0.20f;
+        [Tooltip("Per-hit damage shrink on multi-note squares: scale drops this much per chip. " +
+                 "The final expected note destroys the block instead.")]
+        [SerializeField] private float chipShrinkStep = 0.10f;
+        [Tooltip("Chip/miss tween duration. Kept fast — subdivided taps can be ~0.25s apart.")]
+        [SerializeField] private float chipDuration = 0.08f;
         [Tooltip("Face flash on an out-of-window tap.")]
         [SerializeField] private Color missFlashColor = new Color(0.90f, 0.25f, 0.25f, 1f);
-        [Tooltip("Squares shrink to this scale on an out-of-window tap (inverse of the hit pop).")]
+        [Tooltip("Squares shrink to this scale on an out-of-window tap.")]
         [SerializeField] private float missShrinkScale = 0.92f;
+
+        [Header("Destroy (cosmetic)")]
+        [Tooltip("Punch-grow scale right before the block collapses.")]
+        [SerializeField] private float destroyGrowScale = 1.15f;
+        [SerializeField] private float destroyGrowDuration = 0.05f;
+        [Tooltip("Collapse-to-zero duration after the punch-grow.")]
+        [SerializeField] private float destroyCollapseDuration = 0.10f;
+        [Tooltip("Fragments spawned when a block is destroyed (a couple also puff on chips).")]
+        [SerializeField] private int shardCount = 5;
+        [Tooltip("Shard size as a fraction of the square's rect size.")]
+        [SerializeField] private float shardSizeRatio = 0.22f;
+        [SerializeField] private float shardDistanceMin = 60f;
+        [SerializeField] private float shardDistanceMax = 110f;
+        [Tooltip("Shard fly-out/fade duration.")]
+        [SerializeField] private float shardDuration = 0.35f;
 
         [Header("Grade Flash (cosmetic)")]
         [Tooltip("Seconds the border holds the grade color before fading back to idle. " +
@@ -112,6 +123,12 @@ namespace KrumbleHut.Drummi.Dungeons
                  "so the final card's grade flash is readable during the room-exit cover. " +
                  "Death teardown (OnEncounterStopped) hides immediately, ignoring this.")]
         [SerializeField] private float completeHideDelay = 0.8f;
+
+        [Header("Perform Wobble (cosmetic)")]
+        [Tooltip("Max Z-rotation degrees for the metronome-synced square wobble during the perform bar.")]
+        [SerializeField] private float wobbleRotationAmount = 6f;
+        [Tooltip("Beats for one full wobble cycle (left→right→left). 2 = one swing per beat.")]
+        [SerializeField] private float wobbleBeatsPerCycle = 2f;
         #endregion
 
         #region State
@@ -122,8 +139,19 @@ namespace KrumbleHut.Drummi.Dungeons
         private double       _beatInterval;
         private int          _cursorIndex = -1;
 
-        private readonly Tween[] _flipTweens = new Tween[8];
+        // Runtime-added metronome wobble per square — enabled only while Performing
+        // (the player's round). Added in Start so GameManager.instance exists.
+        private readonly UIRotateWobble[] _wobbles = new UIRotateWobble[8];
+
+        private readonly Tween[] _revealTweens = new Tween[8];
         private readonly Tween[] _popTweens  = new Tween[8];
+        // Per-slot destruction tracking: template (for expected tap count), confirmed
+        // hits so far, whether the block has been destroyed this card, and whether
+        // an out-of-window tap landed on the slot (keeps miss-tapped rests alive).
+        private readonly SquareTemplate[] _templates  = new SquareTemplate[8];
+        private readonly int[]  _hitCounts  = new int[8];
+        private readonly bool[] _destroyed  = new bool[8];
+        private readonly bool[] _missTapped = new bool[8];
         // Face color applied at reveal (note vs rest) — tint fades return to this,
         // never to a mid-fade sample of back.color.
         private readonly Color[] _faceColors = new Color[8];
@@ -133,6 +161,22 @@ namespace KrumbleHut.Drummi.Dungeons
         #endregion
 
         #region Unity
+        private void Start()
+        {
+            // UIRotateWobble.Awake reads GameManager.instance.metronome, so add the
+            // components after all scene Awakes have run.
+            for (int i = 0; i < squares.Length; i++)
+            {
+                if (squares[i]?.root == null) continue;
+                var wobble = squares[i].root.gameObject.AddComponent<UIRotateWobble>();
+                wobble.rotationAmount   = wobbleRotationAmount;
+                wobble.beatsPerCycle    = wobbleBeatsPerCycle;
+                wobble.phaseOffsetBeats = 0f; // unison across the card
+                wobble.enabled          = false;
+                _wobbles[i] = wobble;
+            }
+        }
+
         private void OnEnable()
         {
             if (controller == null) return;
@@ -173,6 +217,10 @@ namespace KrumbleHut.Drummi.Dungeons
             int idx = (int)((now - _timing.ResponseStartTime) / _beatInterval);
             idx = Mathf.Clamp(idx, 0, squares.Length - 1);
             if (idx != _cursorIndex) SetCursor(idx);
+
+            // Rests the player correctly left alone auto-destroy once their beat
+            // has elapsed; a rest that was miss-tapped persists as the failure tell.
+            FinalizeElapsedRests(now);
         }
         #endregion
 
@@ -190,7 +238,7 @@ namespace KrumbleHut.Drummi.Dungeons
             if (cardRoot != null && !cardRoot.gameObject.activeSelf)
                 cardRoot.gameObject.SetActive(true);
 
-            // New card: everything back to face-down, cursor off. The border resets to
+            // New card: every square hidden (scale 0) awaiting its reveal pop, cursor off. The border resets to
             // idle UNLESS the previous card's grade flash is still fading — cards chain
             // zero-gap, so the flash must bleed into this reveal bar to be readable.
             for (int i = 0; i < squares.Length; i++) ResetSquare(i);
@@ -208,21 +256,22 @@ namespace KrumbleHut.Drummi.Dungeons
 
             double expected = _timing.CallStartTime + slot * _beatInterval;
             double delta    = GameClock.Instance != null ? GameClock.Instance.GameTime - expected : 0.0;
-            Debug.Log($"[FlashCardView] Flip | card={cardIndex} slot={slot} {template} " +
+            Debug.Log($"[FlashCardView] Reveal pop | card={cardIndex} slot={slot} {template} " +
                       $"delta=+{delta * 1000.0:F3}ms");
 
-            // Cosmetic flip: scaleX 1→0, swap face at the midpoint, 0→1.
+            // Cosmetic reveal pop: face swaps instantly on the beat, then the square
+            // snaps up from scale 0 with a fast OutBack overshoot.
             // The reveal MOMENT was beat-accurate (controller event); the tween just dresses it.
-            _flipTweens[slot]?.Kill();
+            _templates[slot] = template;
+            _revealTweens[slot]?.Kill();
             _popTweens[slot]?.Kill();
             _popTweens[slot] = null;
-            sq.root.localScale    = Vector3.one;
+            ShowFace(slot, sq, template);
             sq.root.localRotation = Quaternion.identity;
-            var seq = DOTween.Sequence().SetLink(sq.root.gameObject);
-            seq.Append(sq.root.DOScaleX(0f, flipHalfDuration).SetEase(Ease.InQuad));
-            seq.AppendCallback(() => ShowFace(slot, sq, template));
-            seq.Append(sq.root.DOScaleX(1f, flipHalfDuration * 1.6f).SetEase(Ease.OutBack));
-            _flipTweens[slot] = seq;
+            sq.root.localScale    = Vector3.zero;
+            _revealTweens[slot] = sq.root.DOScale(1f, revealPopDuration)
+                                         .SetEase(Ease.OutBack)
+                                         .SetLink(sq.root.gameObject);
         }
 
         private void HandlePerformStart(int cardIndex)
@@ -230,58 +279,130 @@ namespace KrumbleHut.Drummi.Dungeons
             _state = ViewState.Performing;
             SetBorder(borderYourTurnColor, animate: true);
             SetCursor(0);
+            SetAllWobbles(true);
         }
 
         /// <summary>
-        /// Confirmed Perfect/Good tap: quickspawn-style pop on the matched square
-        /// (grow + random tilt → recoil → settle) with a quality tint that fades
-        /// back to the face color. The MOMENT is the reader's hit confirmation
-        /// (controller event); the tween is cosmetic only.
+        /// Confirmed Perfect/Good tap: damages the matched block, destroying it on
+        /// its final expected note. Single-note squares destroy on the first hit;
+        /// subdivided squares chip (shrink + tint flash + small shard puff) per hit.
+        /// Destruction: punch-grow → collapse to 0 + shard burst → the slot stays
+        /// empty for the rest of the card (the cursor child still renders). The
+        /// MOMENT is the reader's hit confirmation (controller event); tweens are
+        /// cosmetic.
         /// </summary>
         private void HandlePlayerHit(int slot, InputMatch.MatchQuality quality)
         {
             if (_state != ViewState.Performing) return;
             if (slot < 0 || slot >= squares.Length) return;
+            if (_destroyed[slot]) return; // stray rematch on an already-destroyed block
             var sq = squares[slot];
             if (sq?.root == null) return;
 
+            _hitCounts[slot]++;
+            int expected = _templates[slot].NoteCount();
+            Color tint = quality == InputMatch.MatchQuality.Perfect ? hitPerfectColor : hitGoodColor;
+
             KillSquareTweens(slot);
-            sq.root.localScale    = Vector3.one;
+            // Tweens own rotation for their duration — pause this square's wobble so
+            // the two don't fight over localRotation.
+            SetWobble(slot, false);
             sq.root.localRotation = Quaternion.identity;
 
-            float angle = UnityEngine.Random.value > 0.5f ? popRotateAngle : -popRotateAngle;
+            if (_hitCounts[slot] < expected)
+                ChipBlock(slot, sq, tint);
+            else
+                DestroyBlock(slot, sq, tint);
+        }
+
+        /// <summary>Partial hit on a multi-note square: damage shrink + quality flash + small puff.</summary>
+        private void ChipBlock(int slot, Square sq, Color tint)
+        {
+            float target = Mathf.Max(0.5f, 1f - chipShrinkStep * _hitCounts[slot]);
             var seq = DOTween.Sequence().SetLink(sq.root.gameObject);
-            seq.Append(sq.root.DOScale(popGrowScale, popGrowDuration).SetEase(Ease.OutQuad));
-            seq.Join(sq.root.DOLocalRotate(new Vector3(0f, 0f, angle), popGrowDuration).SetEase(Ease.OutQuad));
-            seq.Append(sq.root.DOScale(popRecoilScale, popRecoilDuration));
-            seq.Join(sq.root.DOLocalRotate(Vector3.zero, popRecoilDuration));
-            seq.Append(sq.root.DOScale(1f, popSettleDuration));
+            seq.OnComplete(() => SetWobble(slot, _state == ViewState.Performing && !_destroyed[slot]));
+            seq.Append(sq.root.DOScale(target, chipDuration).SetEase(Ease.OutBack));
             if (sq.back != null)
             {
-                sq.back.color = quality == InputMatch.MatchQuality.Perfect ? hitPerfectColor : hitGoodColor;
+                sq.back.color = tint;
                 seq.Join(sq.back.DOColor(_faceColors[slot], hitTintFadeDuration));
             }
             _popTweens[slot] = seq;
+            SpawnShards(slot, tint, 2);
+        }
+
+        /// <summary>
+        /// Auto-destroys rest squares whose beat has fully elapsed in the perform
+        /// bar, rewarding the player for correctly NOT tapping. Miss-tapped rests
+        /// are skipped — they persist (with their red flash) as the failure tell.
+        /// Polled from Update (virtual time), same convention as the beat cursor.
+        /// </summary>
+        private void FinalizeElapsedRests(double now)
+        {
+            for (int i = 0; i < squares.Length; i++)
+            {
+                if (_destroyed[i] || _missTapped[i]) continue;
+                if (_templates[i] != SquareTemplate.Rest) continue;
+                if (now < _timing.ResponseStartTime + (i + 1) * _beatInterval) continue;
+                DestroyRestSlot(i);
+            }
+        }
+
+        /// <summary>Rest auto-destroy: same collapse + shards, tinted with the rest face color.</summary>
+        private void DestroyRestSlot(int i)
+        {
+            var sq = squares[i];
+            if (sq?.root == null) return;
+            KillSquareTweens(i);
+            SetWobble(i, false);
+            sq.root.localRotation = Quaternion.identity;
+            DestroyBlock(i, sq, restFaceColor);
+        }
+
+        /// <summary>Final (or only) note hit: punch-grow, collapse to 0 with a shard burst; slot stays empty.</summary>
+        private void DestroyBlock(int slot, Square sq, Color tint)
+        {
+            _destroyed[slot] = true;
+            if (sq.back != null) sq.back.color = tint;
+
+            var seq = DOTween.Sequence().SetLink(sq.root.gameObject);
+            seq.Append(sq.root.DOScale(destroyGrowScale, destroyGrowDuration).SetEase(Ease.OutQuad));
+            seq.Append(sq.root.DOScale(0f, destroyCollapseDuration).SetEase(Ease.InQuad));
+            seq.OnComplete(() =>
+            {
+                // Block visuals off — the slot stays empty for the rest of the card.
+                // Root back to full scale so the cursor child still renders.
+                sq.root.localScale = Vector3.one;
+                if (sq.back  != null) sq.back.enabled  = false;
+                if (sq.glyph != null) sq.glyph.enabled = false;
+            });
+            _popTweens[slot] = seq;
+            SpawnShards(slot, tint, shardCount);
         }
 
         /// <summary>
         /// Out-of-window tap: inverse feel — the nearest square shrinks and flashes
-        /// red, then recovers to its face color. Cosmetic only.
+        /// red, then recovers to its face color. Cosmetic only. Also flags the slot
+        /// so a miss-tapped rest persists instead of auto-destroying at beat end.
         /// </summary>
         private void HandlePlayerMissTap(int slot)
         {
             if (_state != ViewState.Performing) return;
             if (slot < 0 || slot >= squares.Length) return;
+            _missTapped[slot] = true;
+            if (_destroyed[slot]) return; // destroyed slot — nothing to animate
             var sq = squares[slot];
             if (sq?.root == null) return;
 
             KillSquareTweens(slot);
-            sq.root.localScale    = Vector3.one;
+            // Recover to the chip-damaged size, not full size.
+            float baseScale = Mathf.Max(0.5f, 1f - chipShrinkStep * _hitCounts[slot]);
+            sq.root.localScale    = Vector3.one * baseScale;
             sq.root.localRotation = Quaternion.identity;
 
             var seq = DOTween.Sequence().SetLink(sq.root.gameObject);
-            seq.Append(sq.root.DOScale(missShrinkScale, popGrowDuration).SetEase(Ease.OutQuad));
-            seq.Append(sq.root.DOScale(1f, popRecoilDuration + popSettleDuration));
+            seq.Append(sq.root.DOScale(baseScale * missShrinkScale, chipDuration).SetEase(Ease.OutQuad));
+            seq.Append(sq.root.DOScale(baseScale, chipDuration * 1.5f));
             if (sq.back != null)
             {
                 sq.back.color = missFlashColor;
@@ -292,10 +413,17 @@ namespace KrumbleHut.Drummi.Dungeons
 
         private void HandleCardEvaluated(int cardIndex, EvaluationResult result)
         {
+            // Final beat's untouched rest ends exactly on the evaluation boundary —
+            // Update may not tick between then and now, so finalize here too.
+            for (int i = 0; i < squares.Length; i++)
+                if (!_destroyed[i] && !_missTapped[i] && _templates[i] == SquareTemplate.Rest)
+                    DestroyRestSlot(i);
+
             // Card stays visible (Held) until the next card's reveal resets it —
             // cycles chain zero-gap, so this state is typically one frame long.
             _state = ViewState.Held;
             SetCursor(-1);
+            SetAllWobbles(false);
 
             // Grade flash: the MOMENT is the evaluation boundary (controller event,
             // virtual time); the hold/fade back to idle is cosmetic only.
@@ -322,8 +450,8 @@ namespace KrumbleHut.Drummi.Dungeons
         #region Private — Visual State
         private void KillSquareTweens(int i)
         {
-            _flipTweens[i]?.Kill();
-            _flipTweens[i] = null;
+            _revealTweens[i]?.Kill();
+            _revealTweens[i] = null;
             _popTweens[i]?.Kill();
             _popTweens[i] = null;
         }
@@ -333,10 +461,20 @@ namespace KrumbleHut.Drummi.Dungeons
             var sq = squares[i];
             if (sq?.root == null) return;
             KillSquareTweens(i);
-            sq.root.localScale    = Vector3.one;
+            SetWobble(i, false);
+            _templates[i]  = SquareTemplate.Rest;
+            _hitCounts[i]  = 0;
+            _destroyed[i]  = false;
+            _missTapped[i] = false;
+            // Hidden until its beat: the reveal pop scales the square in from 0.
+            sq.root.localScale    = Vector3.zero;
             sq.root.localRotation = Quaternion.identity;
             _faceColors[i] = faceDownColor;
-            if (sq.back   != null) sq.back.color = faceDownColor;
+            if (sq.back != null)
+            {
+                sq.back.enabled = true; // re-arm after a destroyed card hid it
+                sq.back.color   = faceDownColor;
+            }
             if (sq.glyph  != null) sq.glyph.enabled = false;
             if (sq.cursor != null) sq.cursor.enabled = false;
         }
@@ -434,10 +572,67 @@ namespace KrumbleHut.Drummi.Dungeons
             }
         }
 
+        /// <summary>
+        /// Spawns small quality-tinted fragments at a square's position that fly
+        /// outward, spin, shrink, and fade. Transient plain-Image objects under
+        /// cardRoot (on top of the squares); OnKill destroys them on completion or
+        /// interruption (card hide / teardown). Cosmetic only.
+        /// </summary>
+        private void SpawnShards(int slot, Color color, int count)
+        {
+            var sq = squares[slot];
+            if (sq?.root == null || cardRoot == null) return;
+
+            Vector2 squareSize = sq.root.rect.size;
+            float shardSize = Mathf.Max(4f, Mathf.Min(squareSize.x, squareSize.y) * shardSizeRatio);
+
+            for (int i = 0; i < count; i++)
+            {
+                var go  = new GameObject("Shard", typeof(RectTransform), typeof(Image));
+                var rt  = (RectTransform)go.transform;
+                var img = go.GetComponent<Image>();
+                img.color         = color;
+                img.raycastTarget = false;
+
+                rt.SetParent(cardRoot, worldPositionStays: false);
+                rt.sizeDelta     = Vector2.one * shardSize;
+                rt.position      = sq.root.position;
+                rt.localRotation = Quaternion.Euler(0f, 0f, UnityEngine.Random.Range(0f, 360f));
+                rt.localScale    = Vector3.one * UnityEngine.Random.Range(0.7f, 1.2f);
+
+                Vector2 dir  = UnityEngine.Random.insideUnitCircle.normalized;
+                if (dir == Vector2.zero) dir = Vector2.up;
+                Vector2 dest = rt.anchoredPosition
+                             + dir * UnityEngine.Random.Range(shardDistanceMin, shardDistanceMax);
+                float spin   = UnityEngine.Random.Range(90f, 270f) * (UnityEngine.Random.value > 0.5f ? 1f : -1f);
+
+                var shardGo = go; // capture for OnKill
+                var seq = DOTween.Sequence().SetLink(shardGo);
+                seq.Join(rt.DOAnchorPos(dest, shardDuration).SetEase(Ease.OutCubic));
+                seq.Join(rt.DOLocalRotate(new Vector3(0f, 0f, spin), shardDuration, RotateMode.LocalAxisAdd));
+                seq.Join(rt.DOScale(0f, shardDuration).SetEase(Ease.InQuad));
+                seq.Join(img.DOFade(0f, shardDuration).SetEase(Ease.InQuad));
+                seq.OnKill(() => { if (shardGo != null) Destroy(shardGo); });
+            }
+        }
+
+        private void SetWobble(int i, bool on)
+        {
+            if (i >= 0 && i < _wobbles.Length && _wobbles[i] != null)
+                _wobbles[i].enabled = on;
+        }
+
+        private void SetAllWobbles(bool on)
+        {
+            for (int i = 0; i < _wobbles.Length; i++)
+                SetWobble(i, on);
+        }
+
         private void HideCard()
         {
-            for (int i = 0; i < _flipTweens.Length; i++)
+            for (int i = 0; i < _revealTweens.Length; i++)
                 KillSquareTweens(i);
+            SetAllWobbles(false);
             _borderTween?.Kill();
             _borderTween = null;
             _hideDelayTween?.Kill();
