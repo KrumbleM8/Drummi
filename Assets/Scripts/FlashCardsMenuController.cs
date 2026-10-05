@@ -1,6 +1,5 @@
 using System.Collections;
 using System.Collections.Generic;
-using DG.Tweening;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
@@ -9,19 +8,17 @@ using KrumbleHut.Drummi.UI;
 namespace KrumbleHut.Drummi.FlashCards
 {
     /// <summary>
-    /// Signpost menu for the FlashCardsMenu scene — the game's main scene, which
-    /// also contains the Flash Cards gameplay systems. The camera snaps between
-    /// the authored anchors of an ordered list of MenuSignNodes via chevron
-    /// buttons; tapping the focused sign hides the menu objects, shows the
-    /// gameplay objects, and starts the run in-scene via
+    /// Tiny-planet menu for the FlashCardsMenu scene — the game's main scene,
+    /// which also contains the Flash Cards gameplay systems. Signs stand on the
+    /// rim of a planet disc at the bottom of the screen; PlanetSpinner spins the
+    /// disc (vertical drag + inertia + snap) past a STATIC menu camera. Tapping
+    /// a distant sign spins it into focus; tapping the focused sign hides the
+    /// menu objects, shows the gameplay objects, and starts the run in-scene via
     /// FlashCardsModeController.StartRun (no scene load).
     ///
-    /// All camera motion is DOTween (no Time.time animation). Tweens are
-    /// interruptible: a chevron tap mid-tween DOKills the camera and retargets.
-    ///
     /// INSPECTOR SETUP (FlashCardsMenu scene):
-    ///   nodes — sign nodes in path order. menuCamera — the menu camera.
-    ///   nextButton / prevButton — overlay chevrons (wired to Next()/Prev()).
+    ///   nodes — sign nodes in angular order (index 0 = start focus); must match
+    ///   the spinner's signMounts order. spinner — the PlanetSpinner pivot.
     ///   backButton — overlay back-to-home (wired to BackToHome()).
     ///   screenTransitioner — the shared OverlayUtilCanvas TransitionScreen (the
     ///   SAME ScreenTransition GameManager reveals after StartGame — a separate
@@ -32,16 +29,14 @@ namespace KrumbleHut.Drummi.FlashCards
     public class FlashCardsMenuController : MonoBehaviour
     {
         [Header("Signs")]
-        [Tooltip("Sign nodes in path order — index 0 is focused on Start.")]
+        [Tooltip("Sign nodes in angular order — index 0 is focused on Start. Must match the spinner's signMounts order.")]
         [SerializeField] private List<MenuSignNode> nodes = new();
 
-        [Header("Camera")]
-        [SerializeField] private Camera menuCamera;
-        [SerializeField, Min(0.01f)] private float tweenDuration = 0.35f;
+        [Header("Planet")]
+        [Tooltip("The planet pivot that spins signs into focus.")]
+        [SerializeField] private PlanetSpinner spinner;
 
         [Header("Overlay Buttons")]
-        [SerializeField] private Button nextButton;
-        [SerializeField] private Button prevButton;
         [SerializeField] private Button backButton;
 
         [Header("Transitions (optional)")]
@@ -50,7 +45,7 @@ namespace KrumbleHut.Drummi.FlashCards
         [Header("Gameplay (same scene)")]
         [SerializeField] private FlashCardsModeController modeController;
 
-        [Tooltip("Active only while the signpost menu shows: menu camera, landscape, signs, chevron canvas.")]
+        [Tooltip("Active only while the planet menu shows: menu camera, planet, parallax layers, signs.")]
         [SerializeField] private List<GameObject> menuObjects = new();
 
         [Tooltip("Active only during a run: FlashCardsCanvas, FlashCardSystems, GameplayCamera.")]
@@ -59,7 +54,7 @@ namespace KrumbleHut.Drummi.FlashCards
         private int  _index;
 
         // Latched while leaving the menu (gameplay running or scene transition
-        // out) — blocks Step/select; cleared by ReturnToMenuRoutine.
+        // out) — blocks select; cleared by ReturnToMenuRoutine.
         private bool _leaving;
 
         private void Start()
@@ -67,13 +62,12 @@ namespace KrumbleHut.Drummi.FlashCards
             foreach (MenuSignNode node in nodes)
                 if (node != null) node.Selected += HandleNodeSelected;
 
-            if (nextButton != null) nextButton.onClick.AddListener(Next);
-            if (prevButton != null) prevButton.onClick.AddListener(Prev);
             if (backButton != null) backButton.onClick.AddListener(BackToHome);
+            if (spinner != null) spinner.FocusedIndexChanged += HandleFocusedIndexChanged;
 
             _index = 0;
             SnapToCurrent();
-            UpdateChrome();
+            UpdateFocusVisuals();
         }
 
         private void OnDestroy()
@@ -81,49 +75,26 @@ namespace KrumbleHut.Drummi.FlashCards
             foreach (MenuSignNode node in nodes)
                 if (node != null) node.Selected -= HandleNodeSelected;
 
-            if (nextButton != null) nextButton.onClick.RemoveListener(Next);
-            if (prevButton != null) prevButton.onClick.RemoveListener(Prev);
             if (backButton != null) backButton.onClick.RemoveListener(BackToHome);
+            if (spinner != null) spinner.FocusedIndexChanged -= HandleFocusedIndexChanged;
         }
 
         // ── Navigation ────────────────────────────────────────────────────────
 
-        public void Next() => Step(1);
-        public void Prev() => Step(-1);
-
-        /// <summary>Move focus by delta signs (clamped) and tween the camera there.</summary>
-        public void Step(int delta)
+        /// <summary>Spinner settled nearest a new sign (drag, inertia, or FocusOn tween).</summary>
+        private void HandleFocusedIndexChanged(int index)
         {
-            if (_leaving || nodes.Count == 0 || menuCamera == null) return;
-
-            int target = Mathf.Clamp(_index + delta, 0, nodes.Count - 1);
-            if (target == _index) return;
-
-            _index = target;
-            Transform anchor = nodes[_index].CameraAnchor;
-
-            // Interruptible: kill any in-flight move and retarget from wherever
-            // the camera currently is.
-            Transform cam = menuCamera.transform;
-            cam.DOKill();
-            cam.DOMove(anchor.position, tweenDuration).SetEase(Ease.OutExpo).SetLink(gameObject);
-            cam.DORotateQuaternion(anchor.rotation, tweenDuration).SetEase(Ease.OutExpo).SetLink(gameObject);
-
-            UpdateChrome();
+            _index = Mathf.Clamp(index, 0, nodes.Count - 1);
+            UpdateFocusVisuals();
         }
 
         private void SnapToCurrent()
         {
-            if (nodes.Count == 0 || menuCamera == null) return;
-            Transform anchor = nodes[_index].CameraAnchor;
-            menuCamera.transform.SetPositionAndRotation(anchor.position, anchor.rotation);
+            if (spinner != null) spinner.SnapTo(_index);
         }
 
-        private void UpdateChrome()
+        private void UpdateFocusVisuals()
         {
-            if (prevButton != null) prevButton.gameObject.SetActive(_index > 0);
-            if (nextButton != null) nextButton.gameObject.SetActive(_index < nodes.Count - 1);
-
             for (int i = 0; i < nodes.Count; i++)
                 if (nodes[i] != null) nodes[i].SetFocused(i == _index);
         }
@@ -133,8 +104,20 @@ namespace KrumbleHut.Drummi.FlashCards
         private void HandleNodeSelected(MenuSignNode node)
         {
             if (_leaving || node.Definition == null) return;
-            _leaving = true;
 
+            // Drag release over a sign is not a tap.
+            if (spinner != null && spinner.SuppressChildTap) return;
+
+            // Tapping a distant sign spins it into focus; only the focused sign launches.
+            int tappedIndex = nodes.IndexOf(node);
+            if (tappedIndex != _index)
+            {
+                if (spinner != null && tappedIndex >= 0) spinner.FocusOn(tappedIndex);
+                return;
+            }
+
+            _leaving = true;
+            if (spinner != null) spinner.SetInputEnabled(false);
             StartCoroutine(LaunchRun(node.Definition));
         }
 
@@ -171,7 +154,8 @@ namespace KrumbleHut.Drummi.FlashCards
 
             SetMenuShown(true);
             SnapToCurrent();
-            UpdateChrome();
+            UpdateFocusVisuals();
+            if (spinner != null) spinner.SetInputEnabled(true);
             _leaving = false;
 
             if (screenTransitioner != null) screenTransitioner.StartReveal();
@@ -191,6 +175,7 @@ namespace KrumbleHut.Drummi.FlashCards
             if (_leaving) return;
             _leaving = true;
 
+            if (spinner != null) spinner.SetInputEnabled(false);
             HomeFlowController.SkipIntro = true;
             StartCoroutine(TransitionToScene("New_Home"));
         }
