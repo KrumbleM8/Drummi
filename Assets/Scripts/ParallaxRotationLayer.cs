@@ -3,11 +3,11 @@ using UnityEngine;
 namespace KrumbleHut.Drummi.FlashCards
 {
     /// <summary>
-    /// Rotates a background layer at a fraction of the planet's spin for tiered
-    /// parallax depth (near decor ~1, mid hills ~0.4, sky/clouds ~0.05). Purely
-    /// event-driven off PlanetSpinner.AngleChanged — no Update loop, nothing
-    /// moves at rest. Re-syncs in OnEnable so SetMenuShown off/on toggles leave
-    /// the layer consistent.
+    /// Rolls a background layer around X at a fraction of the globe's spin for
+    /// tiered parallax depth (near decor ~1, mid hills ~0.4, sky/clouds ~0.05).
+    /// Purely event-driven off PlanetSpinner.AngleChanged — no Update loop,
+    /// nothing moves at rest. Re-syncs in OnEnable so SetMenuShown off/on
+    /// toggles leave the layer consistent.
     /// </summary>
     public class ParallaxRotationLayer : MonoBehaviour
     {
@@ -31,7 +31,8 @@ namespace KrumbleHut.Drummi.FlashCards
 
         private void HandleAngleChanged(float angle)
         {
-            transform.localEulerAngles = new Vector3(0f, 0f, angle * factor);
+            // Same axis/sense as the globe's roll (PlanetSpinner.ApplyAngle).
+            transform.localEulerAngles = new Vector3(-angle * factor, 0f, 0f);
         }
     }
 }

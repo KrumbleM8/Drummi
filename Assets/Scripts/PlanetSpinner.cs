@@ -7,12 +7,18 @@ using UnityEngine.InputSystem;
 namespace KrumbleHut.Drummi.FlashCards
 {
     /// <summary>
-    /// Tiny-planet menu navigation: this component lives on the planet pivot
-    /// (a disc at the bottom of the portrait screen) and spins it so signposts
-    /// crest over the horizon. Vertical drag anywhere spins the planet; on
-    /// release the projected stop angle is snapped to the nearest sign and
-    /// tweened there with DOTween. Tapping a distant sign calls FocusOn to
-    /// spin it into focus (driven by FlashCardsMenuController).
+    /// Tiny-planet menu navigation: this component lives on the globe pivot
+    /// (a 3D sphere viewed Mario-Galaxy style — static perspective camera just
+    /// above the surface looking forward) and rolls it around the world X axis
+    /// so signposts rise over the far horizon and travel toward the camera.
+    /// Vertical drag anywhere spins the globe; on release the projected stop
+    /// angle is snapped to the nearest sign and tweened there with DOTween.
+    /// Tapping a distant sign calls FocusOn to roll it into focus (driven by
+    /// FlashCardsMenuController).
+    ///
+    /// Sign mounts sit on the forward great circle (YZ plane) standing
+    /// radially, so signs lean back over the horizon and straighten up as they
+    /// arrive — no counter-rotation, mounts simply ride the globe.
     ///
     /// Input mirrors CarouselController's proven pattern: global InputActions
     /// on &lt;Pointer&gt;/press|delta|position (covers mouse in editor — touch
@@ -22,9 +28,19 @@ namespace KrumbleHut.Drummi.FlashCards
     /// Rotation is applied only when the angle changes — the component does no
     /// per-frame work at rest and allocates nothing while spinning.
     ///
+    /// HORIZON SORTING: the project uses URP's 2D renderer, where the sphere
+    /// mesh gets no depth occlusion over sprites/canvases — far-side signs
+    /// would bleed through the globe. So every pivot child (signs + decor) is
+    /// painter-sorted against the globe: ring angle &lt; horizonFlipAngle →
+    /// sorting order in front of the globe mesh, beyond it → behind (the
+    /// globe's silhouette then clips it per-pixel, so signs still crest the
+    /// horizon gradually). Flipping right at the ridge makes the swap
+    /// invisible. Caches renderers in Awake — no per-spin allocations.
+    ///
     /// INSPECTOR SETUP: signMounts — one child mount per sign, in index order
     /// (index 0 = start focus). Use the ArrangeSigns context menu to lay the
-    /// mounts out along the rim at anglePerSign spacing.
+    /// mounts out along the rim at anglePerSign spacing. The sphere child must
+    /// be named "GlobeMesh" (excluded from horizon sorting, order 0).
     /// </summary>
     public class PlanetSpinner : MonoBehaviour
     {
@@ -35,11 +51,8 @@ namespace KrumbleHut.Drummi.FlashCards
         [Tooltip("Degrees between adjacent signs along the rim.")]
         [SerializeField, Min(1f)] private float anglePerSign = 35f;
 
-        [Tooltip("Distance from the pivot centre to each sign mount (ArrangeSigns).")]
-        [SerializeField, Min(0.01f)] private float radius = 6f;
-
-        [Tooltip("Counter-rotate mounts so signs stay screen-upright; off = signs stand radially on the surface.")]
-        [SerializeField] private bool keepSignsUpright = true;
+        [Tooltip("Distance from the globe centre to each sign mount — the sphere's surface radius (ArrangeSigns).")]
+        [SerializeField, Min(0.01f)] private float radius = 10f;
 
         [Header("Feel")]
         [Tooltip("Drag gain — 1 means a quarter-screen vertical swipe moves one sign.")]
@@ -53,6 +66,10 @@ namespace KrumbleHut.Drummi.FlashCards
 
         [Tooltip("Pixels the pointer must move before the gesture counts as a drag (tap otherwise).")]
         [SerializeField, Min(1f)] private float dragThreshold = 10f;
+
+        [Header("Horizon Sorting (2D renderer)")]
+        [Tooltip("Ring angle (deg from the focus point) past which a pivot child sorts behind the globe — tune to the visible horizon ridge.")]
+        [SerializeField, Range(10f, 90f)] private float horizonFlipAngle = 42f;
 
         /// <summary>Raised whenever the planet's angle changes (parallax layers listen).</summary>
         public event Action<float> AngleChanged;
@@ -90,6 +107,20 @@ namespace KrumbleHut.Drummi.FlashCards
 
         private Tween _snapTween;
 
+        // Horizon sorting cache — one entry per pivot child riding the globe.
+        private struct RimItem
+        {
+            public float      BaseAngle;  // ring angle at currentAngle 0
+            public Renderer[] Renderers;
+            public Canvas[]   Canvases;
+            public bool       InFront;
+        }
+
+        private const int FrontOrder = 10;   // sprites in front of the globe (canvases +1)
+        private const int BehindOrder = -12; // sprites behind the globe (canvases +1)
+
+        private RimItem[] _rimItems;
+
         private void Awake()
         {
             _maxAngle = Mathf.Max(0, signMounts.Count - 1) * anglePerSign;
@@ -101,6 +132,25 @@ namespace KrumbleHut.Drummi.FlashCards
             _pressAction.started  += OnPointerDown;
             _pressAction.canceled += OnPointerUp;
             _deltaAction.performed += OnDragPerformed;
+
+            BuildRimCache();
+        }
+
+        private void BuildRimCache()
+        {
+            var items = new List<RimItem>();
+            foreach (Transform child in transform)
+            {
+                if (child.name == "GlobeMesh") continue;
+                items.Add(new RimItem
+                {
+                    BaseAngle = Mathf.Atan2(child.localPosition.z, child.localPosition.y) * Mathf.Rad2Deg,
+                    Renderers = child.GetComponentsInChildren<Renderer>(true),
+                    Canvases  = child.GetComponentsInChildren<Canvas>(true),
+                    InFront   = false // force first ApplyAngle to assign orders
+                });
+            }
+            _rimItems = items.ToArray();
         }
 
         private void OnEnable()
@@ -244,22 +294,17 @@ namespace KrumbleHut.Drummi.FlashCards
         }
 
         /// <summary>
-        /// Single write point for rotation. Pivot and sign counter-rotation are
-        /// applied in the same call (never across frames), then events fire.
+        /// Single write point for rotation: rolls the globe around X so the
+        /// mount at currentAngle sits at the focus point, then events fire.
+        /// Mounts are plain children standing radially — no per-sign work.
         /// </summary>
         private void ApplyAngle(float angle, bool forceEvents = false)
         {
             if (!forceEvents && Mathf.Approximately(angle, _currentAngle)) return;
             _currentAngle = angle;
 
-            transform.localEulerAngles = new Vector3(0f, 0f, _currentAngle);
-
-            if (keepSignsUpright)
-            {
-                Quaternion counter = Quaternion.Euler(0f, 0f, -_currentAngle);
-                for (int i = 0; i < signMounts.Count; i++)
-                    if (signMounts[i] != null) signMounts[i].localRotation = counter;
-            }
+            transform.localEulerAngles = new Vector3(-_currentAngle, 0f, 0f);
+            UpdateRimSorting(forceEvents);
 
             AngleChanged?.Invoke(_currentAngle);
 
@@ -271,14 +316,43 @@ namespace KrumbleHut.Drummi.FlashCards
             }
         }
 
+        /// <summary>
+        /// Painter-sorts each rim child against the globe mesh for the 2D
+        /// renderer: near side of the horizon ridge → in front, beyond →
+        /// behind (globe silhouette clips it). Only touches renderers whose
+        /// side actually flipped — no work, no allocs on most frames.
+        /// </summary>
+        private void UpdateRimSorting(bool force = false)
+        {
+            if (_rimItems == null) return;
+
+            for (int i = 0; i < _rimItems.Length; i++)
+            {
+                float ringAngle = _rimItems[i].BaseAngle - _currentAngle;
+                bool inFront = ringAngle < horizonFlipAngle;
+                if (!force && inFront == _rimItems[i].InFront) continue;
+                _rimItems[i].InFront = inFront;
+
+                int order = inFront ? FrontOrder : BehindOrder;
+                Renderer[] renderers = _rimItems[i].Renderers;
+                for (int r = 0; r < renderers.Length; r++)
+                    renderers[r].sortingOrder = order;
+                Canvas[] canvases = _rimItems[i].Canvases;
+                for (int c = 0; c < canvases.Length; c++)
+                    canvases[c].sortingOrder = order + 1; // labels/buttons above their board
+            }
+        }
+
         private int NearestIndex(float angle) =>
             Mathf.Clamp(Mathf.RoundToInt(angle / anglePerSign), 0, Mathf.Max(0, signMounts.Count - 1));
 
         // ── Authoring ─────────────────────────────────────────────────────────
 
         /// <summary>
-        /// Editor helper: place mount i at radius·(sin(i·a), cos(i·a)) — sign 0
-        /// at the top of the disc, later signs clockwise below the horizon.
+        /// Editor helper: place mount i on the forward great circle at
+        /// radius·(0, cos(i·a), sin(i·a)) — sign 0 at the top (focus point),
+        /// later signs ahead over the horizon — standing radially so the
+        /// globe's X-roll brings each one upright at the top.
         /// </summary>
         [ContextMenu("Arrange Signs Along Rim")]
         private void ArrangeSigns()
@@ -286,11 +360,10 @@ namespace KrumbleHut.Drummi.FlashCards
             for (int i = 0; i < signMounts.Count; i++)
             {
                 if (signMounts[i] == null) continue;
-                float rad = i * anglePerSign * Mathf.Deg2Rad;
-                signMounts[i].localPosition = new Vector3(Mathf.Sin(rad), Mathf.Cos(rad), 0f) * radius;
-                signMounts[i].localRotation = keepSignsUpright
-                    ? Quaternion.identity
-                    : Quaternion.Euler(0f, 0f, -i * anglePerSign);
+                float a = i * anglePerSign;
+                float rad = a * Mathf.Deg2Rad;
+                signMounts[i].localPosition = new Vector3(0f, Mathf.Cos(rad), Mathf.Sin(rad)) * radius;
+                signMounts[i].localRotation = Quaternion.Euler(a, 0f, 0f);
             }
         }
     }
