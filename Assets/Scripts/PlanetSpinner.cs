@@ -68,8 +68,8 @@ namespace KrumbleHut.Drummi.FlashCards
         [SerializeField, Min(1f)] private float dragThreshold = 10f;
 
         [Header("Horizon Sorting (2D renderer)")]
-        [Tooltip("Ring angle (deg from the focus point) past which a pivot child sorts behind the globe — tune to the visible horizon ridge.")]
-        [SerializeField, Range(10f, 90f)] private float horizonFlipAngle = 42f;
+        [Tooltip("Ring angle (deg from the focus point) past which a pivot child sorts behind the globe. Set to the angle where a sign BASE crosses the visible horizon silhouette (≈20° for camera at (0,13.5,-8), R=10) — flipping exactly there makes the front/behind swap pixel-identical. Too high and far-side signs float over the planet face.")]
+        [SerializeField, Range(10f, 90f)] private float horizonFlipAngle = 20f;
 
         /// <summary>Raised whenever the planet's angle changes (parallax layers listen).</summary>
         public event Action<float> AngleChanged;

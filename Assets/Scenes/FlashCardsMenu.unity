@@ -7102,6 +7102,7 @@ MonoBehaviour:
   deceleration: 5
   snapDuration: 0.35
   dragThreshold: 10
+  horizonFlipAngle: 20
 --- !u!4 &1704582114
 Transform:
   m_ObjectHideFlags: 0
