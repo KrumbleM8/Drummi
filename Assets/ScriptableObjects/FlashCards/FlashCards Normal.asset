@@ -14,4 +14,4 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   displayName: Flash Cards
   tempoMultiplier: 1
-  highScoreKey: FlashCardsHS
+  highScoreKey: FlashCardsHS2

@@ -603,15 +603,25 @@ namespace KrumbleHut.Drummi.Dungeons
 
         /// <summary>
         /// Compute a PhraseTiming from a phrase start virtual time and beat interval.
+        /// Symmetric: the call window is as long as the response window (N beats each).
         /// </summary>
         /// <param name="round">Zero-based round index.</param>
         /// <param name="n">Phrase length in beats.</param>
         /// <param name="phraseStart">Virtual time (GameClock.GameTime) at which the call begins.</param>
         /// <param name="beatInterval">Seconds per beat (60.0 / bpm), snapshotted at encounter start.</param>
         public static PhraseTiming Compute(int round, int n, double phraseStart, double beatInterval)
+            => Compute(round, n, phraseStart, beatInterval, n);
+
+        /// <summary>
+        /// Asymmetric variant: the call window lasts <paramref name="callBeats"/>
+        /// beats while the response window keeps the full N. Used by FlashCards'
+        /// compressed reveal (big cards reveal in a fixed 2 bars); callBeats = n
+        /// reproduces the symmetric behavior exactly.
+        /// </summary>
+        public static PhraseTiming Compute(int round, int n, double phraseStart, double beatInterval, int callBeats)
         {
-            double responseStart = phraseStart + n * beatInterval;
-            double evalTime      = phraseStart + 2.0 * n * beatInterval;
+            double responseStart = phraseStart + callBeats * beatInterval;
+            double evalTime      = responseStart + n * beatInterval;
             return new PhraseTiming(round, n, phraseStart, responseStart, evalTime);
         }
 

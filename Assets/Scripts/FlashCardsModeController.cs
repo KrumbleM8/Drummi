@@ -59,6 +59,26 @@ namespace KrumbleHut.Drummi.FlashCards
                      "at 2x the grid) from this step onward. Forced to 0 in the Double Time menu variant — " +
                      "stacking to 4x is not playable.")]
             [Range(0f, 1f)] public float doubleTimeChance = 0f;
+
+            [Tooltip("BASE rows per card (4 beats each) from this step onward. 1 = quick single-bar cards. " +
+                     "noteRange is authored for THIS size; expanded cards scale it proportionally.")]
+            [Min(1)] public int rows = 1;
+
+            [Tooltip("Rows of an EXPANDED card at this step (0 or <= rows = never expands). Occasional " +
+                     "bigger cards: 2 early, 3/5 as late-run rares.")]
+            [Min(0)] public int expandRows = 2;
+
+            [Tooltip("RandomChance trigger only: chance [0,1] that a card expands to expandRows.")]
+            [Range(0f, 1f)] public float expandChance = 0.2f;
+        }
+
+        /// <summary>How expanded (bigger) cards are triggered during a run.</summary>
+        public enum ExpandTrigger
+        {
+            [Tooltip("Each card rolls expandChance independently.")]
+            RandomChance,
+            [Tooltip("Every Nth card expands (expandEveryNCards), no randomness.")]
+            FixedCadence,
         }
         #endregion
 
@@ -88,12 +108,22 @@ namespace KrumbleHut.Drummi.FlashCards
         [Tooltip("Escalation ladder, in ascending minCardsCleared order. Step 0 should have minCardsCleared = 0.")]
         [SerializeField] private EscalationStep[] escalationSteps =
         {
-            new() { minCardsCleared = 0,  vocab = FlashCardVocab.Quarter | FlashCardVocab.Rest,                                                                                             noteRange = new Vector2Int(3, 4) },
-            new() { minCardsCleared = 4,  vocab = FlashCardVocab.Quarter | FlashCardVocab.EighthPair | FlashCardVocab.Rest,                                                                noteRange = new Vector2Int(3, 5) },
-            new() { minCardsCleared = 10, vocab = FlashCardVocab.Quarter | FlashCardVocab.EighthPair | FlashCardVocab.OffbeatEighth | FlashCardVocab.Rest,                                 noteRange = new Vector2Int(4, 6), doubleTimeChance = 0.15f },
-            new() { minCardsCleared = 16, vocab = FlashCardVocab.Quarter | FlashCardVocab.EighthPair | FlashCardVocab.OffbeatEighth | FlashCardVocab.Triplet | FlashCardVocab.Rest,        noteRange = new Vector2Int(4, 6), doubleTimeChance = 0.25f },
-            new() { minCardsCleared = 22, vocab = FlashCardVocab.Quarter | FlashCardVocab.EighthPair | FlashCardVocab.OffbeatEighth | FlashCardVocab.Triplet | FlashCardVocab.SixteenthQuad | FlashCardVocab.Rest, noteRange = new Vector2Int(4, 6), doubleTimeChance = 0.35f },
+            new() { minCardsCleared = 0,  vocab = FlashCardVocab.Quarter | FlashCardVocab.Rest,                                                                                             noteRange = new Vector2Int(2, 3), rows = 1, expandRows = 2, expandChance = 0.20f },
+            new() { minCardsCleared = 4,  vocab = FlashCardVocab.Quarter | FlashCardVocab.EighthPair | FlashCardVocab.Rest,                                                                noteRange = new Vector2Int(2, 4), rows = 1, expandRows = 2, expandChance = 0.30f },
+            // doubleTimeChance intentionally 0 everywhere for now — the in-run DT
+            // mechanic is built and verified but disabled pending tuning; re-enable
+            // per step when wanted.
+            new() { minCardsCleared = 10, vocab = FlashCardVocab.Quarter | FlashCardVocab.EighthPair | FlashCardVocab.OffbeatEighth | FlashCardVocab.Rest,                                 noteRange = new Vector2Int(3, 4), rows = 1, expandRows = 2, expandChance = 0.35f },
+            new() { minCardsCleared = 16, vocab = FlashCardVocab.Quarter | FlashCardVocab.EighthPair | FlashCardVocab.OffbeatEighth | FlashCardVocab.Triplet | FlashCardVocab.Rest,        noteRange = new Vector2Int(3, 4), rows = 1, expandRows = 3, expandChance = 0.30f },
+            new() { minCardsCleared = 22, vocab = FlashCardVocab.Quarter | FlashCardVocab.EighthPair | FlashCardVocab.OffbeatEighth | FlashCardVocab.Triplet | FlashCardVocab.SixteenthQuad | FlashCardVocab.Rest, noteRange = new Vector2Int(3, 4), rows = 1, expandRows = 5, expandChance = 0.25f },
         };
+
+        [Header("Card Expansion")]
+        [Tooltip("How expanded (bigger) cards trigger: independent per-card chance, or a strict every-Nth-card cadence.")]
+        [SerializeField] private ExpandTrigger expandTrigger = ExpandTrigger.RandomChance;
+
+        [Tooltip("FixedCadence only: every Nth card is an expanded card.")]
+        [SerializeField, Min(2)] private int expandEveryNCards = 4;
 
         [Header("HUD")]
         [Tooltip("Strike pips, left to right. Filled as strikes accumulate.")]
@@ -232,7 +262,8 @@ namespace KrumbleHut.Drummi.FlashCards
             int effectiveLeadInBars = leadInBars * Mathf.Max(1, Mathf.RoundToInt(_activeTempoMultiplier));
             double barDuration = GameConstants.BEATS_PER_LOOP * (60.0 / bpm);
             double start       = virtualStartTime + effectiveLeadInBars * barDuration;
-            cardController.StartEndless(start, virtualStartTime, step.vocab, step.noteRange, EffectiveDoubleTimeChance(step));
+            cardController.StartEndless(start, virtualStartTime, step.vocab, step.noteRange, EffectiveDoubleTimeChance(step), SlotCountFor(step),
+                                        ExpandSlotsFor(step), step.expandChance, ExpandCadence());
         }
 
         public override void Cleanup()
@@ -338,8 +369,10 @@ namespace KrumbleHut.Drummi.FlashCards
             var step = escalationSteps[stepIndex];
             float dtChance = EffectiveDoubleTimeChance(step);
             Debug.Log($"[FlashCardsMode] Escalation step {stepIndex} at {_cardsCleared} cleared → " +
-                      $"vocab={step.vocab} notes={step.noteRange.x}-{step.noteRange.y} dtChance={dtChance:F2}");
-            cardController.SetCardConfig(step.vocab, step.noteRange, dtChance);
+                      $"vocab={step.vocab} notes={step.noteRange.x}-{step.noteRange.y} dtChance={dtChance:F2} " +
+                      $"rows={step.rows} expandRows={step.expandRows} expandChance={step.expandChance:F2}");
+            cardController.SetCardConfig(step.vocab, step.noteRange, dtChance, SlotCountFor(step),
+                                         ExpandSlotsFor(step), step.expandChance, ExpandCadence());
         }
 
         /// <summary>
@@ -349,6 +382,25 @@ namespace KrumbleHut.Drummi.FlashCards
         /// </summary>
         private float EffectiveDoubleTimeChance(EscalationStep step)
             => _activeTempoMultiplier > 1f ? 0f : step.doubleTimeChance;
+
+        /// <summary>
+        /// Beat slots for a step's BASE cards: rows x 4. Defensive floor of 1 row —
+        /// scene-serialized steps authored before this field existed deserialize
+        /// rows = 0.
+        /// </summary>
+        private static int SlotCountFor(EscalationStep step)
+            => Mathf.Max(1, step.rows) * 4;
+
+        /// <summary>
+        /// Beat slots for a step's EXPANDED cards; 0 = this step never expands
+        /// (expandRows unset or not larger than the base).
+        /// </summary>
+        private static int ExpandSlotsFor(EscalationStep step)
+            => step.expandRows > Mathf.Max(1, step.rows) ? step.expandRows * 4 : 0;
+
+        /// <summary>Cards-per-expansion in FixedCadence mode; 0 = RandomChance mode.</summary>
+        private int ExpandCadence()
+            => expandTrigger == ExpandTrigger.FixedCadence ? Mathf.Max(2, expandEveryNCards) : 0;
 
         private int StepIndexFor(int cardsCleared)
         {

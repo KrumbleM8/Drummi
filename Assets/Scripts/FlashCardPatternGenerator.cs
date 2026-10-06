@@ -4,7 +4,8 @@ using UnityEngine;
 namespace KrumbleHut.Drummi.Dungeons
 {
     /// <summary>
-    /// Generates a single Flash Card: 8 beat slots, each stamped with one
+    /// Generates a single Flash Card: slotCount beat slots (multiple of 4 — one
+    /// visual row per 4 beats; default 8), each stamped with one
     /// SquareTemplate from the authored vocabulary. A square is always exactly one
     /// beat; subdivided notes sit at fractional slots (eighths +0.5, sixteenths
     /// +0.25 steps, triplets +1/3 steps) with matching durations. No pad encoding —
@@ -28,8 +29,11 @@ namespace KrumbleHut.Drummi.Dungeons
     /// </summary>
     public class FlashCardPatternGenerator
     {
-        /// <summary>Number of beat slots on a card (2 rows x 4 squares).</summary>
+        /// <summary>Default number of beat slots on a card (2 rows x 4 squares) — dungeon rooms always use this.</summary>
         public const int SlotCount = 8;
+
+        /// <summary>Beats per visual row — rows always stay 4/4 bars.</summary>
+        public const int SlotsPerRow = 4;
 
         // Reused scratch pools — generator is single-threaded, one card at a time.
         private readonly List<SquareTemplate> _notePool   = new(4);
@@ -39,8 +43,13 @@ namespace KrumbleHut.Drummi.Dungeons
         /// <summary>
         /// Generates one card.
         /// </summary>
-        /// <param name="minNotes">Minimum note-bearing squares (clamped to [1, 8]).</param>
-        /// <param name="maxNotes">Maximum note-bearing squares (clamped to [minNotes, 8]).</param>
+        /// <param name="slotCount">
+        /// Beat slots on this card (multiple of 4; 8 = classic 2x4, 12 = 3 rows,
+        /// 20 = 5 rows). Endless-mode escalation grows this; dungeon rooms pass
+        /// <see cref="SlotCount"/>.
+        /// </param>
+        /// <param name="minNotes">Minimum note-bearing squares (clamped to [1, slotCount]).</param>
+        /// <param name="maxNotes">Maximum note-bearing squares (clamped to [minNotes, slotCount]).</param>
         /// <param name="constantType">Type stamped on every note (timing-only grading).</param>
         /// <param name="vocab">
         /// Template vocabulary. Must contain at least one note-bearing flag;
@@ -48,34 +57,39 @@ namespace KrumbleHut.Drummi.Dungeons
         /// sentinel to their Inspector default BEFORE calling.
         /// </param>
         /// <param name="templates">
-        /// Out: 8 entries, the template of each square. Drives the reveal visuals.
+        /// Out: slotCount entries, the template of each square. Drives the reveal visuals.
         /// </param>
         public List<DungeonBeat> GenerateCard(
-            int minNotes, int maxNotes, DungeonEnemyType constantType,
+            int slotCount, int minNotes, int maxNotes, DungeonEnemyType constantType,
             FlashCardVocab vocab, out SquareTemplate[] templates)
         {
             BuildPools(vocab);
 
+            slotCount = Mathf.Max(SlotsPerRow, slotCount);
             bool hasRest = (vocab & FlashCardVocab.Rest) != 0;
-            minNotes = Mathf.Clamp(minNotes, 1, SlotCount);
-            maxNotes = Mathf.Clamp(maxNotes, minNotes, SlotCount);
-            if (!hasRest) { minNotes = SlotCount; maxNotes = SlotCount; }
+            minNotes = Mathf.Clamp(minNotes, 1, slotCount);
+            maxNotes = Mathf.Clamp(maxNotes, minNotes, slotCount);
+            if (!hasRest) { minNotes = slotCount; maxNotes = slotCount; }
             int noteCount = Random.Range(minNotes, maxNotes + 1);
 
-            templates = new SquareTemplate[SlotCount];
-            for (int s = 0; s < SlotCount; s++) templates[s] = SquareTemplate.Rest;
+            templates = new SquareTemplate[slotCount];
+            for (int s = 0; s < slotCount; s++) templates[s] = SquareTemplate.Rest;
 
             // Slot 0 anchor: downbeat-bearing template only.
             templates[0] = _anchorPool[Random.Range(0, _anchorPool.Count)];
 
             // Distribute the remaining (noteCount - 1) note-bearing squares over
-            // slots 1–7 via partial shuffle; each draws uniformly from the note pool.
+            // slots 1..slotCount-1 via partial shuffle. Row-start slots (s % 4 == 0)
+            // draw from the anchor pool so each visual row opens readably WHEN it
+            // opens with a note at all; other slots draw uniformly from the note pool.
             _freeSlots.Clear();
-            for (int s = 1; s < SlotCount; s++) _freeSlots.Add(s);
+            for (int s = 1; s < slotCount; s++) _freeSlots.Add(s);
             for (int i = 0; i < noteCount - 1 && _freeSlots.Count > 0; i++)
             {
                 int pick = Random.Range(0, _freeSlots.Count);
-                templates[_freeSlots[pick]] = _notePool[Random.Range(0, _notePool.Count)];
+                int slot = _freeSlots[pick];
+                var pool = slot % SlotsPerRow == 0 ? _anchorPool : _notePool;
+                templates[slot] = pool[Random.Range(0, pool.Count)];
                 _freeSlots.RemoveAt(pick);
             }
 
@@ -85,7 +99,7 @@ namespace KrumbleHut.Drummi.Dungeons
             // precision, a non-issue (Phase 6 recon).
             const float Third = 1f / 3f;
             var beats = new List<DungeonBeat>(noteCount * 4);
-            for (int s = 0; s < SlotCount; s++)
+            for (int s = 0; s < slotCount; s++)
             {
                 switch (templates[s])
                 {

@@ -17,8 +17,9 @@ namespace KrumbleHut.Drummi.Dungeons
     /// is the one locally polled piece: a pure function of GameClock.GameTime against
     /// the controller's PhraseTiming — no coroutines, no Time.time.
     ///
-    /// Layout follows the GardenPlot/DrumGridCell pattern: 8 persistent squares with
-    /// manual RectTransform placement, no GridLayoutGroup, no pooling.
+    /// Layout: the grid is RUNTIME-BUILT from squarePrefab (EnsureGrid) because the
+    /// row count is dynamic (2/3/5 rows in endless mode) — manual RectTransform
+    /// placement, no GridLayoutGroup; squares persist until the slot count changes.
     ///
     /// This component lives on an always-active object (the FlashCardController's) so
     /// events are never missed; <see cref="cardRoot"/> is toggled for visibility.
@@ -28,7 +29,7 @@ namespace KrumbleHut.Drummi.Dungeons
     ///   controller  — FlashCardController whose events drive this view
     ///   cardRoot    — panel root under DungeonCanvas/GameplayUI (starts inactive)
     ///   cardBorder  — border image behind the card background ("your turn" state)
-    ///   squares     — 8 entries in reading order (back image, glyph image, cursor overlay)
+    ///   squarePrefab — FlashCardSquareWidget prefab (root 140x140, back image, glyph + cursor children)
     ///   noteSprite / restSprite / eighthPairSprite / offbeatEighthSprite /
     ///   sixteenthQuadSprite / tripletSprite — per-template notation glyphs
     ///   (placeholder art, drop-in swap later)
@@ -53,7 +54,24 @@ namespace KrumbleHut.Drummi.Dungeons
         [SerializeField] private FlashCardController controller;
         [SerializeField] private RectTransform cardRoot;
         [SerializeField] private Image cardBorder;
-        [SerializeField] private Square[] squares = new Square[8];
+        [Tooltip("Square prefab instantiated per slot — the grid is runtime-built because the " +
+                 "row count is dynamic (2/3/5 rows in endless mode).")]
+        [SerializeField] private FlashCardSquareWidget squarePrefab;
+
+        [Header("Grid Layout (defaults match the original authored 2x4 card)")]
+        [SerializeField, Min(1)] private int columns = 4;
+        [SerializeField] private float cellSize = 140f;
+        [Tooltip("Horizontal center-to-center spacing between columns.")]
+        [SerializeField] private float pitchX = 152f;
+        [Tooltip("Vertical center-to-center spacing between rows.")]
+        [SerializeField] private float pitchY = 156f;
+        [Tooltip("Space between the card's top edge and the first row of squares.")]
+        [SerializeField] private float topPadding = 38f;
+        [Tooltip("Space between the last row of squares and the card's bottom edge.")]
+        [SerializeField] private float bottomPadding = 46f;
+        [Tooltip("Card heights beyond this uniformly scale cardRoot down so tall " +
+                 "(5-row) cards stay inside the original framing.")]
+        [SerializeField] private float maxCardHeight = 560f;
 
         [Header("Glyphs (drop-in swap for final art)")]
         [SerializeField] private Sprite noteSprite;
@@ -149,22 +167,28 @@ namespace KrumbleHut.Drummi.Dungeons
         private double       _beatInterval;
         private int          _cursorIndex = -1;
 
-        // Runtime-added metronome wobble per square — enabled only while Performing
-        // (the player's round). Added in Start so GameManager.instance exists.
-        private readonly UIRotateWobble[] _wobbles = new UIRotateWobble[8];
+        // Runtime-built grid: squares + all per-slot state are (re)allocated by
+        // EnsureGrid whenever the card's slot count changes.
+        private Square[] squares = System.Array.Empty<Square>();
+        private int _builtSlotCount;
 
-        private readonly Tween[] _revealTweens = new Tween[8];
-        private readonly Tween[] _popTweens  = new Tween[8];
+        // Runtime-added metronome wobble per square — enabled only while Performing
+        // (the player's round). Added in EnsureGrid (first build runs in Start so
+        // GameManager.instance exists).
+        private UIRotateWobble[] _wobbles = System.Array.Empty<UIRotateWobble>();
+
+        private Tween[] _revealTweens = System.Array.Empty<Tween>();
+        private Tween[] _popTweens    = System.Array.Empty<Tween>();
         // Per-slot destruction tracking: template (for expected tap count), confirmed
         // hits so far, whether the block has been destroyed this card, and whether
         // an out-of-window tap landed on the slot (keeps miss-tapped rests alive).
-        private readonly SquareTemplate[] _templates  = new SquareTemplate[8];
-        private readonly int[]  _hitCounts  = new int[8];
-        private readonly bool[] _destroyed  = new bool[8];
-        private readonly bool[] _missTapped = new bool[8];
+        private SquareTemplate[] _templates  = System.Array.Empty<SquareTemplate>();
+        private int[]  _hitCounts  = System.Array.Empty<int>();
+        private bool[] _destroyed  = System.Array.Empty<bool>();
+        private bool[] _missTapped = System.Array.Empty<bool>();
         // Face color applied at reveal (note vs rest) — tint fades return to this,
         // never to a mid-fade sample of back.color.
-        private readonly Color[] _faceColors = new Color[8];
+        private Color[] _faceColors = System.Array.Empty<Color>();
         private Tween            _borderTween;
         private Tween            _hideDelayTween;
         private Tween            _bannerTween;
@@ -174,18 +198,87 @@ namespace KrumbleHut.Drummi.Dungeons
         #region Unity
         private void Start()
         {
-            // UIRotateWobble.Awake reads GameManager.instance.metronome, so add the
-            // components after all scene Awakes have run.
-            for (int i = 0; i < squares.Length; i++)
+            // Initial build of the classic 2x4 grid. Deferred to Start because
+            // UIRotateWobble.Awake reads GameManager.instance.metronome, which must
+            // exist before the wobble components are added.
+            EnsureGrid(FlashCardPatternGenerator.SlotCount);
+        }
+
+        /// <summary>
+        /// (Re)builds the square grid for <paramref name="slotCount"/> slots —
+        /// 4 columns, one row per 4 beats. No-op when the built count already
+        /// matches. Reallocates all per-slot state, recomputes the card height,
+        /// and uniformly scales cardRoot down when a tall (5-row) card would
+        /// exceed maxCardHeight. Layout math reproduces the original authored
+        /// 2x4 card exactly at slotCount = 8.
+        /// </summary>
+        private void EnsureGrid(int slotCount)
+        {
+            if (slotCount == _builtSlotCount) return;
+            if (squarePrefab == null || cardRoot == null)
             {
-                if (squares[i]?.root == null) continue;
-                var wobble = squares[i].root.gameObject.AddComponent<UIRotateWobble>();
+                Debug.LogWarning("[FlashCardView] squarePrefab or cardRoot not assigned — cannot build grid.");
+                return;
+            }
+
+            // Tear down the previous grid. SetLink kills in-flight tweens with
+            // their GameObjects; wobbles live on the destroyed roots too.
+            for (int i = 0; i < squares.Length; i++)
+                if (squares[i]?.root != null)
+                    Destroy(squares[i].root.gameObject);
+
+            int rows = Mathf.CeilToInt(slotCount / (float)columns);
+
+            squares       = new Square[slotCount];
+            _wobbles      = new UIRotateWobble[slotCount];
+            _revealTweens = new Tween[slotCount];
+            _popTweens    = new Tween[slotCount];
+            _templates    = new SquareTemplate[slotCount];
+            _hitCounts    = new int[slotCount];
+            _destroyed    = new bool[slotCount];
+            _missTapped   = new bool[slotCount];
+            _faceColors   = new Color[slotCount];
+
+            for (int i = 0; i < slotCount; i++)
+            {
+                int row = i / columns;
+                int col = i % columns;
+
+                var widget = Instantiate(squarePrefab, cardRoot);
+                widget.name = $"Sq{i}";
+                var rt = widget.root;
+                rt.anchorMin        = new Vector2(0.5f, 1f);
+                rt.anchorMax        = new Vector2(0.5f, 1f);
+                rt.pivot            = new Vector2(0.5f, 0.5f);
+                rt.sizeDelta        = new Vector2(cellSize, cellSize);
+                rt.anchoredPosition = new Vector2(
+                    (col - (columns - 1) * 0.5f) * pitchX,
+                    -(topPadding + cellSize * 0.5f + row * pitchY));
+
+                squares[i] = new Square { root = rt, back = widget.back, glyph = widget.glyph, cursor = widget.cursor };
+
+                var wobble = rt.gameObject.AddComponent<UIRotateWobble>();
                 wobble.rotationAmount   = wobbleRotationAmount;
                 wobble.beatsPerCycle    = wobbleBeatsPerCycle;
                 wobble.phaseOffsetBeats = 0f; // unison across the card
                 wobble.enabled          = false;
                 _wobbles[i] = wobble;
+
+                ResetSquare(i);
             }
+
+            // Banner reads over everything; new squares were appended after it.
+            if (doubleTimeBanner != null) doubleTimeBanner.SetAsLastSibling();
+
+            // Card height: padding + rows, minus the trailing inter-row gap.
+            float height = topPadding + rows * pitchY - (pitchY - cellSize) + bottomPadding;
+            var size = cardRoot.sizeDelta;
+            size.y = height;
+            cardRoot.sizeDelta = size;
+            cardRoot.localScale = Vector3.one * (height > maxCardHeight ? maxCardHeight / height : 1f);
+
+            _builtSlotCount = slotCount;
+            Debug.Log($"[FlashCardView] Grid built: {slotCount} slots ({rows}x{columns}), height={height:F0}, scale={cardRoot.localScale.x:F3}");
         }
 
         private void OnEnable()
@@ -239,10 +332,14 @@ namespace KrumbleHut.Drummi.Dungeons
         private void HandleCardRevealStart(int cardIndex)
         {
             _timing       = controller.CurrentTiming;
-            // Derive from the timing itself (per-card tempo makes the window shorter
-            // on Double Time cards; PhraseLength keeps this correct if N ever changes).
-            _beatInterval = (_timing.ResponseStartTime - _timing.CallStartTime)
+            // Derive from the PERFORM window (eval - responseStart): correct under
+            // per-card tempo AND compressed reveals, where the reveal window is
+            // shorter than N beats. Drives the cursor + rest finalization only.
+            _beatInterval = (_timing.EvaluationTime - _timing.ResponseStartTime)
                             / _timing.PhraseLength;
+
+            // Rebuild the grid when this card's slot count differs (escalation rows).
+            EnsureGrid(_timing.PhraseLength);
 
             // A pending post-completion hide belongs to a previous encounter — cancel it.
             _hideDelayTween?.Kill();
@@ -274,7 +371,7 @@ namespace KrumbleHut.Drummi.Dungeons
             var sq = squares[slot];
             if (sq?.root == null) return;
 
-            double expected = _timing.CallStartTime + slot * _beatInterval;
+            double expected = _timing.CallStartTime + slot * controller.CurrentRevealSlotInterval;
             double delta    = GameClock.Instance != null ? GameClock.Instance.GameTime - expected : 0.0;
             Debug.Log($"[FlashCardView] Reveal pop | card={cardIndex} slot={slot} {template} " +
                       $"delta=+{delta * 1000.0:F3}ms");

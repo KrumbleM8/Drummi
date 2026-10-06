@@ -64,14 +64,24 @@ namespace KrumbleHut.Drummi.Dungeons
         [SerializeField, Min(1)] private int cardsPerEncounter = 4;
 
         [Tooltip("Minimum notes per card (beat 1 is always a note).")]
-        [SerializeField, Range(1, 8)] private int minNotes = 3;
+        [SerializeField, Range(1, 20)] private int minNotes = 3;
 
         [Tooltip("Maximum notes per card.")]
-        [SerializeField, Range(1, 8)] private int maxNotes = 6;
+        [SerializeField, Range(1, 20)] private int maxNotes = 6;
 
         [Tooltip("Default template vocabulary when the room authors None. " +
                  "Quarter | Rest ≡ pre-eighths behavior (quarters and full rests only).")]
         [SerializeField] private FlashCardVocab vocabulary = FlashCardVocab.Quarter | FlashCardVocab.Rest;
+
+        [Header("Reveal Compression (dev toggle)")]
+        [Tooltip("ON: the reveal phase is capped at revealBars bars — bigger cards pop their squares " +
+                 "proportionally faster, so the wait never grows with row count. OFF: classic symmetric " +
+                 "timing (reveal = perform = N beats). Identical for 8-slot cards either way.")]
+        [SerializeField] private bool compressReveal = true;
+
+        [Tooltip("Reveal length in bars (4 beats each) when compression is ON. 1 = every card reveals in " +
+                 "one bar (expanded cards pop double-time-style); 2 = the classic 8-beat reveal.")]
+        [SerializeField, Min(1)] private int revealBars = 1;
 
         #endregion
 
@@ -118,7 +128,31 @@ namespace KrumbleHut.Drummi.Dungeons
         #endregion
 
         #region State
-        private const int CardBeats = FlashCardPatternGenerator.SlotCount; // N = 8
+        // Per-card slot count (N). Config (_activeSlotCount) is applied to the card
+        // at the same boundary as the tempo roll — StartCore / AdvanceCard — so a
+        // ladder change lands on exactly the next card, never mid-card. Dungeon
+        // rooms always run the classic 8 (2 rows x 4).
+        private int _cardSlotCount   = FlashCardPatternGenerator.SlotCount;
+        private int _activeSlotCount = FlashCardPatternGenerator.SlotCount;
+
+        // Reveal phase length of the current card, in card-beats. Equals
+        // _cardSlotCount when compression is off (symmetric), else capped at
+        // revealBars bars. Squares pop at _revealSlotInterval spacing so all
+        // _cardSlotCount pops always fit the reveal window.
+        private int    _cardRevealBeats = FlashCardPatternGenerator.SlotCount;
+        private double _revealSlotInterval;
+
+        // Card expansion (endless mode): occasionally a card is bigger than the
+        // step's base size. 0 expand-slots = never. expandEvery > 0 = strict
+        // every-Nth cadence; otherwise each card rolls expandChance. The authored
+        // noteRange describes the BASE size — expanded cards scale it by the row
+        // ratio so note DENSITY stays constant (_cardMinNotes/_cardMaxNotes).
+        private int   _activeExpandSlotCount;
+        private float _activeExpandChance;
+        private int   _activeExpandEvery;
+        private int   _cardsSinceExpand;
+        private int   _cardMinNotes;
+        private int   _cardMaxNotes;
 
         private bool         _running;
         private int          _cardIndex;
@@ -187,6 +221,12 @@ namespace KrumbleHut.Drummi.Dungeons
         /// Valid from OnCardRevealStart; the view reads this for the telegraph.
         /// </summary>
         public float CurrentCardTempoMultiplier => _cardTempoMultiplier;
+
+        /// <summary>
+        /// Seconds between consecutive square reveals on the current card — shorter
+        /// than the perform-bar beat interval when the reveal is compressed.
+        /// </summary>
+        public double CurrentRevealSlotInterval => _revealSlotInterval;
         #endregion
 
         #region Public API
@@ -246,8 +286,19 @@ namespace KrumbleHut.Drummi.Dungeons
         /// Initial probability [0,1] that a card is an in-run Double Time card (whole
         /// reveal/perform cycle at 2x the base grid). 0 = never (dungeon rooms).
         /// </param>
-        public void StartEndless(double startVirtualTime, double gridOriginVirtualTime, FlashCardVocab vocab, Vector2Int noteRange, float doubleTimeChance = 0f)
-            => StartCore(startVirtualTime, 0, noteRange, vocab, gridOriginVirtualTime, endless: true, doubleTimeChance);
+        /// <param name="slotCount">
+        /// Initial beat slots per card (multiple of 4; one visual row per 4 beats).
+        /// 0 or negative = the classic 8 (2 rows x 4).
+        /// </param>
+        /// <param name="expandSlotCount">
+        /// Slots of an occasional EXPANDED card (0 or &lt;= slotCount = never expand).
+        /// </param>
+        /// <param name="expandChance">Per-card expansion probability [0,1] when expandEvery is 0.</param>
+        /// <param name="expandEvery">&gt; 0 = strict cadence: every Nth card expands instead of rolling.</param>
+        public void StartEndless(double startVirtualTime, double gridOriginVirtualTime, FlashCardVocab vocab, Vector2Int noteRange,
+                                 float doubleTimeChance = 0f, int slotCount = 0, int expandSlotCount = 0, float expandChance = 0f, int expandEvery = 0)
+            => StartCore(startVirtualTime, 0, noteRange, vocab, gridOriginVirtualTime, endless: true, doubleTimeChance, slotCount,
+                         expandSlotCount, expandChance, expandEvery);
 
         /// <summary>
         /// Updates the generation config used for SUBSEQUENT cards. The current card
@@ -255,9 +306,14 @@ namespace KrumbleHut.Drummi.Dungeons
         /// reveal-bar start, so changes made from an OnCardEvaluated handler land on
         /// exactly the next card. Used by the endless mode's escalation ladder.
         /// </summary>
-        public void SetCardConfig(FlashCardVocab vocab, Vector2Int noteRange, float doubleTimeChance = 0f)
+        public void SetCardConfig(FlashCardVocab vocab, Vector2Int noteRange, float doubleTimeChance = 0f, int slotCount = 0,
+                                  int expandSlotCount = 0, float expandChance = 0f, int expandEvery = 0)
         {
             _activeDoubleTimeChance = Mathf.Clamp01(doubleTimeChance);
+            _activeSlotCount        = ResolveSlotCount(slotCount);
+            _activeExpandSlotCount  = expandSlotCount;
+            _activeExpandChance     = Mathf.Clamp01(expandChance);
+            _activeExpandEvery      = Mathf.Max(0, expandEvery);
             bool hasRange   = noteRange.x > 0 && noteRange.y > 0;
             _activeMinNotes = hasRange ? noteRange.x : minNotes;
             _activeMaxNotes = hasRange ? noteRange.y : maxNotes;
@@ -268,11 +324,17 @@ namespace KrumbleHut.Drummi.Dungeons
             }
             _activeVocab = vocab != FlashCardVocab.None ? vocab : vocabulary;
             Debug.Log($"[FlashCard] Card config → notes={_activeMinNotes}-{_activeMaxNotes} vocab={_activeVocab} " +
-                      $"dtChance={_activeDoubleTimeChance:F2} (applies from next card)");
+                      $"dtChance={_activeDoubleTimeChance:F2} slots={_activeSlotCount} (applies from next card)");
         }
 
+        /// <summary>0 or negative = classic 8; otherwise clamped up to one full row (4).</summary>
+        private static int ResolveSlotCount(int slotCount)
+            => slotCount <= 0 ? FlashCardPatternGenerator.SlotCount
+                              : Mathf.Max(FlashCardPatternGenerator.SlotsPerRow, slotCount);
+
         private void StartCore(double startVirtualTime, int cardCount, Vector2Int noteRange, FlashCardVocab vocab,
-                               double? gridOriginOverride, bool endless, float doubleTimeChance = 0f)
+                               double? gridOriginOverride, bool endless, float doubleTimeChance = 0f, int slotCount = 0,
+                               int expandSlotCount = 0, float expandChance = 0f, int expandEvery = 0)
         {
             if (metronome == null)
             {
@@ -297,6 +359,11 @@ namespace KrumbleHut.Drummi.Dungeons
             _endless     = endless;
 
             _activeDoubleTimeChance = Mathf.Clamp01(doubleTimeChance);
+            _activeSlotCount        = ResolveSlotCount(slotCount);
+            _activeExpandSlotCount  = expandSlotCount;
+            _activeExpandChance     = Mathf.Clamp01(expandChance);
+            _activeExpandEvery      = Mathf.Max(0, expandEvery);
+            _cardsSinceExpand       = 0;
             _baseBpm                = metronome.bpm;
             _baseBeatInterval       = 60.0 / _baseBpm;
             RollNextCardTempo();
@@ -350,7 +417,7 @@ namespace KrumbleHut.Drummi.Dungeons
                                  $"raw={raw:F6} snapped={snapped:F6}");
             }
 
-            _current = PhraseTiming.Compute(0, CardBeats, snapped, _cardBeatInterval);
+            _current = PhraseTiming.Compute(0, _cardSlotCount, snapped, _cardBeatInterval, _cardRevealBeats);
 
             Debug.Log($"[FlashCard] === ENCOUNTER START ===");
             Debug.Log($"[FlashCard]   BPM={_baseBpm:F2}  beatInterval={_baseBeatInterval:F6}s  " +
@@ -419,7 +486,7 @@ namespace KrumbleHut.Drummi.Dungeons
                 }
 
                 double delta = now - _current.CallStartTime;
-                Debug.Log($"[FlashCard] RevealStart  | card={_cardIndex} tempo=x{_cardTempoMultiplier:F0} " +
+                Debug.Log($"[FlashCard] RevealStart  | card={_cardIndex} tempo=x{_cardTempoMultiplier:F0} slots={_cardSlotCount} " +
                           $"expected={_current.CallStartTime:F6} actual={now:F6} delta=+{delta * 1000.0:F3}ms");
                 OnCardRevealStart?.Invoke(_cardIndex);
             }
@@ -429,13 +496,13 @@ namespace KrumbleHut.Drummi.Dungeons
             // later; a log/colored square for now).
             if (_revealFired && !_performFired)
             {
-                while (_revealSlot < CardBeats &&
-                       now >= _current.CallStartTime + _revealSlot * _cardBeatInterval)
+                while (_revealSlot < _cardSlotCount &&
+                       now >= _current.CallStartTime + _revealSlot * _revealSlotInterval)
                 {
                     int slot     = _revealSlot++;
                     var template = _templates[slot];
 
-                    double expected = _current.CallStartTime + slot * _cardBeatInterval;
+                    double expected = _current.CallStartTime + slot * _revealSlotInterval;
                     Debug.Log($"[FlashCard] Reveal       | card={_cardIndex} slot={slot} " +
                               $"{template}  " +
                               $"expected={expected:F6} actual={now:F6} delta=+{(now - expected) * 1000.0:F3}ms");
@@ -470,7 +537,7 @@ namespace KrumbleHut.Drummi.Dungeons
                 {
                     // timeOffset maps reveal-bar beats into perform-bar time coordinates,
                     // identical to C&R's echo evaluation (N * beatInterval window shift).
-                    double timeOffset = CardBeats * _cardBeatInterval;
+                    double timeOffset = _cardSlotCount * _cardBeatInterval;
                     result = evaluator.EvaluateBar(inputReader.playerInputData, _cardBeats, timeOffset);
                     if (result != null)
                         Debug.Log($"[FlashCard]   Grade={result.Grade}  points={result.PointsAwarded}  " +
@@ -514,7 +581,7 @@ namespace KrumbleHut.Drummi.Dungeons
             // spans 16 half-beats = 8 base beats, so every card boundary stays on
             // the base bar grid regardless of the mix of normal/DT cards.
             RollNextCardTempo();
-            _current      = PhraseTiming.Compute(_cardIndex, CardBeats, _current.NextPhraseStart, _cardBeatInterval);
+            _current      = PhraseTiming.Compute(_cardIndex, _cardSlotCount, _current.NextPhraseStart, _cardBeatInterval, _cardRevealBeats);
             _revealFired  = false;
             _performFired = false;
             _revealSlot   = 0;
@@ -525,14 +592,41 @@ namespace KrumbleHut.Drummi.Dungeons
         }
 
         /// <summary>
-        /// Rolls the NEXT card's tempo (1x, or 2x with _activeDoubleTimeChance) and
-        /// retunes metronome.bpm so the live-read grading windows match the card.
-        /// Must be called before PhraseTiming.Compute for the card it applies to.
+        /// Rolls the NEXT card's tempo (1x, or 2x with _activeDoubleTimeChance),
+        /// retunes metronome.bpm so the live-read grading windows match the card,
+        /// and applies the active slot count. Must be called before
+        /// PhraseTiming.Compute for the card it applies to.
         /// </summary>
         private void RollNextCardTempo()
         {
             _cardTempoMultiplier = UnityEngine.Random.value < _activeDoubleTimeChance ? 2f : 1f;
             _cardBeatInterval    = _baseBeatInterval / _cardTempoMultiplier;
+
+            // Expansion roll: occasionally a card is bigger than the step's base.
+            bool expand = false;
+            if (_activeExpandSlotCount > _activeSlotCount)
+            {
+                if (_activeExpandEvery > 0)
+                {
+                    _cardsSinceExpand++;
+                    if (_cardsSinceExpand >= _activeExpandEvery) { expand = true; _cardsSinceExpand = 0; }
+                }
+                else
+                {
+                    expand = UnityEngine.Random.value < _activeExpandChance;
+                }
+            }
+            _cardSlotCount = expand ? _activeExpandSlotCount : _activeSlotCount;
+
+            // Proportional density: the authored range describes the base size.
+            float ratio   = (float)_cardSlotCount / _activeSlotCount;
+            _cardMinNotes = Mathf.Max(1, Mathf.RoundToInt(_activeMinNotes * ratio));
+            _cardMaxNotes = Mathf.Max(_cardMinNotes, Mathf.RoundToInt(_activeMaxNotes * ratio));
+
+            _cardRevealBeats     = compressReveal
+                ? Mathf.Min(_cardSlotCount, revealBars * 4)
+                : _cardSlotCount;
+            _revealSlotInterval  = _cardRevealBeats * _cardBeatInterval / _cardSlotCount;
             if (metronome != null) metronome.bpm = _baseBpm * _cardTempoMultiplier;
         }
 
@@ -565,7 +659,7 @@ namespace KrumbleHut.Drummi.Dungeons
             // first note must survive window-open so ReplayBuffer can fire it.
             inputReader.ClearRecordedInputs();
             inputReader.SetScheduledBeats(_cardBeats);
-            inputReader.SetTimeOffset(CardBeats * _cardBeatInterval);
+            inputReader.SetTimeOffset(_cardSlotCount * _cardBeatInterval);
             inputReader.CoyoteWindowStartOverride = null;  // clear before opening so replay goes through normally
             // Any pad tap is tagged to the constant type — Tier 1 grading is timing-only.
             inputReader.SingleDrumEchoConstant = ConstantType;
@@ -618,7 +712,7 @@ namespace KrumbleHut.Drummi.Dungeons
             // Find the scheduled note nearest the tap in perform-bar time coordinates
             // (reveal-bar note time + N * beatInterval — same mapping as evaluation).
             double now        = GameClock.Instance.GameTime;
-            double timeOffset = CardBeats * _cardBeatInterval;
+            double timeOffset = _cardSlotCount * _cardBeatInterval;
             DungeonScheduledBeat nearest = null;
             double bestDelta = double.MaxValue;
             foreach (var beat in _cardBeats)
@@ -629,8 +723,10 @@ namespace KrumbleHut.Drummi.Dungeons
             if (nearest == null) return;
 
             // Floor (with fp epsilon) so offbeat/subdivided notes map to their host square.
-            int slot = (int)Math.Floor((nearest.scheduledTime - _current.CallStartTime) / _cardBeatInterval + 1e-6);
-            slot = Mathf.Clamp(slot, 0, CardBeats - 1);
+            // Slots are measured on the uncompressed reveal timeline (see BuildCard).
+            double revealOrigin = _current.ResponseStartTime - _cardSlotCount * _cardBeatInterval;
+            int slot = (int)Math.Floor((nearest.scheduledTime - revealOrigin) / _cardBeatInterval + 1e-6);
+            slot = Mathf.Clamp(slot, 0, _cardSlotCount - 1);
             OnPlayerHit?.Invoke(slot, quality);
         }
 
@@ -643,7 +739,7 @@ namespace KrumbleHut.Drummi.Dungeons
 
             double now  = GameClock.Instance.GameTime;
             int    slot = (int)Math.Floor((now - _current.ResponseStartTime) / _cardBeatInterval);
-            slot = Mathf.Clamp(slot, 0, CardBeats - 1);
+            slot = Mathf.Clamp(slot, 0, _cardSlotCount - 1);
             OnPlayerMissTap?.Invoke(slot);
         }
         #endregion
@@ -652,13 +748,19 @@ namespace KrumbleHut.Drummi.Dungeons
         private List<DungeonScheduledBeat> BuildCard(PhraseTiming timing, out SquareTemplate[] templates)
         {
             var beats  = _cardGenerator.GenerateCard(
-                _activeMinNotes, _activeMaxNotes, ConstantType, _activeVocab, out templates);
+                _cardSlotCount, _cardMinNotes, _cardMaxNotes, ConstantType, _activeVocab, out templates);
             var result = new List<DungeonScheduledBeat>(beats.Count);
+            // Beats are scheduled on the UNCOMPRESSED reveal timeline: an N-beat bar
+            // ending exactly at ResponseStartTime, so scheduledTime + N*beatInterval
+            // lands on the perform-bar target. With compression off this origin is
+            // just CallStartTime; with it on, the visual reveal (compressed spacing)
+            // and the grading timeline (full spacing) intentionally differ.
+            double revealOrigin = timing.ResponseStartTime - _cardSlotCount * _cardBeatInterval;
             foreach (var b in beats)
             {
                 // b.timeSlot is in beats from card start (may be half-integral for
                 // eighths); multiply by the card's beat interval for seconds.
-                double virtualTime = timing.CallStartTime + b.timeSlot * _cardBeatInterval;
+                double virtualTime = revealOrigin + b.timeSlot * _cardBeatInterval;
                 result.Add(new DungeonScheduledBeat(virtualTime, b.enemyType));
             }
 
@@ -701,8 +803,8 @@ namespace KrumbleHut.Drummi.Dungeons
 
         private void LogCard(int cardIndex, PhraseTiming timing, SquareTemplate[] templates)
         {
-            var slots = new char[CardBeats];
-            for (int i = 0; i < CardBeats; i++) slots[i] = templates[i].ToLogChar();
+            var slots = new char[_cardSlotCount];
+            for (int i = 0; i < _cardSlotCount; i++) slots[i] = templates[i].ToLogChar();
             Debug.Log($"[FlashCard] Card stored  | card={cardIndex} pattern=[{new string(slots)}] " +
                       $"reveal=[{timing.CallStartTime:F6}, {timing.ResponseStartTime:F6})");
         }
