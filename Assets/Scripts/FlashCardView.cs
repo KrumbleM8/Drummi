@@ -71,6 +71,16 @@ namespace KrumbleHut.Drummi.Dungeons
         [SerializeField] private Color borderYourTurnColor = new Color(1f, 0.82f, 0.25f, 0.9f);
         [SerializeField] private Color cursorColor       = new Color(1f, 1f, 1f, 0.35f);
 
+        [Header("Double Time Telegraph")]
+        [Tooltip("Banner root (e.g. a 'DOUBLE TIME!' TMP text under cardRoot, starts inactive). " +
+                 "Pops in at a DT card's reveal and stays up through its perform bar.")]
+        [SerializeField] private RectTransform doubleTimeBanner;
+        [Tooltip("Border tint while a Double Time card is live — distinct from the 'your turn' gold.")]
+        [SerializeField] private Color borderDoubleTimeColor = new Color(1f, 0.25f, 0.55f, 0.95f);
+        [Tooltip("One-shot cue played at a Double Time card's reveal start (audio telegraph alongside " +
+                 "the banner). Played through AudioManager's misc speaker; optional.")]
+        [SerializeField] private AudioClip doubleTimeCueClip;
+
         [Header("Grade Flash Colors (per-card evaluation feedback)")]
         [SerializeField] private Color gradeAllPerfectColor = new Color(1f, 0.85f, 0.30f, 1f);
         [SerializeField] private Color gradeAllGoodColor    = new Color(0.35f, 0.90f, 0.40f, 1f);
@@ -157,6 +167,7 @@ namespace KrumbleHut.Drummi.Dungeons
         private readonly Color[] _faceColors = new Color[8];
         private Tween            _borderTween;
         private Tween            _hideDelayTween;
+        private Tween            _bannerTween;
         private bool             _gradeFlashActive;
         #endregion
 
@@ -228,8 +239,10 @@ namespace KrumbleHut.Drummi.Dungeons
         private void HandleCardRevealStart(int cardIndex)
         {
             _timing       = controller.CurrentTiming;
+            // Derive from the timing itself (per-card tempo makes the window shorter
+            // on Double Time cards; PhraseLength keeps this correct if N ever changes).
             _beatInterval = (_timing.ResponseStartTime - _timing.CallStartTime)
-                            / FlashCardPatternGenerator.SlotCount;
+                            / _timing.PhraseLength;
 
             // A pending post-completion hide belongs to a previous encounter — cancel it.
             _hideDelayTween?.Kill();
@@ -243,8 +256,15 @@ namespace KrumbleHut.Drummi.Dungeons
             // zero-gap, so the flash must bleed into this reveal bar to be readable.
             for (int i = 0; i < squares.Length; i++) ResetSquare(i);
             SetCursor(-1);
+
+            // Double Time telegraph: banner pops at reveal and stays up for the whole
+            // card; the border tints too unless a grade flash is still fading (the
+            // banner alone carries the telegraph in that case).
+            bool doubleTime = controller.CurrentCardTempoMultiplier > 1f;
+            SetDoubleTimeBanner(doubleTime);
+            if (doubleTime) PlayDoubleTimeCue();
             if (!_gradeFlashActive)
-                SetBorder(borderIdleColor, animate: false);
+                SetBorder(doubleTime ? borderDoubleTimeColor : borderIdleColor, animate: doubleTime);
             _state = ViewState.Revealing;
         }
 
@@ -552,6 +572,46 @@ namespace KrumbleHut.Drummi.Dungeons
             _borderTween = seq;
         }
 
+        /// <summary>
+        /// Shows/hides the Double Time banner. Show pops it in from scale 0 (same
+        /// OutBack vocabulary as the reveal pops); hide is immediate — the banner's
+        /// exit moment is the next normal card's reveal, which is not a beat the
+        /// player needs dressed.
+        /// </summary>
+        private void SetDoubleTimeBanner(bool show)
+        {
+            if (doubleTimeBanner == null) return;
+            _bannerTween?.Kill();
+            _bannerTween = null;
+            if (show)
+            {
+                doubleTimeBanner.gameObject.SetActive(true);
+                doubleTimeBanner.localScale = Vector3.zero;
+                _bannerTween = doubleTimeBanner.DOScale(1f, 0.15f)
+                                               .SetEase(Ease.OutBack)
+                                               .SetLink(doubleTimeBanner.gameObject);
+            }
+            else
+            {
+                doubleTimeBanner.localScale = Vector3.one;
+                doubleTimeBanner.gameObject.SetActive(false);
+            }
+        }
+
+        /// <summary>
+        /// Audio half of the Double Time telegraph: one-shot on the misc speaker at
+        /// reveal start. The reveal bar is otherwise silent by design, so a single
+        /// cue reads clearly without fighting the BGM.
+        /// </summary>
+        private void PlayDoubleTimeCue()
+        {
+            if (doubleTimeCueClip == null) return;
+            var audio = AudioManager.instance;
+            if (audio == null || audio.speakers == null || audio.speakers.Length < 3) return;
+            if (audio.speakers[2] == null) return;
+            audio.speakers[2].PlayOneShot(doubleTimeCueClip);
+        }
+
         private void SetBorder(Color color, bool animate)
         {
             if (cardBorder == null) return;
@@ -637,6 +697,7 @@ namespace KrumbleHut.Drummi.Dungeons
             _borderTween = null;
             _hideDelayTween?.Kill();
             _hideDelayTween   = null;
+            SetDoubleTimeBanner(false);
             _gradeFlashActive = false;
             _state       = ViewState.Hidden;
             _cursorIndex = -1;

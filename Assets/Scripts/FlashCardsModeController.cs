@@ -54,6 +54,11 @@ namespace KrumbleHut.Drummi.FlashCards
 
             [Tooltip("Note-bearing-square range from this step onward (x = min, y = max).")]
             public Vector2Int noteRange = new(3, 4);
+
+            [Tooltip("Chance [0,1] that a card is an in-run DOUBLE TIME card (whole reveal/perform cycle " +
+                     "at 2x the grid) from this step onward. Forced to 0 in the Double Time menu variant — " +
+                     "stacking to 4x is not playable.")]
+            [Range(0f, 1f)] public float doubleTimeChance = 0f;
         }
         #endregion
 
@@ -85,9 +90,9 @@ namespace KrumbleHut.Drummi.FlashCards
         {
             new() { minCardsCleared = 0,  vocab = FlashCardVocab.Quarter | FlashCardVocab.Rest,                                                                                             noteRange = new Vector2Int(3, 4) },
             new() { minCardsCleared = 4,  vocab = FlashCardVocab.Quarter | FlashCardVocab.EighthPair | FlashCardVocab.Rest,                                                                noteRange = new Vector2Int(3, 5) },
-            new() { minCardsCleared = 10, vocab = FlashCardVocab.Quarter | FlashCardVocab.EighthPair | FlashCardVocab.OffbeatEighth | FlashCardVocab.Rest,                                 noteRange = new Vector2Int(4, 6) },
-            new() { minCardsCleared = 16, vocab = FlashCardVocab.Quarter | FlashCardVocab.EighthPair | FlashCardVocab.OffbeatEighth | FlashCardVocab.Triplet | FlashCardVocab.Rest,        noteRange = new Vector2Int(4, 6) },
-            new() { minCardsCleared = 22, vocab = FlashCardVocab.Quarter | FlashCardVocab.EighthPair | FlashCardVocab.OffbeatEighth | FlashCardVocab.Triplet | FlashCardVocab.SixteenthQuad | FlashCardVocab.Rest, noteRange = new Vector2Int(4, 6) },
+            new() { minCardsCleared = 10, vocab = FlashCardVocab.Quarter | FlashCardVocab.EighthPair | FlashCardVocab.OffbeatEighth | FlashCardVocab.Rest,                                 noteRange = new Vector2Int(4, 6), doubleTimeChance = 0.15f },
+            new() { minCardsCleared = 16, vocab = FlashCardVocab.Quarter | FlashCardVocab.EighthPair | FlashCardVocab.OffbeatEighth | FlashCardVocab.Triplet | FlashCardVocab.Rest,        noteRange = new Vector2Int(4, 6), doubleTimeChance = 0.25f },
+            new() { minCardsCleared = 22, vocab = FlashCardVocab.Quarter | FlashCardVocab.EighthPair | FlashCardVocab.OffbeatEighth | FlashCardVocab.Triplet | FlashCardVocab.SixteenthQuad | FlashCardVocab.Rest, noteRange = new Vector2Int(4, 6), doubleTimeChance = 0.35f },
         };
 
         [Header("HUD")]
@@ -227,7 +232,7 @@ namespace KrumbleHut.Drummi.FlashCards
             int effectiveLeadInBars = leadInBars * Mathf.Max(1, Mathf.RoundToInt(_activeTempoMultiplier));
             double barDuration = GameConstants.BEATS_PER_LOOP * (60.0 / bpm);
             double start       = virtualStartTime + effectiveLeadInBars * barDuration;
-            cardController.StartEndless(start, virtualStartTime, step.vocab, step.noteRange);
+            cardController.StartEndless(start, virtualStartTime, step.vocab, step.noteRange, EffectiveDoubleTimeChance(step));
         }
 
         public override void Cleanup()
@@ -331,10 +336,19 @@ namespace KrumbleHut.Drummi.FlashCards
 
             _appliedStep = stepIndex;
             var step = escalationSteps[stepIndex];
+            float dtChance = EffectiveDoubleTimeChance(step);
             Debug.Log($"[FlashCardsMode] Escalation step {stepIndex} at {_cardsCleared} cleared → " +
-                      $"vocab={step.vocab} notes={step.noteRange.x}-{step.noteRange.y}");
-            cardController.SetCardConfig(step.vocab, step.noteRange);
+                      $"vocab={step.vocab} notes={step.noteRange.x}-{step.noteRange.y} dtChance={dtChance:F2}");
+            cardController.SetCardConfig(step.vocab, step.noteRange, dtChance);
         }
+
+        /// <summary>
+        /// In-run Double Time only applies to the normal-speed variant — in the
+        /// Double Time menu variant the whole grid already runs at 2x, and stacking
+        /// to an effective 4x (Perfect window ~±7 ms) is not playable.
+        /// </summary>
+        private float EffectiveDoubleTimeChance(EscalationStep step)
+            => _activeTempoMultiplier > 1f ? 0f : step.doubleTimeChance;
 
         private int StepIndexFor(int cardsCleared)
         {

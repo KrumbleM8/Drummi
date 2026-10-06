@@ -128,7 +128,21 @@ namespace KrumbleHut.Drummi.Dungeons
         private int          _revealSlot;   // next slot to reveal, 0–8
 
         // Snapshotted at StartEncounter — held constant for the full encounter.
-        private double _beatInterval;
+        // The BASE grid: metronome.bpm as it was at run start (already includes any
+        // run-wide variant multiplier, e.g. the Double Time menu variant's 2x).
+        private double _baseBpm;
+        private double _baseBeatInterval;
+
+        // Per-card tempo (in-run Double Time cards): rolled at each card boundary.
+        // _cardBeatInterval = _baseBeatInterval / _cardTempoMultiplier. metronome.bpm
+        // is retuned alongside so the evaluator/reader grading windows (which read
+        // bpm live) scale with the card — without this, a 2x card's windows would
+        // break the geometric rest-enforcement guard (see CheckSubdivisionTuningGuard).
+        // Retuning bpm mid-run is safe: Metronome caches timePerTick only in
+        // InitializeWithStartTime, so the audible tick grid and BGM are untouched.
+        private double _cardBeatInterval;
+        private float  _cardTempoMultiplier = 1f;
+        private float  _activeDoubleTimeChance;
 
         private FlashCardPatternGenerator _cardGenerator;
 
@@ -167,6 +181,12 @@ namespace KrumbleHut.Drummi.Dungeons
 
         /// <summary>Timing boundaries of the current card cycle.</summary>
         public PhraseTiming CurrentTiming => _current;
+
+        /// <summary>
+        /// Tempo multiplier of the CURRENT card (1 = normal, 2 = in-run Double Time).
+        /// Valid from OnCardRevealStart; the view reads this for the telegraph.
+        /// </summary>
+        public float CurrentCardTempoMultiplier => _cardTempoMultiplier;
         #endregion
 
         #region Public API
@@ -222,8 +242,12 @@ namespace KrumbleHut.Drummi.Dungeons
         /// </param>
         /// <param name="vocab">Initial vocabulary (None = Inspector default).</param>
         /// <param name="noteRange">Initial note range ((0,0) = Inspector defaults).</param>
-        public void StartEndless(double startVirtualTime, double gridOriginVirtualTime, FlashCardVocab vocab, Vector2Int noteRange)
-            => StartCore(startVirtualTime, 0, noteRange, vocab, gridOriginVirtualTime, endless: true);
+        /// <param name="doubleTimeChance">
+        /// Initial probability [0,1] that a card is an in-run Double Time card (whole
+        /// reveal/perform cycle at 2x the base grid). 0 = never (dungeon rooms).
+        /// </param>
+        public void StartEndless(double startVirtualTime, double gridOriginVirtualTime, FlashCardVocab vocab, Vector2Int noteRange, float doubleTimeChance = 0f)
+            => StartCore(startVirtualTime, 0, noteRange, vocab, gridOriginVirtualTime, endless: true, doubleTimeChance);
 
         /// <summary>
         /// Updates the generation config used for SUBSEQUENT cards. The current card
@@ -231,8 +255,9 @@ namespace KrumbleHut.Drummi.Dungeons
         /// reveal-bar start, so changes made from an OnCardEvaluated handler land on
         /// exactly the next card. Used by the endless mode's escalation ladder.
         /// </summary>
-        public void SetCardConfig(FlashCardVocab vocab, Vector2Int noteRange)
+        public void SetCardConfig(FlashCardVocab vocab, Vector2Int noteRange, float doubleTimeChance = 0f)
         {
+            _activeDoubleTimeChance = Mathf.Clamp01(doubleTimeChance);
             bool hasRange   = noteRange.x > 0 && noteRange.y > 0;
             _activeMinNotes = hasRange ? noteRange.x : minNotes;
             _activeMaxNotes = hasRange ? noteRange.y : maxNotes;
@@ -242,11 +267,12 @@ namespace KrumbleHut.Drummi.Dungeons
                 _activeMaxNotes = _activeMinNotes;
             }
             _activeVocab = vocab != FlashCardVocab.None ? vocab : vocabulary;
-            Debug.Log($"[FlashCard] Card config → notes={_activeMinNotes}-{_activeMaxNotes} vocab={_activeVocab} (applies from next card)");
+            Debug.Log($"[FlashCard] Card config → notes={_activeMinNotes}-{_activeMaxNotes} vocab={_activeVocab} " +
+                      $"dtChance={_activeDoubleTimeChance:F2} (applies from next card)");
         }
 
         private void StartCore(double startVirtualTime, int cardCount, Vector2Int noteRange, FlashCardVocab vocab,
-                               double? gridOriginOverride, bool endless)
+                               double? gridOriginOverride, bool endless, float doubleTimeChance = 0f)
         {
             if (metronome == null)
             {
@@ -270,7 +296,10 @@ namespace KrumbleHut.Drummi.Dungeons
             _activeVocab = vocab != FlashCardVocab.None ? vocab : vocabulary;
             _endless     = endless;
 
-            _beatInterval      = 60.0 / metronome.bpm;
+            _activeDoubleTimeChance = Mathf.Clamp01(doubleTimeChance);
+            _baseBpm                = metronome.bpm;
+            _baseBeatInterval       = 60.0 / _baseBpm;
+            RollNextCardTempo();
             _cardGenerator     = new FlashCardPatternGenerator();
             _cardIndex         = 0;
             _running           = true;
@@ -297,35 +326,37 @@ namespace KrumbleHut.Drummi.Dungeons
             // ── Beat-grid snap (same approach as CallAndResponseController) ──
             // Origin priority: explicit override (endless host) > DungeonModeController
             // session grid (dungeon rooms) > t=0 fallback (debug trigger only).
+            // Always snapped on the BASE grid — per-card tempo never moves the origin.
             double raw = startVirtualTime;
             double snapped;
             if (gridOriginOverride.HasValue)
             {
                 double origin = gridOriginOverride.Value;
-                snapped = origin + SnapToBeat(raw - origin, _beatInterval);
+                snapped = origin + SnapToBeat(raw - origin, _baseBeatInterval);
                 Debug.Log($"[FlashCard] Beat-snap (explicit origin): raw={raw:F6}  snapped={snapped:F6}  " +
                           $"grid-offset=+{(snapped - raw) * 1000.0:F3}ms  origin={origin:F6}");
             }
             else if (modeController != null)
             {
                 double sessionOrigin = modeController.SessionStartVirtualTime;
-                snapped = sessionOrigin + SnapToBeat(raw - sessionOrigin, _beatInterval);
+                snapped = sessionOrigin + SnapToBeat(raw - sessionOrigin, _baseBeatInterval);
                 Debug.Log($"[FlashCard] Beat-snap: raw={raw:F6}  snapped={snapped:F6}  " +
                           $"grid-offset=+{(snapped - raw) * 1000.0:F3}ms  sessionOrigin={sessionOrigin:F6}");
             }
             else
             {
-                snapped = SnapToBeat(raw, _beatInterval);
+                snapped = SnapToBeat(raw, _baseBeatInterval);
                 Debug.LogWarning($"[FlashCard] No DungeonModeController — snapping relative to t=0. " +
                                  $"raw={raw:F6} snapped={snapped:F6}");
             }
 
-            _current = PhraseTiming.Compute(0, CardBeats, snapped, _beatInterval);
+            _current = PhraseTiming.Compute(0, CardBeats, snapped, _cardBeatInterval);
 
             Debug.Log($"[FlashCard] === ENCOUNTER START ===");
-            Debug.Log($"[FlashCard]   BPM={metronome.bpm:F2}  beatInterval={_beatInterval:F6}s  " +
+            Debug.Log($"[FlashCard]   BPM={_baseBpm:F2}  beatInterval={_baseBeatInterval:F6}s  " +
                       $"cards={(_endless ? "endless" : _activeCards.ToString())}  " +
-                      $"notes={_activeMinNotes}-{_activeMaxNotes}  vocab={_activeVocab}");
+                      $"notes={_activeMinNotes}-{_activeMaxNotes}  vocab={_activeVocab}  " +
+                      $"dtChance={_activeDoubleTimeChance:F2}");
             Debug.Log($"[FlashCard]   {_current}");
         }
 
@@ -388,7 +419,7 @@ namespace KrumbleHut.Drummi.Dungeons
                 }
 
                 double delta = now - _current.CallStartTime;
-                Debug.Log($"[FlashCard] RevealStart  | card={_cardIndex} " +
+                Debug.Log($"[FlashCard] RevealStart  | card={_cardIndex} tempo=x{_cardTempoMultiplier:F0} " +
                           $"expected={_current.CallStartTime:F6} actual={now:F6} delta=+{delta * 1000.0:F3}ms");
                 OnCardRevealStart?.Invoke(_cardIndex);
             }
@@ -399,12 +430,12 @@ namespace KrumbleHut.Drummi.Dungeons
             if (_revealFired && !_performFired)
             {
                 while (_revealSlot < CardBeats &&
-                       now >= _current.CallStartTime + _revealSlot * _beatInterval)
+                       now >= _current.CallStartTime + _revealSlot * _cardBeatInterval)
                 {
                     int slot     = _revealSlot++;
                     var template = _templates[slot];
 
-                    double expected = _current.CallStartTime + slot * _beatInterval;
+                    double expected = _current.CallStartTime + slot * _cardBeatInterval;
                     Debug.Log($"[FlashCard] Reveal       | card={_cardIndex} slot={slot} " +
                               $"{template}  " +
                               $"expected={expected:F6} actual={now:F6} delta=+{(now - expected) * 1000.0:F3}ms");
@@ -439,7 +470,7 @@ namespace KrumbleHut.Drummi.Dungeons
                 {
                     // timeOffset maps reveal-bar beats into perform-bar time coordinates,
                     // identical to C&R's echo evaluation (N * beatInterval window shift).
-                    double timeOffset = CardBeats * _beatInterval;
+                    double timeOffset = CardBeats * _cardBeatInterval;
                     result = evaluator.EvaluateBar(inputReader.playerInputData, _cardBeats, timeOffset);
                     if (result != null)
                         Debug.Log($"[FlashCard]   Grade={result.Grade}  points={result.PointsAwarded}  " +
@@ -464,6 +495,7 @@ namespace KrumbleHut.Drummi.Dungeons
             if (!_endless && _cardIndex >= _activeCards)
             {
                 _running = false;
+                RestoreBaseBpm();
                 if (inputReader != null)
                 {
                     inputReader.allowInput                = false;
@@ -478,7 +510,11 @@ namespace KrumbleHut.Drummi.Dungeons
             }
 
             // Chain: next card starts exactly where this one ended — no gap, no drift.
-            _current      = PhraseTiming.Compute(_cardIndex, CardBeats, _current.NextPhraseStart, _beatInterval);
+            // Per-card tempo is rolled BEFORE computing the next timing; a 2x card
+            // spans 16 half-beats = 8 base beats, so every card boundary stays on
+            // the base bar grid regardless of the mix of normal/DT cards.
+            RollNextCardTempo();
+            _current      = PhraseTiming.Compute(_cardIndex, CardBeats, _current.NextPhraseStart, _cardBeatInterval);
             _revealFired  = false;
             _performFired = false;
             _revealSlot   = 0;
@@ -486,6 +522,33 @@ namespace KrumbleHut.Drummi.Dungeons
             _templates    = null;
 
             Debug.Log($"[FlashCard]   {_current}");
+        }
+
+        /// <summary>
+        /// Rolls the NEXT card's tempo (1x, or 2x with _activeDoubleTimeChance) and
+        /// retunes metronome.bpm so the live-read grading windows match the card.
+        /// Must be called before PhraseTiming.Compute for the card it applies to.
+        /// </summary>
+        private void RollNextCardTempo()
+        {
+            _cardTempoMultiplier = UnityEngine.Random.value < _activeDoubleTimeChance ? 2f : 1f;
+            _cardBeatInterval    = _baseBeatInterval / _cardTempoMultiplier;
+            if (metronome != null) metronome.bpm = _baseBpm * _cardTempoMultiplier;
+        }
+
+        /// <summary>
+        /// Returns metronome.bpm to the run's base value. Called on every teardown
+        /// path so a run ending mid-DT-card never leaks a doubled bpm to menus or
+        /// the results screen. Only writes when the tempo was actually doubled —
+        /// TerminateEncounter also runs when a NEW encounter supersedes an old one,
+        /// where the host may have already retuned bpm for the new run.
+        /// </summary>
+        private void RestoreBaseBpm()
+        {
+            if (metronome != null && _baseBpm > 0 && _cardTempoMultiplier > 1f)
+                metronome.bpm = _baseBpm;
+            _cardTempoMultiplier = 1f;
+            _cardBeatInterval    = _baseBeatInterval;
         }
         #endregion
 
@@ -502,7 +565,7 @@ namespace KrumbleHut.Drummi.Dungeons
             // first note must survive window-open so ReplayBuffer can fire it.
             inputReader.ClearRecordedInputs();
             inputReader.SetScheduledBeats(_cardBeats);
-            inputReader.SetTimeOffset(CardBeats * _beatInterval);
+            inputReader.SetTimeOffset(CardBeats * _cardBeatInterval);
             inputReader.CoyoteWindowStartOverride = null;  // clear before opening so replay goes through normally
             // Any pad tap is tagged to the constant type — Tier 1 grading is timing-only.
             inputReader.SingleDrumEchoConstant = ConstantType;
@@ -531,6 +594,7 @@ namespace KrumbleHut.Drummi.Dungeons
         private void TerminateEncounter()
         {
             ClosePerformWindow();
+            RestoreBaseBpm();
             if (inputReader != null)
             {
                 inputReader.SuppressSpawnMarkers      = false;
@@ -554,7 +618,7 @@ namespace KrumbleHut.Drummi.Dungeons
             // Find the scheduled note nearest the tap in perform-bar time coordinates
             // (reveal-bar note time + N * beatInterval — same mapping as evaluation).
             double now        = GameClock.Instance.GameTime;
-            double timeOffset = CardBeats * _beatInterval;
+            double timeOffset = CardBeats * _cardBeatInterval;
             DungeonScheduledBeat nearest = null;
             double bestDelta = double.MaxValue;
             foreach (var beat in _cardBeats)
@@ -565,7 +629,7 @@ namespace KrumbleHut.Drummi.Dungeons
             if (nearest == null) return;
 
             // Floor (with fp epsilon) so offbeat/subdivided notes map to their host square.
-            int slot = (int)Math.Floor((nearest.scheduledTime - _current.CallStartTime) / _beatInterval + 1e-6);
+            int slot = (int)Math.Floor((nearest.scheduledTime - _current.CallStartTime) / _cardBeatInterval + 1e-6);
             slot = Mathf.Clamp(slot, 0, CardBeats - 1);
             OnPlayerHit?.Invoke(slot, quality);
         }
@@ -578,7 +642,7 @@ namespace KrumbleHut.Drummi.Dungeons
             if (GameClock.Instance == null) return;
 
             double now  = GameClock.Instance.GameTime;
-            int    slot = (int)Math.Floor((now - _current.ResponseStartTime) / _beatInterval);
+            int    slot = (int)Math.Floor((now - _current.ResponseStartTime) / _cardBeatInterval);
             slot = Mathf.Clamp(slot, 0, CardBeats - 1);
             OnPlayerMissTap?.Invoke(slot);
         }
@@ -593,8 +657,8 @@ namespace KrumbleHut.Drummi.Dungeons
             foreach (var b in beats)
             {
                 // b.timeSlot is in beats from card start (may be half-integral for
-                // eighths); multiply by _beatInterval for seconds.
-                double virtualTime = timing.CallStartTime + b.timeSlot * _beatInterval;
+                // eighths); multiply by the card's beat interval for seconds.
+                double virtualTime = timing.CallStartTime + b.timeSlot * _cardBeatInterval;
                 result.Add(new DungeonScheduledBeat(virtualTime, b.enemyType));
             }
 
