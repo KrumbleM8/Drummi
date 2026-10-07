@@ -110,6 +110,13 @@ public class DungeonInputReader : MonoBehaviour
     /// </summary>
     public DungeonEnemyType? SingleDrumEchoConstant { get; set; }
 
+    /// <summary>
+    /// When non-null, every pad tap plays this clip (on AudioManager speakers[1],
+    /// the pad-sound channel) instead of the default bongo pad sounds. Set by the
+    /// FlashCards instrument skins; null in all dungeon contexts.
+    /// </summary>
+    public AudioClip PadEchoOverride { get; set; }
+
     public List<DungeonInput> playerInputData = new();
 
     // Set by DungeonBeatManager each bar so single-input evaluation works
@@ -166,9 +173,20 @@ public class DungeonInputReader : MonoBehaviour
 
     // ── Event Handlers ────────────────────────────────────────────────────
 
-    private void OnLeft()   { AudioManager.instance?.PlayPadLeft();  TriggerInput(DungeonEnemyType.Left);   }
-    private void OnCenter() { AudioManager.instance?.PlayPadCenter();  TriggerInput(DungeonEnemyType.Center); }
-    private void OnRight()  { AudioManager.instance?.PlayPadRight(); TriggerInput(DungeonEnemyType.Right);  }
+    private void OnLeft()   { PlayPadEcho(static a => a.PlayPadLeft());   TriggerInput(DungeonEnemyType.Left);   }
+    private void OnCenter() { PlayPadEcho(static a => a.PlayPadCenter()); TriggerInput(DungeonEnemyType.Center); }
+    private void OnRight()  { PlayPadEcho(static a => a.PlayPadRight());  TriggerInput(DungeonEnemyType.Right);  }
+
+    /// <summary>Instrument override when set (all pads share one voice), else the default pad sound.</summary>
+    private void PlayPadEcho(System.Action<AudioManager> defaultSound)
+    {
+        var audio = AudioManager.instance;
+        if (audio == null) return;
+        if (PadEchoOverride != null && audio.speakers != null && audio.speakers.Length > 1 && audio.speakers[1] != null)
+            audio.speakers[1].PlayOneShot(PadEchoOverride);
+        else
+            defaultSound(audio);
+    }
 
     // ── Core ──────────────────────────────────────────────────────────────
 

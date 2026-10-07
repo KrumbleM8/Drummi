@@ -151,6 +151,20 @@ namespace KrumbleHut.Drummi.FlashCards
                  "music speeds up (and rises in key) with the grid. Reset to 1 at run start/end.")]
         [SerializeField] private bool pitchMusicWithStages = true;
 
+        [Header("Instruments")]
+        [Tooltip("Selectable tap-sound/visual skins, in cycle order. Element 0 is the stock Bongo. " +
+                 "Selection persists via PlayerPrefs and applies immediately (menu AND mid-run).")]
+        [SerializeField] private FlashCardInstrument[] instruments;
+
+        [Tooltip("Shared input reader — receives the instrument's tap-echo override clip.")]
+        [SerializeField] private DungeonInputReader instrumentInputReader;
+
+        [Tooltip("The tappable drum button Image (skins swap its sprite/tint).")]
+        [SerializeField] private Image drumButtonImage;
+
+        [Tooltip("Label on the menu's instrument cycle button — shows the current displayName.")]
+        [SerializeField] private TMP_Text instrumentLabelText;
+
         [Header("HUD")]
         [Tooltip("Strike pips, left to right. Filled as strikes accumulate.")]
         [SerializeField] private Image[] strikePips = new Image[3];
@@ -192,6 +206,25 @@ namespace KrumbleHut.Drummi.FlashCards
         // TempoFor floors to 1.
         private float     _appliedTempo = 1f;
         private Coroutine _stageBreakRoutine;
+
+        // Instrument selection (PlayerPrefs-persisted index into instruments).
+        private const string InstrumentPrefKey = "FlashCardsInstrument";
+        private int    _instrumentIndex;
+        private Sprite _defaultDrumSprite;
+        private bool   _drumDefaultsCached;
+        #endregion
+
+        #region Unity
+        private void Start()
+        {
+            // Restore the saved instrument before any run starts, so the menu label,
+            // button look, and tap sound are correct from the first tap.
+            if (instruments != null && instruments.Length > 0)
+            {
+                _instrumentIndex = Mathf.Clamp(PlayerPrefs.GetInt(InstrumentPrefKey, 0), 0, instruments.Length - 1);
+                ApplyInstrument();
+            }
+        }
         #endregion
 
         #region ModeController — Identity & Scoring
@@ -477,6 +510,71 @@ namespace KrumbleHut.Drummi.FlashCards
             if (i >= 0) return escalationSteps[i];
             Debug.LogWarning("[FlashCardsMode] No escalation step with minCardsCleared <= 0 — using built-in Quarter|Rest default.");
             return new EscalationStep();
+        }
+        #endregion
+
+        #region Instruments
+        /// <summary>
+        /// Menu cycle-button entry point: advances to the next instrument skin,
+        /// persists the choice, applies it (tap sound + button look + label), and
+        /// auditions the new tap sound. Safe mid-run — the override applies to the
+        /// very next tap.
+        /// </summary>
+        public void CycleInstrument()
+        {
+            if (instruments == null || instruments.Length == 0) return;
+            _instrumentIndex = (_instrumentIndex + 1) % instruments.Length;
+            PlayerPrefs.SetInt(InstrumentPrefKey, _instrumentIndex);
+            ApplyInstrument();
+            AuditionCurrentInstrument();
+        }
+
+        private FlashCardInstrument CurrentInstrument
+            => instruments != null && instruments.Length > 0
+               ? instruments[Mathf.Clamp(_instrumentIndex, 0, instruments.Length - 1)]
+               : null;
+
+        /// <summary>
+        /// Pushes the current instrument everywhere it lives: tap-echo override on
+        /// the input reader (null clip = stock bongo), drum button sprite/tint
+        /// (null sprite = scene default, cached on first apply), and the menu label.
+        /// </summary>
+        private void ApplyInstrument()
+        {
+            var inst = CurrentInstrument;
+            if (inst == null) return;
+
+            if (instrumentInputReader != null) instrumentInputReader.PadEchoOverride = inst.tapClip;
+
+            if (drumButtonImage != null)
+            {
+                if (!_drumDefaultsCached)
+                {
+                    _defaultDrumSprite  = drumButtonImage.sprite;
+                    _drumDefaultsCached = true;
+                }
+                drumButtonImage.sprite = inst.buttonSprite != null ? inst.buttonSprite : _defaultDrumSprite;
+                drumButtonImage.color  = inst.buttonTint;
+            }
+
+            if (instrumentLabelText != null) instrumentLabelText.text = inst.displayName;
+        }
+
+        /// <summary>One-shot preview of the current tap sound (same channel as real taps).</summary>
+        private void AuditionCurrentInstrument()
+        {
+            var inst  = CurrentInstrument;
+            var audio = AudioManager.instance;
+            if (audio == null) return;
+            if (inst != null && inst.tapClip != null)
+            {
+                if (audio.speakers != null && audio.speakers.Length > 1 && audio.speakers[1] != null)
+                    audio.speakers[1].PlayOneShot(inst.tapClip);
+            }
+            else
+            {
+                audio.PlayPadCenter();
+            }
         }
         #endregion
 
