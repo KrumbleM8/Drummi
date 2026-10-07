@@ -120,6 +120,15 @@ namespace KrumbleHut.Drummi.Dungeons
         public event Action OnEncounterComplete;
 
         /// <summary>
+        /// Fired at a stage-up boundary (endless ladder tempo change), when the
+        /// telegraphed break begins. Parameters: new tempo multiplier (relative to
+        /// run-start BPM), break start virtual time, break length in beats, new
+        /// base beat interval in seconds. The next card reveals at
+        /// breakStart + breakBeats * beatInterval.
+        /// </summary>
+        public event Action<float, double, int, double> OnStageUp;
+
+        /// <summary>
         /// Fired when the encounter is stopped externally mid-cycle (death, room interrupt).
         /// NOT fired on normal completion — subscribers use OnEncounterComplete for that.
         /// Lets the card view tear down cleanly without polling encounter state.
@@ -161,11 +170,19 @@ namespace KrumbleHut.Drummi.Dungeons
         private bool         _performFired;
         private int          _revealSlot;   // next slot to reveal, 0–8
 
-        // Snapshotted at StartEncounter — held constant for the full encounter.
         // The BASE grid: metronome.bpm as it was at run start (already includes any
         // run-wide variant multiplier, e.g. the Double Time menu variant's 2x).
+        // Stages (endless ladder) retune the base grid at a card boundary:
+        // _baseBpm = _runBpm * stageMultiplier; _runBpm itself never changes
+        // during an encounter, so stage multipliers are absolute, not compounding.
+        private double _runBpm;
         private double _baseBpm;
         private double _baseBeatInterval;
+
+        // Pending stage change (QueueStageTempo): applied in AdvanceCard at the
+        // next card boundary, like SetCardConfig. 0 = nothing pending.
+        private float _pendingStageMultiplier;
+        private int   _pendingStageBreakBeats;
 
         // Per-card tempo (in-run Double Time cards): rolled at each card boundary.
         // _cardBeatInterval = _baseBeatInterval / _cardTempoMultiplier. metronome.bpm
@@ -327,6 +344,26 @@ namespace KrumbleHut.Drummi.Dungeons
                       $"dtChance={_activeDoubleTimeChance:F2} slots={_activeSlotCount} (applies from next card)");
         }
 
+        /// <summary>
+        /// Queues a stage tempo change (endless escalation ladder). At the next card
+        /// boundary the BASE grid is retuned to runStartBpm * multiplier and a
+        /// breakBeats-long telegraphed break — counted at the NEW tempo — is inserted
+        /// before the next card (OnStageUp fires at the break start). Same next-card
+        /// contract as SetCardConfig. No-op outside endless runs.
+        /// </summary>
+        public void QueueStageTempo(float multiplier, int breakBeats)
+        {
+            if (!_endless)
+            {
+                Debug.LogWarning("[FlashCard] QueueStageTempo ignored — not an endless run.");
+                return;
+            }
+            _pendingStageMultiplier = Mathf.Max(1f, multiplier);
+            _pendingStageBreakBeats = Mathf.Max(0, breakBeats);
+            Debug.Log($"[FlashCard] Stage tempo queued → x{_pendingStageMultiplier:F2} " +
+                      $"({_runBpm * _pendingStageMultiplier:F1} BPM), break={_pendingStageBreakBeats} beats (applies at next card boundary)");
+        }
+
         /// <summary>0 or negative = classic 8; otherwise clamped up to one full row (4).</summary>
         private static int ResolveSlotCount(int slotCount)
             => slotCount <= 0 ? FlashCardPatternGenerator.SlotCount
@@ -364,8 +401,10 @@ namespace KrumbleHut.Drummi.Dungeons
             _activeExpandChance     = Mathf.Clamp01(expandChance);
             _activeExpandEvery      = Mathf.Max(0, expandEvery);
             _cardsSinceExpand       = 0;
-            _baseBpm                = metronome.bpm;
+            _runBpm                 = metronome.bpm;
+            _baseBpm                = _runBpm;
             _baseBeatInterval       = 60.0 / _baseBpm;
+            _pendingStageMultiplier = 0f;
             RollNextCardTempo();
             _cardGenerator     = new FlashCardPatternGenerator();
             _cardIndex         = 0;
@@ -580,8 +619,24 @@ namespace KrumbleHut.Drummi.Dungeons
             // Per-card tempo is rolled BEFORE computing the next timing; a 2x card
             // spans 16 half-beats = 8 base beats, so every card boundary stays on
             // the base bar grid regardless of the mix of normal/DT cards.
+            //
+            // Stage-up (endless ladder): the pending multiplier retunes the BASE grid
+            // here — chaining is relative (next card starts at NextPhraseStart), so
+            // no grid re-anchor is needed — and inserts the telegraphed break, counted
+            // in NEW-tempo beats, before the next card.
+            double chainStart = _current.NextPhraseStart;
+            if (_pendingStageMultiplier > 0f)
+            {
+                _baseBpm          = _runBpm * _pendingStageMultiplier;
+                _baseBeatInterval = 60.0 / _baseBpm;
+                chainStart       += _pendingStageBreakBeats * _baseBeatInterval;
+                Debug.Log($"[FlashCard] STAGE UP → x{_pendingStageMultiplier:F2} ({_baseBpm:F1} BPM), " +
+                          $"break={_pendingStageBreakBeats} beats, next card at {chainStart:F3}");
+                OnStageUp?.Invoke(_pendingStageMultiplier, _current.NextPhraseStart, _pendingStageBreakBeats, _baseBeatInterval);
+                _pendingStageMultiplier = 0f;
+            }
             RollNextCardTempo();
-            _current      = PhraseTiming.Compute(_cardIndex, _cardSlotCount, _current.NextPhraseStart, _cardBeatInterval, _cardRevealBeats);
+            _current      = PhraseTiming.Compute(_cardIndex, _cardSlotCount, chainStart, _cardBeatInterval, _cardRevealBeats);
             _revealFired  = false;
             _performFired = false;
             _revealSlot   = 0;

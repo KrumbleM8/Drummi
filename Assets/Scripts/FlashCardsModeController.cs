@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -70,6 +71,11 @@ namespace KrumbleHut.Drummi.FlashCards
 
             [Tooltip("RandomChance trigger only: chance [0,1] that a card expands to expandRows.")]
             [Range(0f, 1f)] public float expandChance = 0.2f;
+
+            [Tooltip("STAGE tempo from this step onward: beat-grid multiplier relative to the run-start BPM " +
+                     "(absolute, not compounding). When it increases between steps, a two-bar telegraphed " +
+                     "break (sting + banner, then count-in clicks at the new tempo) precedes the next card.")]
+            [Min(1f)] public float tempoMultiplier = 1f;
         }
 
         /// <summary>How expanded (bigger) cards are triggered during a run.</summary>
@@ -113,9 +119,11 @@ namespace KrumbleHut.Drummi.FlashCards
             // doubleTimeChance intentionally 0 everywhere for now — the in-run DT
             // mechanic is built and verified but disabled pending tuning; re-enable
             // per step when wanted.
-            new() { minCardsCleared = 10, vocab = FlashCardVocab.Quarter | FlashCardVocab.EighthPair | FlashCardVocab.OffbeatEighth | FlashCardVocab.Rest,                                 noteRange = new Vector2Int(3, 4), rows = 1, expandRows = 2, expandChance = 0.35f },
-            new() { minCardsCleared = 16, vocab = FlashCardVocab.Quarter | FlashCardVocab.EighthPair | FlashCardVocab.OffbeatEighth | FlashCardVocab.Triplet | FlashCardVocab.Rest,        noteRange = new Vector2Int(3, 4), rows = 1, expandRows = 3, expandChance = 0.30f },
-            new() { minCardsCleared = 22, vocab = FlashCardVocab.Quarter | FlashCardVocab.EighthPair | FlashCardVocab.OffbeatEighth | FlashCardVocab.Triplet | FlashCardVocab.SixteenthQuad | FlashCardVocab.Rest, noteRange = new Vector2Int(3, 4), rows = 1, expandRows = 5, expandChance = 0.25f },
+            new() { minCardsCleared = 10, vocab = FlashCardVocab.Quarter | FlashCardVocab.EighthPair | FlashCardVocab.OffbeatEighth | FlashCardVocab.Rest,                                 noteRange = new Vector2Int(3, 4), rows = 1, expandRows = 2, expandChance = 0.35f, tempoMultiplier = 1.1f },
+            new() { minCardsCleared = 16, vocab = FlashCardVocab.Quarter | FlashCardVocab.EighthPair | FlashCardVocab.OffbeatEighth | FlashCardVocab.Triplet | FlashCardVocab.Rest,        noteRange = new Vector2Int(3, 4), rows = 1, expandRows = 3, expandChance = 0.30f, tempoMultiplier = 1.2f },
+            new() { minCardsCleared = 22, vocab = FlashCardVocab.Quarter | FlashCardVocab.EighthPair | FlashCardVocab.OffbeatEighth | FlashCardVocab.Triplet | FlashCardVocab.SixteenthQuad | FlashCardVocab.Rest, noteRange = new Vector2Int(3, 4), rows = 1, expandRows = 5, expandChance = 0.25f, tempoMultiplier = 1.3f },
+            new() { minCardsCleared = 28, vocab = FlashCardVocab.Quarter | FlashCardVocab.EighthPair | FlashCardVocab.OffbeatEighth | FlashCardVocab.Triplet | FlashCardVocab.SixteenthQuad | FlashCardVocab.Rest, noteRange = new Vector2Int(3, 4), rows = 1, expandRows = 5, expandChance = 0.25f, tempoMultiplier = 1.4f },
+            new() { minCardsCleared = 35, vocab = FlashCardVocab.Quarter | FlashCardVocab.EighthPair | FlashCardVocab.OffbeatEighth | FlashCardVocab.Triplet | FlashCardVocab.SixteenthQuad | FlashCardVocab.Rest, noteRange = new Vector2Int(3, 4), rows = 1, expandRows = 5, expandChance = 0.25f, tempoMultiplier = 1.5f },
         };
 
         [Header("Card Expansion")]
@@ -124,6 +132,24 @@ namespace KrumbleHut.Drummi.FlashCards
 
         [Tooltip("FixedCadence only: every Nth card is an expanded card.")]
         [SerializeField, Min(2)] private int expandEveryNCards = 4;
+
+        [Header("Stages")]
+        [Tooltip("Beats of telegraphed break at a stage-up, counted at the NEW tempo. With 8 (two 4-beat " +
+                 "bars): bar 1 = sting + banner, bar 2 = four count-in clicks at the new speed.")]
+        [SerializeField, Min(0)] private int stageBreakBeats = 8;
+
+        [Tooltip("One-shot sting at the stage-up break start (WarioWare speed-up moment).")]
+        [SerializeField] private AudioClip stageUpStingClip;
+
+        [Tooltip("Count-in click, played on each of the break's last four beats at the new tempo.")]
+        [SerializeField] private AudioClip stageCountInClip;
+
+        [Tooltip("Banner shown during the stage-up break (e.g. 'SPEED UP! x1.2'). Inactive otherwise.")]
+        [SerializeField] private TMP_Text stageBannerText;
+
+        [Tooltip("WarioWare-style: pitch the BGM (AudioManager speakers[0]) by the stage multiplier so the " +
+                 "music speeds up (and rises in key) with the grid. Reset to 1 at run start/end.")]
+        [SerializeField] private bool pitchMusicWithStages = true;
 
         [Header("HUD")]
         [Tooltip("Strike pips, left to right. Filled as strikes accumulate.")]
@@ -160,6 +186,12 @@ namespace KrumbleHut.Drummi.FlashCards
         private int  _streak;
         private int  _bestStreak;
         private int  _appliedStep = -1;
+
+        // Stage tempo currently applied/queued (relative to run-start BPM).
+        // Serialized steps authored before tempoMultiplier existed deserialize 0 —
+        // TempoFor floors to 1.
+        private float     _appliedTempo = 1f;
+        private Coroutine _stageBreakRoutine;
         #endregion
 
         #region ModeController — Identity & Scoring
@@ -241,6 +273,7 @@ namespace KrumbleHut.Drummi.FlashCards
             _streak       = 0;
             _bestStreak   = 0;
             _appliedStep  = -1;
+            EndStageBreakPresentation();
             UpdateHud();
 
             // BGM: loop from the shared DSP start (dungeon floor pattern).
@@ -251,11 +284,13 @@ namespace KrumbleHut.Drummi.FlashCards
             }
 
             cardController.OnCardEvaluated += HandleCardEvaluated;
+            cardController.OnStageUp      += HandleStageUp;
 
             // First reveal after the lead-in; grid origin = music start, so the
             // whole-bar lead-in keeps the start on the grid (snap is a no-op).
             var step = ResolveStep(0);
-            _appliedStep = StepIndexFor(0);
+            _appliedStep  = StepIndexFor(0);
+            _appliedTempo = TempoFor(step);
             // Scale lead-in bars by the tempo multiplier so the real-time lead-in
             // matches 1x and the first reveal still lands on a real BGM bar
             // boundary (2 doubled bars = 1 real bar). Integer multipliers only.
@@ -272,8 +307,11 @@ namespace KrumbleHut.Drummi.FlashCards
             if (cardController != null)
             {
                 cardController.OnCardEvaluated -= HandleCardEvaluated;
+                cardController.OnStageUp      -= HandleStageUp;
                 if (cardController.IsRunning) cardController.StopEncounter();
             }
+            EndStageBreakPresentation();
+            RestoreRunBpm();
             _runActive = false;
         }
 
@@ -282,10 +320,13 @@ namespace KrumbleHut.Drummi.FlashCards
             if (cardController != null)
             {
                 cardController.OnCardEvaluated -= HandleCardEvaluated;
+                cardController.OnStageUp      -= HandleStageUp;
                 if (cardController.IsRunning) cardController.StopEncounter();
             }
             if (evaluator != null) evaluator.ResetScore();
 
+            EndStageBreakPresentation();
+            RestoreRunBpm();
             _runActive    = false;
             _cardsCleared = 0;
             _strikes      = 0;
@@ -349,7 +390,9 @@ namespace KrumbleHut.Drummi.FlashCards
             Debug.Log($"[FlashCardsMode] RUN OVER — score={Score} cleared={_cardsCleared} bestStreak={_bestStreak}");
             _runActive = false;
             cardController.OnCardEvaluated -= HandleCardEvaluated;
+            cardController.OnStageUp      -= HandleStageUp;
             cardController.StopEncounter();
+            EndStageBreakPresentation();
 
             // Write the extra results lines BEFORE CompletMode — GameManager's
             // results sequence shows the Score page but never touches these texts.
@@ -370,9 +413,20 @@ namespace KrumbleHut.Drummi.FlashCards
             float dtChance = EffectiveDoubleTimeChance(step);
             Debug.Log($"[FlashCardsMode] Escalation step {stepIndex} at {_cardsCleared} cleared → " +
                       $"vocab={step.vocab} notes={step.noteRange.x}-{step.noteRange.y} dtChance={dtChance:F2} " +
-                      $"rows={step.rows} expandRows={step.expandRows} expandChance={step.expandChance:F2}");
+                      $"rows={step.rows} expandRows={step.expandRows} expandChance={step.expandChance:F2} " +
+                      $"tempo=x{TempoFor(step):F2}");
             cardController.SetCardConfig(step.vocab, step.noteRange, dtChance, SlotCountFor(step),
                                          ExpandSlotsFor(step), step.expandChance, ExpandCadence());
+
+            // STAGE UP: the step carries a higher tempo — queue the base-grid retune
+            // (lands at the same next-card boundary as the config above, with the
+            // telegraphed break in between).
+            float tempo = TempoFor(step);
+            if (tempo > _appliedTempo + 0.001f)
+            {
+                _appliedTempo = tempo;
+                cardController.QueueStageTempo(tempo, stageBreakBeats);
+            }
         }
 
         /// <summary>
@@ -402,6 +456,13 @@ namespace KrumbleHut.Drummi.FlashCards
         private int ExpandCadence()
             => expandTrigger == ExpandTrigger.FixedCadence ? Mathf.Max(2, expandEveryNCards) : 0;
 
+        /// <summary>
+        /// Step tempo with a defensive floor of 1 — scene-serialized steps authored
+        /// before tempoMultiplier existed deserialize 0 (same gotcha as rows).
+        /// </summary>
+        private static float TempoFor(EscalationStep step)
+            => Mathf.Max(1f, step.tempoMultiplier);
+
         private int StepIndexFor(int cardsCleared)
         {
             int best = -1;
@@ -416,6 +477,92 @@ namespace KrumbleHut.Drummi.FlashCards
             if (i >= 0) return escalationSteps[i];
             Debug.LogWarning("[FlashCardsMode] No escalation step with minCardsCleared <= 0 — using built-in Quarter|Rest default.");
             return new EscalationStep();
+        }
+        #endregion
+
+        #region Stage Break Presentation
+        /// <summary>
+        /// WarioWare-style stage-up moment, driven by FlashCardController.OnStageUp
+        /// at the break start. Bar 1: sting + banner; bar 2 (last four beats):
+        /// count-in clicks at the NEW tempo so the player hears the speed before
+        /// performing at it. GameClock-polled, so pausing freezes it for free.
+        /// </summary>
+        private void HandleStageUp(float multiplier, double breakStart, int breakBeats, double beatInterval)
+        {
+            if (_stageBreakRoutine != null) StopCoroutine(_stageBreakRoutine);
+            _stageBreakRoutine = StartCoroutine(StageBreakRoutine(multiplier, breakStart, breakBeats, beatInterval));
+        }
+
+        private IEnumerator StageBreakRoutine(float multiplier, double breakStart, int breakBeats, double beatInterval)
+        {
+            PlayStageOneShot(stageUpStingClip);
+            if (pitchMusicWithStages) SetMusicPitch(multiplier);
+            if (stageBannerText != null)
+            {
+                stageBannerText.text = $"SPEED UP!\n<size=60%>x{multiplier:0.0#}</size>";
+                stageBannerText.gameObject.SetActive(true);
+            }
+
+            // Count-in clicks on the break's last four beats (the whole break when shorter).
+            int countIn = Mathf.Min(4, breakBeats);
+            for (int i = breakBeats - countIn; i < breakBeats; i++)
+            {
+                double beatTime = breakStart + i * beatInterval;
+                while (GameClock.Instance != null && GameClock.Instance.GameTime < beatTime) yield return null;
+                PlayStageOneShot(stageCountInClip);
+            }
+
+            double breakEnd = breakStart + breakBeats * beatInterval;
+            while (GameClock.Instance != null && GameClock.Instance.GameTime < breakEnd) yield return null;
+
+            if (stageBannerText != null) stageBannerText.gameObject.SetActive(false);
+            _stageBreakRoutine = null;
+        }
+
+        /// <summary>
+        /// Stops any in-flight break presentation, hides the banner, and returns the
+        /// BGM to normal pitch (run start/end/reset). In StartMode this runs BEFORE
+        /// PlayMusic, so a new run never inherits the previous run's staged pitch.
+        /// </summary>
+        private void EndStageBreakPresentation()
+        {
+            if (_stageBreakRoutine != null)
+            {
+                StopCoroutine(_stageBreakRoutine);
+                _stageBreakRoutine = null;
+            }
+            if (stageBannerText != null) stageBannerText.gameObject.SetActive(false);
+            SetMusicPitch(1f);
+        }
+
+        /// <summary>BGM pitch — speakers[0] is the music source (AudioManager.PlayMusic).</summary>
+        private static void SetMusicPitch(float pitch)
+        {
+            var audio = AudioManager.instance;
+            if (audio == null || audio.speakers == null || audio.speakers.Length < 1) return;
+            if (audio.speakers[0] == null) return;
+            audio.speakers[0].pitch = pitch;
+        }
+
+        /// <summary>
+        /// Returns the metronome to the run's variant baseline so a run that ended
+        /// at stage 5 never leaks a staged bpm to menus/results (BeginRun re-tunes
+        /// every run anyway — belt and braces, mirroring RestoreBaseBpm's intent).
+        /// </summary>
+        private void RestoreRunBpm()
+        {
+            if (metronome != null) metronome.bpm = musicBpm * _activeTempoMultiplier;
+            _appliedTempo = 1f;
+        }
+
+        /// <summary>Misc-speaker one-shot — same channel as the Double Time cue.</summary>
+        private static void PlayStageOneShot(AudioClip clip)
+        {
+            if (clip == null) return;
+            var audio = AudioManager.instance;
+            if (audio == null || audio.speakers == null || audio.speakers.Length < 3) return;
+            if (audio.speakers[2] == null) return;
+            audio.speakers[2].PlayOneShot(clip);
         }
         #endregion
 
