@@ -1,4 +1,5 @@
 using UnityEngine;
+using KrumbleHut.Drummi.Dungeons;
 
 namespace KrumbleHut.Drummi.FlashCards
 {
@@ -19,5 +20,10 @@ namespace KrumbleHut.Drummi.FlashCards
 
         [Tooltip("PlayerPrefs key for this variant's high score.")]
         public string highScoreKey = "FlashCardsHS";
+
+        [Tooltip("Card presentation. Grid = classic memorize-then-perform card. ColumnScroll " +
+                 "(Snake) = single vertical column of beat squares stepping down one slot per " +
+                 "beat onto an enlarged bottom hit zone — same mechanics, scrolling look.")]
+        public FlashCardLayout layout = FlashCardLayout.Grid;
     }
 }

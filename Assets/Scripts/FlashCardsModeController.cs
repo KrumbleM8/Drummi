@@ -199,6 +199,10 @@ namespace KrumbleHut.Drummi.FlashCards
         // so RestartFromResults preserves the full variant identity.
         private string _activeHighScoreKey = "FlashCardsHS";
 
+        // Card presentation of the active variant (Grid vs ColumnScroll/Snake) —
+        // kept so RestartFromResults preserves the full variant identity.
+        private FlashCardLayout _activeLayout = FlashCardLayout.Grid;
+
         private bool _runActive;
         private int  _cardsCleared;
         private int  _strikes;
@@ -257,17 +261,17 @@ namespace KrumbleHut.Drummi.FlashCards
             // Defensive — the scene's GameManager should already default to this
             // mode, but SetMode is idempotent and cheap.
             GameManager.instance.SetMode(ModeId);
-            BeginRun(definition.tempoMultiplier, definition.highScoreKey);
+            BeginRun(definition.tempoMultiplier, definition.highScoreKey, definition.layout);
         }
 
         /// <summary>Play-button entry point: normal speed (1x grid).</summary>
-        public void StartFromMenu() => BeginRun(1f, "FlashCardsHS");
+        public void StartFromMenu() => BeginRun(1f, "FlashCardsHS", FlashCardLayout.Grid);
 
         /// <summary>Double Time button entry point: 2x beat grid over the same music.</summary>
-        public void StartFromMenuDoubleTime() => BeginRun(doubleTimeMultiplier, "FlashCardsDoubleHS");
+        public void StartFromMenuDoubleTime() => BeginRun(doubleTimeMultiplier, "FlashCardsDoubleHS", FlashCardLayout.Grid);
 
-        /// <summary>Again-button entry point: restarts at whatever speed the last run used.</summary>
-        public void RestartFromResults() => BeginRun(_activeTempoMultiplier, _activeHighScoreKey);
+        /// <summary>Again-button entry point: restarts at whatever variant the last run used.</summary>
+        public void RestartFromResults() => BeginRun(_activeTempoMultiplier, _activeHighScoreKey, _activeLayout);
 
         /// <summary>
         /// Applies the mode's music selection (track + BPM, scaled by the beat-grid
@@ -276,10 +280,21 @@ namespace KrumbleHut.Drummi.FlashCards
         /// track itself is untouched; an integer multiplier keeps the faster grid
         /// aligned with the music (e.g. 210 vs 105).
         /// </summary>
-        private void BeginRun(float tempoMultiplier, string highScoreKey)
+        private void BeginRun(float tempoMultiplier, string highScoreKey, FlashCardLayout layout)
         {
             _activeTempoMultiplier = tempoMultiplier;
             _activeHighScoreKey    = highScoreKey;
+            _activeLayout          = layout;
+
+            // The view lives on the controller's GameObject (FlashCardSystems) —
+            // set BEFORE StartGame so the first card builds in the right layout.
+            if (cardController != null)
+            {
+                var view = cardController.GetComponent<FlashCardView>();
+                if (view != null) view.SetLayoutMode(layout);
+                else Debug.LogError("[FlashCardsMode] No FlashCardView on the cardController object — layout not applied.");
+            }
+
             if (metronome != null) metronome.bpm = musicBpm * tempoMultiplier;
             if (evaluator != null) evaluator.SetHighScoreKey(highScoreKey);
             if (AudioManager.instance != null) AudioManager.instance.selectedSongIndex = musicTrackIndex;

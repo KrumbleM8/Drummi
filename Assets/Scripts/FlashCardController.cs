@@ -260,6 +260,17 @@ namespace KrumbleHut.Drummi.Dungeons
         private List<DungeonScheduledBeat> _nextBeats;
         private SquareTemplate[]           _nextTemplates;
 
+        // Preview buffer: the card AFTER next, rolled+generated one boundary
+        // early so the column-scroll view keeps a constant on-screen stream —
+        // new bars always spawn above the screen top and only enter by
+        // scrolling. Pattern only (relative beats + templates); absolute
+        // scheduling waits until PrepareNextCard consumes it. Invalidated on
+        // stage-ups (generated under pre-stage config) and at run start.
+        private bool              _previewValid;
+        private CardSpec          _previewSpec;
+        private List<DungeonBeat> _previewPattern;
+        private SquareTemplate[]  _previewTemplates;
+
         // One warning per encounter for the eighths tuning guard (see BuildCard).
         private bool _tuningGuardWarned;
 
@@ -303,6 +314,22 @@ namespace KrumbleHut.Drummi.Dungeons
         /// than the perform-bar beat interval when the reveal is compressed.
         /// </summary>
         public double CurrentRevealSlotInterval => _revealSlotInterval;
+
+        /// <summary>
+        /// Templates of the pre-built NEXT card (pipelined flow). Valid from
+        /// OnNextCardRevealStart until the handoff; null/stale otherwise. The
+        /// column-scroll view deals the whole upcoming card at once from this.
+        /// </summary>
+        public IReadOnlyList<SquareTemplate> NextTemplates => _nextPrepared ? _nextTemplates : null;
+
+        /// <summary>
+        /// Templates of the card AFTER next (preview buffer) — pattern-only
+        /// lookahead for the column-scroll stream. Null while a stage-up is
+        /// pending: the previewed card would be discarded for a fresh post-break
+        /// roll, so it must never be shown to the player.
+        /// </summary>
+        public IReadOnlyList<SquareTemplate> PreviewTemplates
+            => _previewValid && _pendingStageMultiplier <= 0f ? _previewTemplates : null;
         #endregion
 
         #region Public API
@@ -464,6 +491,8 @@ namespace KrumbleHut.Drummi.Dungeons
             _baseBpm                = _runBpm;
             _baseBeatInterval       = 60.0 / _baseBpm;
             _pendingStageMultiplier = 0f;
+            _previewValid           = false;
+            _previewPattern         = null;
             RollNextCardTempo();
             _cardGenerator     = new FlashCardPatternGenerator();
             _cardIndex         = 0;
@@ -584,6 +613,14 @@ namespace KrumbleHut.Drummi.Dungeons
                     inputReader.EncounterActive           = true;
                     inputReader.CoyoteWindowStartOverride = _current.ResponseStartTime;
                 }
+
+                // Pipeline the next+preview cards at REVEAL start (not perform
+                // start — that call becomes a no-op) so the column-scroll stream
+                // is full from the first frame: the view pulls Next/Preview
+                // templates while dealing the intro stack. The on-deck reveal
+                // events stay gated on the perform window (_performFired), so
+                // grid-mode visuals and all timing are unchanged.
+                PrepareNextCard();
 
                 double delta = now - _current.CallStartTime;
                 Debug.Log($"[FlashCard] RevealStart  | card={_cardIndex} tempo=x{_cardTempoMultiplier:F0} slots={_cardSlotCount} " +
@@ -772,6 +809,10 @@ namespace KrumbleHut.Drummi.Dungeons
                           $"break={_pendingStageBreakBeats} beats, next card at {chainStart:F3}");
                 OnStageUp?.Invoke(_pendingStageMultiplier, _current.NextPhraseStart, _pendingStageBreakBeats, _baseBeatInterval);
                 _pendingStageMultiplier = 0f;
+                // The previewed card was generated under pre-stage config/beat
+                // interval — discard it; the post-break card rolls fresh below.
+                _previewValid   = false;
+                _previewPattern = null;
             }
             RollNextCardTempo();
             _current      = PhraseTiming.Compute(_cardIndex, _cardSlotCount, chainStart, _cardBeatInterval, _cardRevealBeats);
@@ -865,13 +906,44 @@ namespace KrumbleHut.Drummi.Dungeons
         {
             if (!_endless || _nextPrepared || _pendingStageMultiplier > 0f) return;
 
-            _nextSpec = RollCardSpec();
+            // Consume the preview buffer when valid — the card the player has
+            // been reading in the stream MUST be the card they get. Scheduling
+            // happens now that its timing exists. Fresh roll otherwise.
+            if (_previewValid)
+            {
+                _nextSpec       = _previewSpec;
+                _nextTemplates  = _previewTemplates;
+                _previewValid   = false;
+            }
+            else
+            {
+                _nextSpec      = RollCardSpec();
+                _nextTemplates = null; // generated below
+            }
+
             double callStart = _current.EvaluationTime - _nextSpec.revealBeats * _nextSpec.beatInterval;
             _nextTiming = PhraseTiming.Compute(_cardIndex + 1, _nextSpec.slotCount, callStart,
                                                _nextSpec.beatInterval, _nextSpec.revealBeats);
-            _nextBeats  = BuildCard(_nextTiming.ResponseStartTime, _nextSpec.slotCount, _nextSpec.minNotes,
-                                    _nextSpec.maxNotes, _nextSpec.beatInterval, out _nextTemplates);
+            if (_previewPattern != null && _nextTemplates != null)
+            {
+                _nextBeats      = ScheduleCard(_previewPattern, _nextTiming.ResponseStartTime,
+                                               _nextSpec.slotCount, _nextSpec.beatInterval, _nextTemplates);
+                _previewPattern = null;
+            }
+            else
+            {
+                _nextBeats = BuildCard(_nextTiming.ResponseStartTime, _nextSpec.slotCount, _nextSpec.minNotes,
+                                       _nextSpec.maxNotes, _nextSpec.beatInterval, out _nextTemplates);
+            }
             LogCard(_cardIndex + 1, _nextTiming, _nextTemplates);
+
+            // Refill the preview: roll + generate the card AFTER the one just
+            // prepared (pattern only — scheduled when consumed next boundary).
+            _previewSpec    = RollCardSpec();
+            _previewPattern = _cardGenerator.GenerateCard(_previewSpec.slotCount, _previewSpec.minNotes,
+                                                          _previewSpec.maxNotes, ConstantType, _activeVocab,
+                                                          out _previewTemplates);
+            _previewValid   = true;
 
             // Never reveal before the current perform window begins (exotic tempo
             // mixes could push the reveal window earlier); the pop loop catches up.
@@ -1010,8 +1082,19 @@ namespace KrumbleHut.Drummi.Dungeons
         private List<DungeonScheduledBeat> BuildCard(double responseStartTime, int slotCount, int minNotes,
                                                      int maxNotes, double beatInterval, out SquareTemplate[] templates)
         {
-            var beats  = _cardGenerator.GenerateCard(
+            var beats = _cardGenerator.GenerateCard(
                 slotCount, minNotes, maxNotes, ConstantType, _activeVocab, out templates);
+            return ScheduleCard(beats, responseStartTime, slotCount, beatInterval, templates);
+        }
+
+        /// <summary>
+        /// Schedules a generated (relative) pattern onto absolute virtual time.
+        /// Split from BuildCard so the preview buffer can GENERATE a card one
+        /// boundary early and defer scheduling until its timing exists.
+        /// </summary>
+        private List<DungeonScheduledBeat> ScheduleCard(List<DungeonBeat> beats, double responseStartTime,
+                                                        int slotCount, double beatInterval, SquareTemplate[] templates)
+        {
             var result = new List<DungeonScheduledBeat>(beats.Count);
             // Beats are scheduled on the UNCOMPRESSED reveal timeline: an N-beat bar
             // ending exactly at ResponseStartTime, so scheduledTime + N*beatInterval

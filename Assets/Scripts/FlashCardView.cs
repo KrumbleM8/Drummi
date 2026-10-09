@@ -6,6 +6,19 @@ using UnityEngine.UI;
 namespace KrumbleHut.Drummi.Dungeons
 {
     /// <summary>
+    /// Card presentation variants, chosen per run by FlashCardsModeDefinition.
+    /// Grid = the classic memorize-then-perform card. ColumnScroll (the Snake
+    /// variant) = a single vertical column of beat squares that steps DOWN one
+    /// slot per beat onto an enlarged bottom hit zone — same timing/scoring
+    /// mechanics, scrolling sight-reading presentation.
+    /// </summary>
+    public enum FlashCardLayout
+    {
+        Grid,
+        ColumnScroll,
+    }
+
+    /// <summary>
     /// Renders the Flash Card: a 2x4 grid of squares (beats 1–4 top row, 5–8 bottom,
     /// reading order top-left → bottom-right) that pop in from scale 0 on their beats during
     /// the reveal bar and stay visible through the perform bar.
@@ -191,6 +204,25 @@ namespace KrumbleHut.Drummi.Dungeons
                  "perform start — every card arrives through the GET READY telegraph. OFF = " +
                  "classic in-place reveal (keep OFF for dungeon rooms).")]
         [SerializeField] private bool alwaysOnDeckReveal = false;
+
+        [Header("Column Scroll (Snake variant layout)")]
+        [Tooltip("Center-to-center vertical spacing between column slots.")]
+        [SerializeField] private float columnPitch = 150f;
+        [Tooltip("Scale of the bottom (current beat) slot — the hit zone reads bigger than the trail.")]
+        [SerializeField] private float columnCurrentScale = 1.25f;
+        [Tooltip("Scale of the trail slots above the current beat (on-deck squares match this size).")]
+        [SerializeField] private float columnTrailScale = 0.85f;
+        [Tooltip("Duration of the discrete per-beat scroll step (column snaps down one pitch).")]
+        [SerializeField] private float columnStepDuration = 0.12f;
+        [Tooltip("Lane width in column mode — cardRoot becomes a narrow full-height stream.")]
+        [SerializeField] private float columnLaneWidth = 240f;
+        [Tooltip("Lane bottom edge height above the CANVAS bottom — keeps the hit zone clear of the pad.")]
+        [SerializeField] private float columnLaneBottomY = 380f;
+        [Tooltip("How far the lane extends PAST the top of the canvas — upcoming squares enter the " +
+                 "screen already inside the lane, reading as a stream flowing in from above.")]
+        [SerializeField] private float columnLaneTopOverflow = 200f;
+        [Tooltip("Hit-zone (slot 0) center height above the lane's bottom edge.")]
+        [SerializeField] private float columnHitZoneY = 140f;
         #endregion
 
         #region State
@@ -246,6 +278,26 @@ namespace KrumbleHut.Drummi.Dungeons
         // handoff slide offsets squares below home, so any interrupted slide
         // (KillSquareTweens) must snap position back, never leave it displaced.
         private Vector2[] _homePositions = System.Array.Empty<Vector2>();
+
+        // Column mode (Snake): squares live inside per-slot holder rects under a
+        // scroll container — the holder carries layout position + hit-zone
+        // emphasis scale, so the square root's own scale stays free for the
+        // existing reveal/chip/destroy tweens. The container's Y offset is the
+        // discrete scroll: -currentBeat * columnPitch.
+        private FlashCardLayout _layoutMode  = FlashCardLayout.Grid;
+        private FlashCardLayout _builtLayout = FlashCardLayout.Grid;
+        private RectTransform   _columnRoot;
+        private RectTransform[] _slotHolders = System.Array.Empty<RectTransform>();
+        private Tween[]         _holderScaleTweens = System.Array.Empty<Tween>();
+        private Tween           _columnScrollTween;
+        // cardRoot's authored rect (grid card framing), captured at Start and
+        // restored when switching back to Grid — column mode re-anchors the root
+        // into a full-height lane.
+        private Vector2 _authoredAnchorMin;
+        private Vector2 _authoredAnchorMax;
+        private Vector2 _authoredPivot;
+        private Vector2 _authoredAnchoredPos;
+        private Vector2 _authoredSizeDelta;
         #endregion
 
         #region Unity
@@ -254,33 +306,69 @@ namespace KrumbleHut.Drummi.Dungeons
             // Initial build of the classic 2x4 grid. Deferred to Start because
             // UIRotateWobble.Awake reads GameManager.instance.metronome, which must
             // exist before the wobble components are added.
+            if (cardRoot != null)
+            {
+                _authoredAnchorMin   = cardRoot.anchorMin;
+                _authoredAnchorMax   = cardRoot.anchorMax;
+                _authoredPivot       = cardRoot.pivot;
+                _authoredAnchoredPos = cardRoot.anchoredPosition;
+                _authoredSizeDelta   = cardRoot.sizeDelta;
+            }
             EnsureGrid(FlashCardPatternGenerator.SlotCount);
         }
 
         /// <summary>
-        /// (Re)builds the square grid for <paramref name="slotCount"/> slots —
-        /// 4 columns, one row per 4 beats. No-op when the built count already
-        /// matches. Reallocates all per-slot state, recomputes the card height,
-        /// and uniformly scales cardRoot down when a tall (5-row) card would
-        /// exceed maxCardHeight. Layout math reproduces the original authored
-        /// 2x4 card exactly at slotCount = 8.
+        /// Selects the card presentation for the next run. Called by
+        /// FlashCardsModeController.BeginRun BEFORE StartGame (card hidden).
+        /// A mode change tears down the layout roots so the next EnsureGrid
+        /// rebuilds everything in the new mode's math.
+        /// </summary>
+        public void SetLayoutMode(FlashCardLayout layout)
+        {
+            if (_layoutMode == layout) return;
+            _layoutMode = layout;
+
+            // The on-deck root's parent/anchoring is mode-specific — destroy it
+            // (and the column container) so both rebuild lazily. The active
+            // squares are rebuilt by EnsureGrid via the _builtLayout mismatch.
+            if (_onDeckRoot != null) Destroy(_onDeckRoot.gameObject);
+            _onDeckRoot       = null;
+            _onDeckLabel      = null;
+            _onDeckSquares    = System.Array.Empty<Square>();
+            _onDeckTweens     = System.Array.Empty<Tween>();
+            _onDeckPulseTween = null;
+            _onDeckBuiltCount = 0;
+
+            if (_columnRoot != null) Destroy(_columnRoot.gameObject);
+            _columnRoot        = null;
+            _columnScrollTween = null;
+        }
+
+        /// <summary>
+        /// (Re)builds the squares for <paramref name="slotCount"/> slots in the
+        /// active layout mode. No-op when the built count AND layout already
+        /// match. Reallocates all per-slot state; layout-specific placement and
+        /// card sizing live in BuildGridLayout / BuildColumnLayout.
         /// </summary>
         private void EnsureGrid(int slotCount)
         {
-            if (slotCount == _builtSlotCount) return;
+            if (slotCount == _builtSlotCount && _layoutMode == _builtLayout) return;
             if (squarePrefab == null || cardRoot == null)
             {
                 Debug.LogWarning("[FlashCardView] squarePrefab or cardRoot not assigned — cannot build grid.");
                 return;
             }
 
-            // Tear down the previous grid. SetLink kills in-flight tweens with
-            // their GameObjects; wobbles live on the destroyed roots too.
+            // Tear down the previous squares. SetLink kills in-flight tweens with
+            // their GameObjects; wobbles live on the destroyed roots too. Column
+            // squares are owned by their slot holders.
             for (int i = 0; i < squares.Length; i++)
-                if (squares[i]?.root != null)
+            {
+                if (i < _slotHolders.Length && _slotHolders[i] != null)
+                    Destroy(_slotHolders[i].gameObject);
+                else if (squares[i]?.root != null)
                     Destroy(squares[i].root.gameObject);
-
-            int rows = Mathf.CeilToInt(slotCount / (float)columns);
+            }
 
             squares       = new Square[slotCount];
             _wobbles      = new UIRotateWobble[slotCount];
@@ -292,6 +380,36 @@ namespace KrumbleHut.Drummi.Dungeons
             _missTapped     = new bool[slotCount];
             _faceColors     = new Color[slotCount];
             _homePositions  = new Vector2[slotCount];
+            _slotHolders       = new RectTransform[slotCount];
+            _holderScaleTweens = new Tween[slotCount];
+
+            if (_layoutMode == FlashCardLayout.ColumnScroll) BuildColumnLayout(slotCount);
+            else                                             BuildGridLayout(slotCount);
+
+            // Banner reads over everything; new squares were appended after it.
+            if (doubleTimeBanner != null) doubleTimeBanner.SetAsLastSibling();
+
+            _builtSlotCount = slotCount;
+            _builtLayout    = _layoutMode;
+        }
+
+        /// <summary>
+        /// Classic grid placement — 4 columns, one row per 4 beats. Recomputes
+        /// the card height and uniformly scales cardRoot down when a tall card
+        /// would exceed maxCardHeight. Layout math reproduces the original
+        /// authored 2x4 card exactly at slotCount = 8.
+        /// </summary>
+        private void BuildGridLayout(int slotCount)
+        {
+            // Leaving column mode: drop the scroll container (holders are gone).
+            if (_columnRoot != null)
+            {
+                Destroy(_columnRoot.gameObject);
+                _columnRoot        = null;
+                _columnScrollTween = null;
+            }
+
+            int rows = Mathf.CeilToInt(slotCount / (float)columns);
 
             for (int i = 0; i < slotCount; i++)
             {
@@ -311,29 +429,144 @@ namespace KrumbleHut.Drummi.Dungeons
                 _homePositions[i] = rt.anchoredPosition;
 
                 squares[i] = new Square { root = rt, back = widget.back, glyph = widget.glyph, cursor = widget.cursor };
-
-                var wobble = rt.gameObject.AddComponent<UIRotateWobble>();
-                wobble.rotationAmount   = wobbleRotationAmount;
-                wobble.beatsPerCycle    = wobbleBeatsPerCycle;
-                wobble.phaseOffsetBeats = 0f; // unison across the card
-                wobble.enabled          = false;
-                _wobbles[i] = wobble;
-
+                AddWobble(i, rt);
                 ResetSquare(i);
             }
 
-            // Banner reads over everything; new squares were appended after it.
-            if (doubleTimeBanner != null) doubleTimeBanner.SetAsLastSibling();
+            // Restore the authored card framing (column mode re-anchors the root
+            // into a lane), then apply the usual dynamic height.
+            cardRoot.anchorMin        = _authoredAnchorMin;
+            cardRoot.anchorMax        = _authoredAnchorMax;
+            cardRoot.pivot            = _authoredPivot;
+            cardRoot.anchoredPosition = _authoredAnchoredPos;
 
             // Card height: padding + rows, minus the trailing inter-row gap.
             float height = topPadding + rows * pitchY - (pitchY - cellSize) + bottomPadding;
-            var size = cardRoot.sizeDelta;
+            var size = _authoredSizeDelta;
             size.y = height;
             cardRoot.sizeDelta = size;
             cardRoot.localScale = Vector3.one * (height > maxCardHeight ? maxCardHeight / height : 1f);
 
-            _builtSlotCount = slotCount;
             Debug.Log($"[FlashCardView] Grid built: {slotCount} slots ({rows}x{columns}), height={height:F0}, scale={cardRoot.localScale.x:F3}");
+        }
+
+        /// <summary>
+        /// Column (Snake) placement — one vertical column, slot 0 at the bottom
+        /// hit zone, later beats trailing upward. Each square sits centered in a
+        /// per-slot HOLDER that carries position + emphasis scale; the square
+        /// root's own scale/position stay the tween playground they are in grid
+        /// mode (_homePositions are zero — home is the holder's center).
+        /// </summary>
+        private void BuildColumnLayout(int slotCount)
+        {
+            if (_columnRoot == null)
+            {
+                var go = new GameObject("ColumnRoot", typeof(RectTransform));
+                _columnRoot = (RectTransform)go.transform;
+                _columnRoot.SetParent(cardRoot, worldPositionStays: false);
+                _columnRoot.anchorMin = new Vector2(0.5f, 0f);
+                _columnRoot.anchorMax = new Vector2(0.5f, 0f);
+                _columnRoot.pivot     = new Vector2(0.5f, 0f);
+                _columnRoot.sizeDelta = Vector2.zero;
+                _columnRoot.anchoredPosition = Vector2.zero;
+            }
+
+            for (int i = 0; i < slotCount; i++)
+            {
+                var holderGo = new GameObject($"Slot{i}", typeof(RectTransform));
+                var holder = (RectTransform)holderGo.transform;
+                holder.SetParent(_columnRoot, worldPositionStays: false);
+                holder.anchorMin        = new Vector2(0.5f, 0f);
+                holder.anchorMax        = new Vector2(0.5f, 0f);
+                holder.pivot            = new Vector2(0.5f, 0.5f);
+                holder.sizeDelta        = new Vector2(cellSize, cellSize);
+                holder.anchoredPosition = new Vector2(0f, columnHitZoneY + i * columnPitch);
+                holder.localScale       = Vector3.one * columnTrailScale;
+                _slotHolders[i] = holder;
+
+                var widget = Instantiate(squarePrefab, holder);
+                widget.name = $"Sq{i}";
+                var rt = widget.root;
+                rt.anchorMin        = new Vector2(0.5f, 0.5f);
+                rt.anchorMax        = new Vector2(0.5f, 0.5f);
+                rt.pivot            = new Vector2(0.5f, 0.5f);
+                rt.sizeDelta        = new Vector2(cellSize, cellSize);
+                rt.anchoredPosition = Vector2.zero;
+                _homePositions[i]   = Vector2.zero;
+
+                squares[i] = new Square { root = rt, back = widget.back, glyph = widget.glyph, cursor = widget.cursor };
+                AddWobble(i, rt);
+                ResetSquare(i);
+            }
+
+            // Full-height lane framing: stretch from past the TOP of the canvas
+            // down to just above the pad, so the column reads as a stream flowing
+            // in from the top of the screen. offsetMin/Max define the rect against
+            // the stretched anchors. No maxCardHeight down-scale here.
+            cardRoot.anchorMin = new Vector2(0.5f, 0f);
+            cardRoot.anchorMax = new Vector2(0.5f, 1f);
+            cardRoot.pivot     = new Vector2(0.5f, 0f);
+            cardRoot.offsetMin = new Vector2(-columnLaneWidth * 0.5f, columnLaneBottomY);
+            cardRoot.offsetMax = new Vector2( columnLaneWidth * 0.5f, columnLaneTopOverflow);
+            cardRoot.localScale = Vector3.one;
+            ResetColumnScroll();
+
+            Debug.Log($"[FlashCardView] Column built: {slotCount} slots, pitch={columnPitch:F0}");
+        }
+
+        private void AddWobble(int i, RectTransform rt)
+        {
+            var wobble = rt.gameObject.AddComponent<UIRotateWobble>();
+            wobble.rotationAmount   = wobbleRotationAmount;
+            wobble.beatsPerCycle    = wobbleBeatsPerCycle;
+            wobble.phaseOffsetBeats = 0f; // unison across the card
+            wobble.enabled          = false;
+            _wobbles[i] = wobble;
+        }
+
+        /// <summary>
+        /// Snaps the column to rest: scroll offset zero (slot 0 at the hit
+        /// zone), every holder at trail scale, all step tweens dead.
+        /// </summary>
+        private void ResetColumnScroll()
+        {
+            _columnScrollTween?.Kill();
+            _columnScrollTween = null;
+            if (_columnRoot != null) _columnRoot.anchoredPosition = Vector2.zero;
+            for (int i = 0; i < _slotHolders.Length; i++)
+            {
+                _holderScaleTweens[i]?.Kill();
+                _holderScaleTweens[i] = null;
+                if (_slotHolders[i] != null)
+                    _slotHolders[i].localScale = Vector3.one * columnTrailScale;
+            }
+        }
+
+        /// <summary>
+        /// Discrete scroll step: the column snaps down so slot <paramref name="idx"/>
+        /// lands on the hit zone, growing to the current-beat scale while the
+        /// slot it replaces shrinks back to trail size. The step MOMENT is the
+        /// beat-cursor crossing (virtual time, Update) — the tween is cosmetic.
+        /// </summary>
+        private void ColumnStep(int idx)
+        {
+            if (_columnRoot == null) return;
+
+            _columnScrollTween?.Kill();
+            _columnScrollTween = _columnRoot.DOAnchorPosY(-idx * columnPitch, columnStepDuration)
+                                            .SetEase(Ease.OutCubic)
+                                            .SetLink(_columnRoot.gameObject);
+
+            for (int i = 0; i < _slotHolders.Length; i++)
+            {
+                if (_slotHolders[i] == null) continue;
+                float target = i == idx ? columnCurrentScale : columnTrailScale;
+                if (Mathf.Approximately(_slotHolders[i].localScale.x, target)) continue;
+                _holderScaleTweens[i]?.Kill();
+                _holderScaleTweens[i] = _slotHolders[i].DOScale(target, columnStepDuration)
+                                                       .SetEase(Ease.OutBack)
+                                                       .SetLink(_slotHolders[i].gameObject);
+            }
         }
 
         private void OnEnable()
@@ -381,7 +614,13 @@ namespace KrumbleHut.Drummi.Dungeons
             double now = GameClock.Instance.GameTime;
             int idx = (int)((now - _timing.ResponseStartTime) / _beatInterval);
             idx = Mathf.Clamp(idx, 0, squares.Length - 1);
-            if (idx != _cursorIndex) SetCursor(idx);
+            if (idx != _cursorIndex)
+            {
+                SetCursor(idx);
+                // Column mode: the beat crossing IS the scroll step — the column
+                // snaps down one pitch so the new current beat lands on the hit zone.
+                if (_layoutMode == FlashCardLayout.ColumnScroll) ColumnStep(idx);
+            }
 
             // Rests the player correctly left alone auto-destroy once their beat
             // has elapsed; a rest that was miss-tapped persists as the failure tell.
@@ -410,10 +649,20 @@ namespace KrumbleHut.Drummi.Dungeons
             // the reveal presents in the on-deck zone instead and HandlePerformStart
             // promotes it with the same slide-up as a pipelined handoff — every card
             // arrives through the same telegraph. Otherwise: in-place reveal.
+            // Column mode: a classic reveal means the previous scroll offset is
+            // stale — snap the column to rest before anything shows.
+            if (_layoutMode == FlashCardLayout.ColumnScroll) ResetColumnScroll();
+
             if (alwaysOnDeckReveal)
             {
-                ShowOnDeck(_timing.PhraseLength);
                 _promoteOnPerform = true;
+                // Column mode: classic reveals (run start / post-stage-break) deal
+                // the revealing card PLUS the already-pipelined next+preview cards
+                // as one full stack — the stream is constant from the first frame.
+                if (_layoutMode == FlashCardLayout.ColumnScroll)
+                    DealIntroColumn();
+                else
+                    ShowOnDeck(_timing.PhraseLength);
             }
             else
             {
@@ -446,7 +695,9 @@ namespace KrumbleHut.Drummi.Dungeons
             // the active grid stays empty until promotion at perform start.
             if (_promoteOnPerform)
             {
-                RevealOnDeckSquare(slot, template);
+                // Column mode already dealt the full card at reveal start.
+                if (_layoutMode != FlashCardLayout.ColumnScroll)
+                    RevealOnDeckSquare(slot, template);
                 return;
             }
 
@@ -491,6 +742,10 @@ namespace KrumbleHut.Drummi.Dungeons
             if (!_gradeFlashActive)
                 SetBorder(borderYourTurnColor, animate: true);
             SetCursor(0);
+            // Column mode: the promotion parked the column one pitch high — this
+            // step slides slot 0 down onto the hit zone, continuing the per-beat
+            // slither through the card boundary with zero visual gap.
+            if (_layoutMode == FlashCardLayout.ColumnScroll) ColumnStep(0);
             SetAllWobbles(true);
         }
 
@@ -653,13 +908,83 @@ namespace KrumbleHut.Drummi.Dungeons
         /// </summary>
         private void HandleNextCardRevealStart(int cardIndex, int slotCount, float tempoMultiplier)
         {
-            ShowOnDeck(slotCount);
+            // Column mode: the stream is CONSTANT — the on-deck stack is dealt
+            // whole (next card + preview card) the moment it exists. New bars
+            // spawn above the screen top and only enter by scrolling down, so
+            // nothing ever visibly pops into the frame. Grid mode keeps the
+            // beat-by-beat on-deck reveal (OnNextSquareReveal).
+            if (_layoutMode == FlashCardLayout.ColumnScroll)
+                DealOnDeckColumn();
+            else
+                ShowOnDeck(slotCount);
 
             if (tempoMultiplier > 1f)
             {
                 SetDoubleTimeBanner(true);
                 PlayDoubleTimeCue();
             }
+        }
+
+        /// <summary>
+        /// Column mode: the in-perform on-deck stack — the controller's NEXT card
+        /// with the PREVIEW card above it, directly above the active card's last
+        /// slot. Pull-based so the handoff redeal (next already consumed →
+        /// preview only) and the in-perform deal (both) share one code path.
+        /// </summary>
+        private void DealOnDeckColumn()
+            => DealColumnStack(columnHitZoneY + _builtSlotCount * columnPitch,
+                               controller.NextTemplates, controller.PreviewTemplates);
+
+        /// <summary>
+        /// Column mode intro (classic reveal at run start / post-stage-break):
+        /// the revealing card itself plus next+preview, parked one pitch above
+        /// the hit zone — the perform-start step drops slot 0 onto the zone.
+        /// Tier positions match the post-promotion layout exactly, so promotion
+        /// is world-seamless.
+        /// </summary>
+        private void DealIntroColumn()
+            => DealColumnStack(columnHitZoneY + columnPitch,
+                               controller.CurrentTemplates, controller.NextTemplates, controller.PreviewTemplates);
+
+        /// <summary>
+        /// (Re)builds the on-deck stack from the given tiers (bottom-up) with
+        /// every face shown instantly — no pop tweens. New blocks materialize
+        /// above the screen top and only enter the frame by scrolling, and a
+        /// rebuild + face set completes within one frame, so visible blocks
+        /// never blink or pop across redeals.
+        /// </summary>
+        private void DealColumnStack(float baseY, params System.Collections.Generic.IReadOnlyList<SquareTemplate>[] tiers)
+        {
+            int total = 0;
+            foreach (var tier in tiers) total += tier?.Count ?? 0;
+            if (total == 0) { HideOnDeck(); return; }
+
+            EnsureOnDeckGrid(total);
+            if (_onDeckRoot == null) return;
+
+            _onDeckPulseTween?.Kill();
+            _onDeckPulseTween = null;
+            // The root lives inside the scroll container, so the whole stack
+            // slithers with the stream.
+            _onDeckRoot.anchoredPosition = new Vector2(0f, baseY);
+            _onDeckRoot.localScale       = Vector3.one;
+
+            int idx = 0;
+            foreach (var tier in tiers)
+            {
+                if (tier == null) continue;
+                for (int j = 0; j < tier.Count && idx < _onDeckSquares.Length; j++, idx++)
+                {
+                    var sq = _onDeckSquares[idx];
+                    if (sq?.root == null) continue;
+                    _onDeckTweens[idx]?.Kill();
+                    _onDeckTweens[idx] = null;
+                    ShowOnDeckFace(sq, tier[j]);
+                    sq.root.localRotation = Quaternion.identity;
+                    sq.root.localScale    = Vector3.one;
+                }
+            }
+            _onDeckRoot.gameObject.SetActive(true);
         }
 
         /// <summary>Builds/resets the on-deck panel for a fresh card and shows it.</summary>
@@ -672,13 +997,31 @@ namespace KrumbleHut.Drummi.Dungeons
             // A killed beat pulse must never leave the panel off its base scale.
             _onDeckPulseTween?.Kill();
             _onDeckPulseTween = null;
-            _onDeckRoot.localScale = Vector3.one * onDeckScale;
+
+            if (_layoutMode == FlashCardLayout.ColumnScroll)
+            {
+                // Stack the continuation above the active card's LAST slot. In a
+                // classic reveal (_promoteOnPerform — run start / post-stage-break)
+                // there is no live card below: park slot 0 one pitch above the hit
+                // zone, ready to step in at perform start.
+                int stackBase = _promoteOnPerform ? 1 : _builtSlotCount;
+                _onDeckRoot.anchoredPosition = new Vector2(0f, columnHitZoneY + stackBase * columnPitch);
+                _onDeckRoot.localScale = Vector3.one;
+            }
+            else
+            {
+                _onDeckRoot.localScale = Vector3.one * onDeckScale;
+            }
             if (_onDeckLabel != null) _onDeckLabel.text = onDeckLabelText;
             _onDeckRoot.gameObject.SetActive(true);
         }
 
         private void HandleNextSquareReveal(int cardIndex, int slot, SquareTemplate template)
-            => RevealOnDeckSquare(slot, template);
+        {
+            // Column mode dealt the full card at reveal start.
+            if (_layoutMode == FlashCardLayout.ColumnScroll) return;
+            RevealOnDeckSquare(slot, template);
+        }
 
         /// <summary>On-deck square flips on its beat — same pop vocabulary as the live reveal, dimmed.</summary>
         private void RevealOnDeckSquare(int slot, SquareTemplate template)
@@ -697,7 +1040,9 @@ namespace KrumbleHut.Drummi.Dungeons
 
             // Whole-panel beat pulse + optional tick: the preview breathes with
             // the beat so the player's eye is drawn down while still performing.
-            if (_onDeckRoot != null)
+            // Column mode skips the pulse — the panel is the column's continuation
+            // and pulsing it would shift the stacked squares off their pitch.
+            if (_onDeckRoot != null && _layoutMode != FlashCardLayout.ColumnScroll)
             {
                 _onDeckPulseTween?.Kill();
                 _onDeckRoot.localScale = Vector3.one * onDeckScale;
@@ -742,7 +1087,20 @@ namespace KrumbleHut.Drummi.Dungeons
         /// </summary>
         private void PromoteOnDeckVisuals()
         {
-            HideOnDeck();
+            bool column = _layoutMode == FlashCardLayout.ColumnScroll && _columnRoot != null;
+            // Column mode keeps the on-deck stack alive through the handoff frame —
+            // DealOnDeckColumn below redeals it (preview tier) with no hidden gap.
+            if (!column) HideOnDeck();
+            if (column)
+            {
+                // Park the column one pitch HIGH: the new card's squares then sit
+                // exactly where the on-deck stack just was (slot 0 one pitch above
+                // the hit zone), and HandlePerformStart's ColumnStep(0) slides the
+                // whole column down — the handoff reads as one more slither step,
+                // not a rebuild.
+                ResetColumnScroll();
+                _columnRoot.anchoredPosition = new Vector2(0f, columnPitch);
+            }
 
             var templates = controller.CurrentTemplates;
             for (int i = 0; i < squares.Length; i++)
@@ -753,6 +1111,13 @@ namespace KrumbleHut.Drummi.Dungeons
                 var template  = templates != null && i < templates.Count ? templates[i] : SquareTemplate.Rest;
                 _templates[i] = template;
                 ShowFace(i, sq, template);
+                if (column)
+                {
+                    // Seamless swap: trail-scaled holders at the on-deck squares'
+                    // exact size/positions — no per-square dressing needed.
+                    sq.root.localScale = Vector3.one;
+                    continue;
+                }
                 sq.root.localScale       = Vector3.one * onDeckScale;
                 sq.root.anchoredPosition = _homePositions[i] + Vector2.down * handoffSlideDistance;
                 var seq = DOTween.Sequence().SetLink(sq.root.gameObject);
@@ -760,6 +1125,12 @@ namespace KrumbleHut.Drummi.Dungeons
                 seq.Join(sq.root.DOAnchorPos(_homePositions[i], handoffPopDuration).SetEase(Ease.OutCubic));
                 _revealTweens[i] = seq;
             }
+
+            // Redeal the stack above the new active card: at a pipelined handoff
+            // the next card is already consumed, so this shows the PREVIEW card —
+            // the same blocks the player was just reading, at identical world
+            // positions (slot math is seamless across the park+step).
+            if (column) DealOnDeckColumn();
 
             // DT banner persists through a Double Time card, drops otherwise.
             SetDoubleTimeBanner(controller.CurrentCardTempoMultiplier > 1f);
@@ -840,40 +1211,61 @@ namespace KrumbleHut.Drummi.Dungeons
         private void EnsureOnDeckGrid(int slotCount)
         {
             if (squarePrefab == null || cardRoot == null) return;
+            bool column = _layoutMode == FlashCardLayout.ColumnScroll;
+            if (column && _columnRoot == null) return; // active column always builds first
 
             if (_onDeckRoot == null)
             {
                 var go = new GameObject("OnDeck", typeof(RectTransform));
                 _onDeckRoot = (RectTransform)go.transform;
-                _onDeckRoot.SetParent(cardRoot, worldPositionStays: false);
-                _onDeckRoot.anchorMin  = new Vector2(0.5f, 0f);
-                _onDeckRoot.anchorMax  = new Vector2(0.5f, 0f);
-                _onDeckRoot.pivot      = new Vector2(0.5f, 1f);
-                _onDeckRoot.sizeDelta  = new Vector2(cardRoot.sizeDelta.x, 0f);
-                _onDeckRoot.localScale = Vector3.one * onDeckScale;
 
-                // Telegraph label: sits on top of the preview (inside the onDeckGap),
-                // gold like the 'your turn' border — "this is about to be yours".
-                var labelGo = new GameObject("OnDeckLabel", typeof(RectTransform));
-                _onDeckLabel = labelGo.AddComponent<TextMeshProUGUI>();
-                var labelRt = (RectTransform)labelGo.transform;
-                labelRt.SetParent(_onDeckRoot, worldPositionStays: false);
-                labelRt.anchorMin        = new Vector2(0.5f, 1f);
-                labelRt.anchorMax        = new Vector2(0.5f, 1f);
-                labelRt.pivot            = new Vector2(0.5f, 0f);
-                labelRt.sizeDelta        = new Vector2(600f, onDeckLabelFontSize * 1.3f);
-                labelRt.anchoredPosition = new Vector2(0f, 4f);
-                _onDeckLabel.text          = onDeckLabelText;
-                _onDeckLabel.fontSize      = onDeckLabelFontSize;
-                _onDeckLabel.fontStyle     = FontStyles.Bold;
-                _onDeckLabel.alignment     = TextAlignmentOptions.Center;
-                _onDeckLabel.color         = borderYourTurnColor;
-                _onDeckLabel.raycastTarget = false;
+                if (column)
+                {
+                    // Column mode: the on-deck stack is simply the column's
+                    // CONTINUATION — parented inside the scroll container so it
+                    // slithers down with the active card. No label, no gap: the
+                    // visible trail is its own telegraph.
+                    _onDeckRoot.SetParent(_columnRoot, worldPositionStays: false);
+                    _onDeckRoot.anchorMin  = new Vector2(0.5f, 0f);
+                    _onDeckRoot.anchorMax  = new Vector2(0.5f, 0f);
+                    _onDeckRoot.pivot      = new Vector2(0.5f, 0f);
+                    _onDeckRoot.sizeDelta  = Vector2.zero;
+                    _onDeckRoot.localScale = Vector3.one;
+                }
+                else
+                {
+                    _onDeckRoot.SetParent(cardRoot, worldPositionStays: false);
+                    _onDeckRoot.anchorMin  = new Vector2(0.5f, 0f);
+                    _onDeckRoot.anchorMax  = new Vector2(0.5f, 0f);
+                    _onDeckRoot.pivot      = new Vector2(0.5f, 1f);
+                    _onDeckRoot.sizeDelta  = new Vector2(cardRoot.sizeDelta.x, 0f);
+                    _onDeckRoot.localScale = Vector3.one * onDeckScale;
+
+                    // Telegraph label: sits on top of the preview (inside the onDeckGap),
+                    // gold like the 'your turn' border — "this is about to be yours".
+                    var labelGo = new GameObject("OnDeckLabel", typeof(RectTransform));
+                    _onDeckLabel = labelGo.AddComponent<TextMeshProUGUI>();
+                    var labelRt = (RectTransform)labelGo.transform;
+                    labelRt.SetParent(_onDeckRoot, worldPositionStays: false);
+                    labelRt.anchorMin        = new Vector2(0.5f, 1f);
+                    labelRt.anchorMax        = new Vector2(0.5f, 1f);
+                    labelRt.pivot            = new Vector2(0.5f, 0f);
+                    labelRt.sizeDelta        = new Vector2(600f, onDeckLabelFontSize * 1.3f);
+                    labelRt.anchoredPosition = new Vector2(0f, 4f);
+                    _onDeckLabel.text          = onDeckLabelText;
+                    _onDeckLabel.fontSize      = onDeckLabelFontSize;
+                    _onDeckLabel.fontStyle     = FontStyles.Bold;
+                    _onDeckLabel.alignment     = TextAlignmentOptions.Center;
+                    _onDeckLabel.color         = borderYourTurnColor;
+                    _onDeckLabel.raycastTarget = false;
+                }
 
                 // Banner reads over everything, including the preview.
                 if (doubleTimeBanner != null) doubleTimeBanner.SetAsLastSibling();
             }
-            _onDeckRoot.anchoredPosition = new Vector2(0f, -onDeckGap);
+            // Column mode: ShowOnDeck owns the stack position (it depends on the
+            // active card's slot count). Grid mode: fixed below the card.
+            if (!column) _onDeckRoot.anchoredPosition = new Vector2(0f, -onDeckGap);
 
             if (slotCount == _onDeckBuiltCount) return;
 
@@ -889,26 +1281,38 @@ namespace KrumbleHut.Drummi.Dungeons
 
             for (int i = 0; i < slotCount; i++)
             {
-                int row = i / columns;
-                int col = i % columns;
-
                 var widget = Instantiate(squarePrefab, _onDeckRoot);
                 widget.name = $"OnDeckSq{i}";
                 var rt = widget.root;
-                rt.anchorMin        = new Vector2(0.5f, 1f);
-                rt.anchorMax        = new Vector2(0.5f, 1f);
-                rt.pivot            = new Vector2(0.5f, 0.5f);
-                rt.sizeDelta        = new Vector2(cellSize, cellSize);
-                rt.anchoredPosition = new Vector2(
-                    (col - (columns - 1) * 0.5f) * pitchX,
-                    -(cellSize * 0.5f + row * pitchY));
+                if (column)
+                {
+                    // Vertical continuation: slot i one pitch above the previous,
+                    // sized to match the trail (holder-scaled) active squares.
+                    rt.anchorMin        = new Vector2(0.5f, 0f);
+                    rt.anchorMax        = new Vector2(0.5f, 0f);
+                    rt.pivot            = new Vector2(0.5f, 0.5f);
+                    rt.sizeDelta        = Vector2.one * (cellSize * columnTrailScale);
+                    rt.anchoredPosition = new Vector2(0f, i * columnPitch);
+                }
+                else
+                {
+                    int row = i / columns;
+                    int col = i % columns;
+                    rt.anchorMin        = new Vector2(0.5f, 1f);
+                    rt.anchorMax        = new Vector2(0.5f, 1f);
+                    rt.pivot            = new Vector2(0.5f, 0.5f);
+                    rt.sizeDelta        = new Vector2(cellSize, cellSize);
+                    rt.anchoredPosition = new Vector2(
+                        (col - (columns - 1) * 0.5f) * pitchX,
+                        -(cellSize * 0.5f + row * pitchY));
+                }
 
                 _onDeckSquares[i] = new Square { root = rt, back = widget.back, glyph = widget.glyph, cursor = widget.cursor };
                 ResetOnDeckSquare(i);
             }
 
             _onDeckBuiltCount = slotCount;
-            Debug.Log($"[FlashCardView] On-deck grid built: {slotCount} slots");
+            Debug.Log($"[FlashCardView] On-deck grid built: {slotCount} slots ({(column ? "column" : "grid")})");
         }
 
         private void ResetOnDeckSquare(int i)
@@ -950,7 +1354,9 @@ namespace KrumbleHut.Drummi.Dungeons
             _onDeckPulseTween = null;
             if (_onDeckRoot != null)
             {
-                _onDeckRoot.localScale = Vector3.one * onDeckScale;
+                _onDeckRoot.localScale = _layoutMode == FlashCardLayout.ColumnScroll
+                    ? Vector3.one
+                    : Vector3.one * onDeckScale;
                 _onDeckRoot.gameObject.SetActive(false);
             }
         }
@@ -1146,6 +1552,7 @@ namespace KrumbleHut.Drummi.Dungeons
                 KillSquareTweens(i);
             SetAllWobbles(false);
             HideOnDeck();
+            ResetColumnScroll();
             _borderTween?.Kill();
             _borderTween = null;
             _hideDelayTween?.Kill();

@@ -2312,7 +2312,7 @@ PrefabInstance:
     - target: {fileID: 8769215976315606097, guid: 739076fc8a2db3d4285f9d644daecc73, type: 3}
       propertyPath: definition
       value: 
-      objectReference: {fileID: 11400000, guid: 96a9dfd62bf63924eb97b7543b1168b2, type: 2}
+      objectReference: {fileID: 11400000, guid: 5d94b3094d9313a43be341cef5aa1d8d, type: 2}
     m_RemovedComponents: []
     m_RemovedGameObjects:
     - {fileID: 1131215870057073952, guid: 739076fc8a2db3d4285f9d644daecc73, type: 3}
@@ -3123,6 +3123,14 @@ MonoBehaviour:
   handoffPopDuration: 0.1
   handoffSlideDistance: 80
   alwaysOnDeckReveal: 1
+  columnPitch: 150
+  columnCurrentScale: 1.25
+  columnTrailScale: 0.85
+  columnStepDuration: 0.12
+  columnLaneWidth: 240
+  columnLaneBottomY: 560
+  columnLaneTopOverflow: 200
+  columnHitZoneY: 140
 --- !u!4 &879554923
 Transform:
   m_ObjectHideFlags: 0
@@ -5390,7 +5398,7 @@ PrefabInstance:
     - target: {fileID: 8769215976315606097, guid: 739076fc8a2db3d4285f9d644daecc73, type: 3}
       propertyPath: definition
       value: 
-      objectReference: {fileID: 11400000, guid: 5d94b3094d9313a43be341cef5aa1d8d, type: 2}
+      objectReference: {fileID: 11400000, guid: 96a9dfd62bf63924eb97b7543b1168b2, type: 2}
     m_RemovedComponents: []
     m_RemovedGameObjects:
     - {fileID: 1131215870057073952, guid: 739076fc8a2db3d4285f9d644daecc73, type: 3}
