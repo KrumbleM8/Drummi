@@ -1,4 +1,5 @@
 using DG.Tweening;
+using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -157,6 +158,39 @@ namespace KrumbleHut.Drummi.Dungeons
         [SerializeField] private float wobbleRotationAmount = 6f;
         [Tooltip("Beats for one full wobble cycle (left→right→left). 2 = one swing per beat.")]
         [SerializeField] private float wobbleBeatsPerCycle = 2f;
+
+        [Header("On-Deck Reveal (pipelined next card)")]
+        [Tooltip("Scale of the on-deck (next card) preview relative to the active card. Kept close " +
+                 "to full size so the preview reads as a real, imminent card — the dim, the label, " +
+                 "and the lower position carry the 'not live yet' distinction instead.")]
+        [SerializeField, Range(0.2f, 1f)] private float onDeckScale = 0.95f;
+        [Tooltip("Gap between the active card's bottom edge and the top of the on-deck panel " +
+                 "(the GET READY label lives inside this gap).")]
+        [SerializeField] private float onDeckGap = 84f;
+        [Tooltip("Dim multiplier on on-deck square face/glyph colors — reads as 'upcoming', not live. " +
+                 "Near 1 = full brightness; the label and lower position carry the distinction.")]
+        [SerializeField, Range(0.2f, 1f)] private float onDeckDim = 0.95f;
+        [Tooltip("Label above the on-deck grid telegraphing that the card must be played " +
+                 "immediately at the boundary.")]
+        [SerializeField] private string onDeckLabelText = "GET READY!";
+        [SerializeField] private float onDeckLabelFontSize = 56f;
+        [Tooltip("Whole-panel scale pulse on each on-deck square reveal — the preview breathes " +
+                 "with the beat so the eye is drawn to it while performing.")]
+        [SerializeField, Range(1f, 1.3f)] private float onDeckPulseScale = 1.1f;
+        [Tooltip("Optional soft tick played on each on-deck square reveal (misc speaker) — an " +
+                 "audible 'next card is being dealt' telegraph. None = silent reveal.")]
+        [SerializeField] private AudioClip onDeckTickClip;
+        [Tooltip("Handoff pop duration: at the boundary the new card's squares grow from the " +
+                 "on-deck scale to full size while sliding up from the on-deck direction.")]
+        [SerializeField] private float handoffPopDuration = 0.10f;
+        [Tooltip("How far below their final position the squares start the handoff slide — reads " +
+                 "as the on-deck card physically moving up into the live frame.")]
+        [SerializeField] private float handoffSlideDistance = 80f;
+        [Tooltip("Uniform flow (endless scene): ALSO present classic reveal bars (run start, " +
+                 "post-stage-break) in the on-deck zone, promoting with the same slide-up at " +
+                 "perform start — every card arrives through the GET READY telegraph. OFF = " +
+                 "classic in-place reveal (keep OFF for dungeon rooms).")]
+        [SerializeField] private bool alwaysOnDeckReveal = false;
         #endregion
 
         #region State
@@ -193,6 +227,25 @@ namespace KrumbleHut.Drummi.Dungeons
         private Tween            _hideDelayTween;
         private Tween            _bannerTween;
         private bool             _gradeFlashActive;
+
+        // On-deck grid (pipelined next card): lightweight squares (back + glyph
+        // only — no cursor, wobble, or hit state) under an auto-created root
+        // parented to cardRoot and anchored to its BOTTOM edge, so it tracks the
+        // active card's height automatically. Built/resized on demand.
+        private RectTransform _onDeckRoot;
+        private Square[] _onDeckSquares = System.Array.Empty<Square>();
+        private Tween[]  _onDeckTweens  = System.Array.Empty<Tween>();
+        private int      _onDeckBuiltCount;
+        private TextMeshProUGUI _onDeckLabel;
+        private Tween           _onDeckPulseTween;
+        // alwaysOnDeckReveal: this card is revealing in the on-deck zone and must
+        // be promoted to the active grid when its perform bar starts.
+        private bool            _promoteOnPerform;
+
+        // Authored home position per active square (set in EnsureGrid) — the
+        // handoff slide offsets squares below home, so any interrupted slide
+        // (KillSquareTweens) must snap position back, never leave it displaced.
+        private Vector2[] _homePositions = System.Array.Empty<Vector2>();
         #endregion
 
         #region Unity
@@ -235,9 +288,10 @@ namespace KrumbleHut.Drummi.Dungeons
             _popTweens    = new Tween[slotCount];
             _templates    = new SquareTemplate[slotCount];
             _hitCounts    = new int[slotCount];
-            _destroyed    = new bool[slotCount];
-            _missTapped   = new bool[slotCount];
-            _faceColors   = new Color[slotCount];
+            _destroyed      = new bool[slotCount];
+            _missTapped     = new bool[slotCount];
+            _faceColors     = new Color[slotCount];
+            _homePositions  = new Vector2[slotCount];
 
             for (int i = 0; i < slotCount; i++)
             {
@@ -254,6 +308,7 @@ namespace KrumbleHut.Drummi.Dungeons
                 rt.anchoredPosition = new Vector2(
                     (col - (columns - 1) * 0.5f) * pitchX,
                     -(topPadding + cellSize * 0.5f + row * pitchY));
+                _homePositions[i] = rt.anchoredPosition;
 
                 squares[i] = new Square { root = rt, back = widget.back, glyph = widget.glyph, cursor = widget.cursor };
 
@@ -284,28 +339,34 @@ namespace KrumbleHut.Drummi.Dungeons
         private void OnEnable()
         {
             if (controller == null) return;
-            controller.OnCardRevealStart   += HandleCardRevealStart;
-            controller.OnSquareReveal      += HandleSquareReveal;
-            controller.OnPerformStart      += HandlePerformStart;
-            controller.OnPlayerHit         += HandlePlayerHit;
-            controller.OnPlayerMissTap     += HandlePlayerMissTap;
-            controller.OnCardEvaluated     += HandleCardEvaluated;
-            controller.OnEncounterComplete += HandleEncounterComplete;
-            controller.OnEncounterStopped  += HandleEncounterStopped;
+            controller.OnCardRevealStart     += HandleCardRevealStart;
+            controller.OnSquareReveal        += HandleSquareReveal;
+            controller.OnPerformStart        += HandlePerformStart;
+            controller.OnPlayerHit           += HandlePlayerHit;
+            controller.OnPlayerMissTap       += HandlePlayerMissTap;
+            controller.OnCardEvaluated       += HandleCardEvaluated;
+            controller.OnEncounterComplete   += HandleEncounterComplete;
+            controller.OnEncounterStopped    += HandleEncounterStopped;
+            controller.OnNextCardRevealStart += HandleNextCardRevealStart;
+            controller.OnNextSquareReveal    += HandleNextSquareReveal;
+            controller.OnCardHandoff         += HandleCardHandoff;
         }
 
         private void OnDisable()
         {
             if (controller != null)
             {
-                controller.OnCardRevealStart   -= HandleCardRevealStart;
-                controller.OnSquareReveal      -= HandleSquareReveal;
-                controller.OnPerformStart      -= HandlePerformStart;
-                controller.OnPlayerHit         -= HandlePlayerHit;
-                controller.OnPlayerMissTap     -= HandlePlayerMissTap;
-                controller.OnCardEvaluated     -= HandleCardEvaluated;
-                controller.OnEncounterComplete -= HandleEncounterComplete;
-                controller.OnEncounterStopped  -= HandleEncounterStopped;
+                controller.OnCardRevealStart     -= HandleCardRevealStart;
+                controller.OnSquareReveal        -= HandleSquareReveal;
+                controller.OnPerformStart        -= HandlePerformStart;
+                controller.OnPlayerHit           -= HandlePlayerHit;
+                controller.OnPlayerMissTap       -= HandlePlayerMissTap;
+                controller.OnCardEvaluated       -= HandleCardEvaluated;
+                controller.OnEncounterComplete   -= HandleEncounterComplete;
+                controller.OnEncounterStopped    -= HandleEncounterStopped;
+                controller.OnNextCardRevealStart -= HandleNextCardRevealStart;
+                controller.OnNextSquareReveal    -= HandleNextSquareReveal;
+                controller.OnCardHandoff         -= HandleCardHandoff;
             }
             HideCard();
         }
@@ -345,6 +406,20 @@ namespace KrumbleHut.Drummi.Dungeons
             _hideDelayTween?.Kill();
             _hideDelayTween = null;
 
+            // Classic reveal (run start / post-stage-break). With alwaysOnDeckReveal
+            // the reveal presents in the on-deck zone instead and HandlePerformStart
+            // promotes it with the same slide-up as a pipelined handoff — every card
+            // arrives through the same telegraph. Otherwise: in-place reveal.
+            if (alwaysOnDeckReveal)
+            {
+                ShowOnDeck(_timing.PhraseLength);
+                _promoteOnPerform = true;
+            }
+            else
+            {
+                HideOnDeck();
+            }
+
             if (cardRoot != null && !cardRoot.gameObject.activeSelf)
                 cardRoot.gameObject.SetActive(true);
 
@@ -367,6 +442,14 @@ namespace KrumbleHut.Drummi.Dungeons
 
         private void HandleSquareReveal(int cardIndex, int slot, SquareTemplate template)
         {
+            // alwaysOnDeckReveal: classic reveal pops render in the on-deck zone;
+            // the active grid stays empty until promotion at perform start.
+            if (_promoteOnPerform)
+            {
+                RevealOnDeckSquare(slot, template);
+                return;
+            }
+
             if (slot < 0 || slot >= squares.Length) return;
             var sq = squares[slot];
             if (sq?.root == null) return;
@@ -393,8 +476,20 @@ namespace KrumbleHut.Drummi.Dungeons
 
         private void HandlePerformStart(int cardIndex)
         {
+            // alwaysOnDeckReveal: this card revealed in the on-deck zone — promote
+            // it onto the active grid now, exactly like a pipelined handoff.
+            if (_promoteOnPerform)
+            {
+                _promoteOnPerform = false;
+                PromoteOnDeckVisuals();
+            }
+
             _state = ViewState.Performing;
-            SetBorder(borderYourTurnColor, animate: true);
+            // At a pipelined handoff the previous card's grade flash started THIS
+            // frame — let it bleed through the perform window's start instead of
+            // stomping it (classic cycles have a whole reveal bar between the two).
+            if (!_gradeFlashActive)
+                SetBorder(borderYourTurnColor, animate: true);
             SetCursor(0);
             SetAllWobbles(true);
         }
@@ -550,6 +645,126 @@ namespace KrumbleHut.Drummi.Dungeons
                 SetBorder(borderIdleColor, animate: false);
         }
 
+        /// <summary>
+        /// Pipelined reveal: the NEXT card starts revealing in the dimmed on-deck
+        /// zone below the active card, while the player is still performing. The
+        /// active card is untouched. DT telegraph moves here — the banner/cue fire
+        /// when the upcoming card starts revealing, one perform window early.
+        /// </summary>
+        private void HandleNextCardRevealStart(int cardIndex, int slotCount, float tempoMultiplier)
+        {
+            ShowOnDeck(slotCount);
+
+            if (tempoMultiplier > 1f)
+            {
+                SetDoubleTimeBanner(true);
+                PlayDoubleTimeCue();
+            }
+        }
+
+        /// <summary>Builds/resets the on-deck panel for a fresh card and shows it.</summary>
+        private void ShowOnDeck(int slotCount)
+        {
+            EnsureOnDeckGrid(slotCount);
+            if (_onDeckRoot == null) return;
+
+            for (int i = 0; i < _onDeckSquares.Length; i++) ResetOnDeckSquare(i);
+            // A killed beat pulse must never leave the panel off its base scale.
+            _onDeckPulseTween?.Kill();
+            _onDeckPulseTween = null;
+            _onDeckRoot.localScale = Vector3.one * onDeckScale;
+            if (_onDeckLabel != null) _onDeckLabel.text = onDeckLabelText;
+            _onDeckRoot.gameObject.SetActive(true);
+        }
+
+        private void HandleNextSquareReveal(int cardIndex, int slot, SquareTemplate template)
+            => RevealOnDeckSquare(slot, template);
+
+        /// <summary>On-deck square flips on its beat — same pop vocabulary as the live reveal, dimmed.</summary>
+        private void RevealOnDeckSquare(int slot, SquareTemplate template)
+        {
+            if (slot < 0 || slot >= _onDeckSquares.Length) return;
+            var sq = _onDeckSquares[slot];
+            if (sq?.root == null) return;
+
+            _onDeckTweens[slot]?.Kill();
+            ShowOnDeckFace(sq, template);
+            sq.root.localRotation = Quaternion.identity;
+            sq.root.localScale    = Vector3.zero;
+            _onDeckTweens[slot] = sq.root.DOScale(1f, revealPopDuration)
+                                         .SetEase(Ease.OutBack)
+                                         .SetLink(sq.root.gameObject);
+
+            // Whole-panel beat pulse + optional tick: the preview breathes with
+            // the beat so the player's eye is drawn down while still performing.
+            if (_onDeckRoot != null)
+            {
+                _onDeckPulseTween?.Kill();
+                _onDeckRoot.localScale = Vector3.one * onDeckScale;
+                _onDeckPulseTween = _onDeckRoot.DOScale(onDeckScale * onDeckPulseScale, 0.06f)
+                                               .SetLoops(2, LoopType.Yoyo)
+                                               .SetLink(_onDeckRoot.gameObject);
+            }
+            PlayOnDeckTick();
+        }
+
+        /// <summary>
+        /// Pipelined handoff: the on-deck card just became the CURRENT card at the
+        /// zero-gap boundary. The card arrives FULLY revealed (it was read in the
+        /// on-deck zone), so every face shows immediately — the grow from the
+        /// on-deck scale to full size is the only dressing, reading as the preview
+        /// snapping up into the live frame. State/border/cursor/wobbles follow via
+        /// OnPerformStart, which the controller fires immediately after.
+        /// </summary>
+        private void HandleCardHandoff(int cardIndex)
+        {
+            _timing       = controller.CurrentTiming;
+            _beatInterval = (_timing.EvaluationTime - _timing.ResponseStartTime)
+                            / _timing.PhraseLength;
+            EnsureGrid(_timing.PhraseLength);
+
+            _hideDelayTween?.Kill();
+            _hideDelayTween = null;
+            if (cardRoot != null && !cardRoot.gameObject.activeSelf)
+                cardRoot.gameObject.SetActive(true);
+
+            _promoteOnPerform = false;
+            PromoteOnDeckVisuals();
+        }
+
+        /// <summary>
+        /// Promotes the on-deck card's content onto the active grid: hides the
+        /// preview, shows every face immediately, and slides the squares up from
+        /// the on-deck direction while growing to full size — the preview visibly
+        /// BECOMES the live card. An interrupted slide snaps home via
+        /// KillSquareTweens (_homePositions). Shared by the pipelined handoff and
+        /// the alwaysOnDeckReveal classic path.
+        /// </summary>
+        private void PromoteOnDeckVisuals()
+        {
+            HideOnDeck();
+
+            var templates = controller.CurrentTemplates;
+            for (int i = 0; i < squares.Length; i++)
+            {
+                ResetSquare(i);
+                var sq = squares[i];
+                if (sq?.root == null) continue;
+                var template  = templates != null && i < templates.Count ? templates[i] : SquareTemplate.Rest;
+                _templates[i] = template;
+                ShowFace(i, sq, template);
+                sq.root.localScale       = Vector3.one * onDeckScale;
+                sq.root.anchoredPosition = _homePositions[i] + Vector2.down * handoffSlideDistance;
+                var seq = DOTween.Sequence().SetLink(sq.root.gameObject);
+                seq.Join(sq.root.DOScale(1f, handoffPopDuration).SetEase(Ease.OutBack));
+                seq.Join(sq.root.DOAnchorPos(_homePositions[i], handoffPopDuration).SetEase(Ease.OutCubic));
+                _revealTweens[i] = seq;
+            }
+
+            // DT banner persists through a Double Time card, drops otherwise.
+            SetDoubleTimeBanner(controller.CurrentCardTempoMultiplier > 1f);
+        }
+
         // Normal completion: hold the card briefly so the final card's grade flash is
         // readable while the room-exit transition covers the screen. Real-time delay,
         // cosmetic only — the hide moment is not beat-critical.
@@ -571,6 +786,11 @@ namespace KrumbleHut.Drummi.Dungeons
             _revealTweens[i] = null;
             _popTweens[i]?.Kill();
             _popTweens[i] = null;
+            // A killed handoff slide must never leave the square displaced —
+            // snap back to its authored grid position (scale/color are always
+            // re-set by whoever called this; position is not).
+            if (i < _homePositions.Length && squares[i]?.root != null)
+                squares[i].root.anchoredPosition = _homePositions[i];
         }
 
         private void ResetSquare(int i)
@@ -608,6 +828,141 @@ namespace KrumbleHut.Drummi.Dungeons
                 // Rests read quieter: dim the glyph slightly.
                 sq.glyph.color = isNote ? Color.black : new Color(0.15f, 0.15f, 0.2f, 0.8f);
             }
+        }
+
+        /// <summary>
+        /// (Re)builds the on-deck mini-grid for <paramref name="slotCount"/> slots.
+        /// The root is created on demand under cardRoot, anchored to its BOTTOM
+        /// edge (pivot top) so it tracks the active card's height automatically,
+        /// scaled by onDeckScale. Squares reuse the live layout math; no wobble,
+        /// cursor, or hit state — the on-deck card is read-only.
+        /// </summary>
+        private void EnsureOnDeckGrid(int slotCount)
+        {
+            if (squarePrefab == null || cardRoot == null) return;
+
+            if (_onDeckRoot == null)
+            {
+                var go = new GameObject("OnDeck", typeof(RectTransform));
+                _onDeckRoot = (RectTransform)go.transform;
+                _onDeckRoot.SetParent(cardRoot, worldPositionStays: false);
+                _onDeckRoot.anchorMin  = new Vector2(0.5f, 0f);
+                _onDeckRoot.anchorMax  = new Vector2(0.5f, 0f);
+                _onDeckRoot.pivot      = new Vector2(0.5f, 1f);
+                _onDeckRoot.sizeDelta  = new Vector2(cardRoot.sizeDelta.x, 0f);
+                _onDeckRoot.localScale = Vector3.one * onDeckScale;
+
+                // Telegraph label: sits on top of the preview (inside the onDeckGap),
+                // gold like the 'your turn' border — "this is about to be yours".
+                var labelGo = new GameObject("OnDeckLabel", typeof(RectTransform));
+                _onDeckLabel = labelGo.AddComponent<TextMeshProUGUI>();
+                var labelRt = (RectTransform)labelGo.transform;
+                labelRt.SetParent(_onDeckRoot, worldPositionStays: false);
+                labelRt.anchorMin        = new Vector2(0.5f, 1f);
+                labelRt.anchorMax        = new Vector2(0.5f, 1f);
+                labelRt.pivot            = new Vector2(0.5f, 0f);
+                labelRt.sizeDelta        = new Vector2(600f, onDeckLabelFontSize * 1.3f);
+                labelRt.anchoredPosition = new Vector2(0f, 4f);
+                _onDeckLabel.text          = onDeckLabelText;
+                _onDeckLabel.fontSize      = onDeckLabelFontSize;
+                _onDeckLabel.fontStyle     = FontStyles.Bold;
+                _onDeckLabel.alignment     = TextAlignmentOptions.Center;
+                _onDeckLabel.color         = borderYourTurnColor;
+                _onDeckLabel.raycastTarget = false;
+
+                // Banner reads over everything, including the preview.
+                if (doubleTimeBanner != null) doubleTimeBanner.SetAsLastSibling();
+            }
+            _onDeckRoot.anchoredPosition = new Vector2(0f, -onDeckGap);
+
+            if (slotCount == _onDeckBuiltCount) return;
+
+            for (int i = 0; i < _onDeckSquares.Length; i++)
+            {
+                _onDeckTweens[i]?.Kill();
+                if (_onDeckSquares[i]?.root != null)
+                    Destroy(_onDeckSquares[i].root.gameObject);
+            }
+
+            _onDeckSquares = new Square[slotCount];
+            _onDeckTweens  = new Tween[slotCount];
+
+            for (int i = 0; i < slotCount; i++)
+            {
+                int row = i / columns;
+                int col = i % columns;
+
+                var widget = Instantiate(squarePrefab, _onDeckRoot);
+                widget.name = $"OnDeckSq{i}";
+                var rt = widget.root;
+                rt.anchorMin        = new Vector2(0.5f, 1f);
+                rt.anchorMax        = new Vector2(0.5f, 1f);
+                rt.pivot            = new Vector2(0.5f, 0.5f);
+                rt.sizeDelta        = new Vector2(cellSize, cellSize);
+                rt.anchoredPosition = new Vector2(
+                    (col - (columns - 1) * 0.5f) * pitchX,
+                    -(cellSize * 0.5f + row * pitchY));
+
+                _onDeckSquares[i] = new Square { root = rt, back = widget.back, glyph = widget.glyph, cursor = widget.cursor };
+                ResetOnDeckSquare(i);
+            }
+
+            _onDeckBuiltCount = slotCount;
+            Debug.Log($"[FlashCardView] On-deck grid built: {slotCount} slots");
+        }
+
+        private void ResetOnDeckSquare(int i)
+        {
+            var sq = _onDeckSquares[i];
+            if (sq?.root == null) return;
+            _onDeckTweens[i]?.Kill();
+            _onDeckTweens[i] = null;
+            sq.root.localScale    = Vector3.zero;
+            sq.root.localRotation = Quaternion.identity;
+            if (sq.back   != null) { sq.back.enabled = true; sq.back.color = faceDownColor; }
+            if (sq.glyph  != null) sq.glyph.enabled  = false;
+            if (sq.cursor != null) sq.cursor.enabled = false;
+        }
+
+        /// <summary>Dimmed variant of ShowFace — never touches the live card's per-slot state.</summary>
+        private void ShowOnDeckFace(Square sq, SquareTemplate template)
+        {
+            bool  isNote = template.IsNoteBearing();
+            Color dim    = new Color(onDeckDim, onDeckDim, onDeckDim, 1f);
+            if (sq.back != null) sq.back.color = (isNote ? noteFaceColor : restFaceColor) * dim;
+            if (sq.glyph != null)
+            {
+                sq.glyph.sprite  = GlyphSprite(template);
+                sq.glyph.enabled = sq.glyph.sprite != null;
+                sq.glyph.color   = isNote ? new Color(0f, 0f, 0f, 0.85f)
+                                          : new Color(0.15f, 0.15f, 0.2f, 0.6f);
+            }
+        }
+
+        private void HideOnDeck()
+        {
+            for (int i = 0; i < _onDeckTweens.Length; i++)
+            {
+                _onDeckTweens[i]?.Kill();
+                _onDeckTweens[i] = null;
+            }
+            _onDeckPulseTween?.Kill();
+            _onDeckPulseTween = null;
+            if (_onDeckRoot != null)
+            {
+                _onDeckRoot.localScale = Vector3.one * onDeckScale;
+                _onDeckRoot.gameObject.SetActive(false);
+            }
+        }
+
+        /// <summary>Optional audible 'card being dealt' tick — same misc speaker as the DT cue.</summary>
+        private void PlayOnDeckTick()
+        {
+            if (onDeckTickClip == null) return;
+            var audio = AudioManager.instance;
+            if (audio == null || audio.speakers == null || audio.speakers.Length < 3) return;
+            if (audio.speakers[2] == null) return;
+            audio.speakers[2].PlayOneShot(onDeckTickClip);
         }
 
         private Sprite GlyphSprite(SquareTemplate template) => template switch
@@ -790,12 +1145,14 @@ namespace KrumbleHut.Drummi.Dungeons
             for (int i = 0; i < _revealTweens.Length; i++)
                 KillSquareTweens(i);
             SetAllWobbles(false);
+            HideOnDeck();
             _borderTween?.Kill();
             _borderTween = null;
             _hideDelayTween?.Kill();
             _hideDelayTween   = null;
             SetDoubleTimeBanner(false);
             _gradeFlashActive = false;
+            _promoteOnPerform = false;
             _state       = ViewState.Hidden;
             _cursorIndex = -1;
             if (cardRoot != null) cardRoot.gameObject.SetActive(false);

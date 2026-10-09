@@ -127,6 +127,11 @@ namespace KrumbleHut.Drummi.FlashCards
         };
 
         [Header("Card Expansion")]
+        [Tooltip("Hard cap on card rows — base AND expanded. Ladder steps authored above this " +
+                 "(e.g. the legacy 3/5-row expandRows) clamp down to it, so the grid never exceeds " +
+                 "maxRows x 4 slots.")]
+        [SerializeField, Min(1)] private int maxRows = 2;
+
         [Tooltip("How expanded (bigger) cards trigger: independent per-card chance, or a strict every-Nth-card cadence.")]
         [SerializeField] private ExpandTrigger expandTrigger = ExpandTrigger.RandomChance;
 
@@ -471,19 +476,24 @@ namespace KrumbleHut.Drummi.FlashCards
             => _activeTempoMultiplier > 1f ? 0f : step.doubleTimeChance;
 
         /// <summary>
-        /// Beat slots for a step's BASE cards: rows x 4. Defensive floor of 1 row —
-        /// scene-serialized steps authored before this field existed deserialize
-        /// rows = 0.
+        /// Beat slots for a step's BASE cards: rows x 4, capped at maxRows.
+        /// Defensive floor of 1 row — scene-serialized steps authored before this
+        /// field existed deserialize rows = 0.
         /// </summary>
-        private static int SlotCountFor(EscalationStep step)
-            => Mathf.Max(1, step.rows) * 4;
+        private int SlotCountFor(EscalationStep step)
+            => Mathf.Clamp(step.rows, 1, maxRows) * 4;
 
         /// <summary>
-        /// Beat slots for a step's EXPANDED cards; 0 = this step never expands
-        /// (expandRows unset or not larger than the base).
+        /// Beat slots for a step's EXPANDED cards, capped at maxRows; 0 = this step
+        /// never expands (expandRows unset, not larger than the base, or the base
+        /// already sits at the cap).
         /// </summary>
-        private static int ExpandSlotsFor(EscalationStep step)
-            => step.expandRows > Mathf.Max(1, step.rows) ? step.expandRows * 4 : 0;
+        private int ExpandSlotsFor(EscalationStep step)
+        {
+            int baseRows   = Mathf.Clamp(step.rows, 1, maxRows);
+            int expandRows = Mathf.Min(step.expandRows, maxRows);
+            return expandRows > baseRows ? expandRows * 4 : 0;
+        }
 
         /// <summary>Cards-per-expansion in FixedCadence mode; 0 = RandomChance mode.</summary>
         private int ExpandCadence()

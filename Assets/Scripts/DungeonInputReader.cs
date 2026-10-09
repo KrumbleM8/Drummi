@@ -250,6 +250,29 @@ public class DungeonInputReader : MonoBehaviour
             return;
         }
 
+        // ── Handoff coyote (FlashCards pipelined reveal) ──────────────────
+        // When an encounter controller chains two perform windows with ZERO gap,
+        // it sets CoyoteWindowStartOverride to the NEXT window's start while
+        // allowInput is still true for the current one. A tap near that boundary
+        // is ambiguous: late for the outgoing card's last note, or early for the
+        // next card's first beat. Nearest-claim rule: if the tap is within the
+        // coyote buffer of the boundary AND closer to the boundary than to the
+        // outgoing card's last scheduled note, buffer it for the next window
+        // (replayed via ReplayCoyoteBuffer at the handoff) instead of recording
+        // it — and penalising it — against the outgoing card.
+        if (CoyoteWindowStartOverride.HasValue)
+        {
+            double now             = GameClock.Instance.GameTime;
+            double timeUntilWindow = CoyoteWindowStartOverride.Value - now;
+            if (timeUntilWindow >= -windowOpenLateToleranceSeconds &&
+                timeUntilWindow <= barStartInputBufferSeconds &&
+                IsCloserToNextWindow(now))
+            {
+                _bufferedInput = new BufferedInput { type = type, virtualTime = now };
+                return;
+            }
+        }
+
         // SingleDrum C&R mode: retag every echo tap to the constant type so all beats
         // match on type and EvaluateBar grades on timing alone. Null in all other contexts.
         if (SingleDrumEchoConstant.HasValue)
@@ -293,7 +316,31 @@ public class DungeonInputReader : MonoBehaviour
     /// </summary>
     public void ClearRecordedInputs() => playerInputData.Clear();
 
+    /// <summary>
+    /// Replays any coyote-buffered tap immediately. Used at FlashCards' pipelined
+    /// card handoff, where the input window closes and reopens within one frame —
+    /// Update's false→true transition detection never sees the flip, so the
+    /// controller triggers the replay explicitly after opening the next window.
+    /// </summary>
+    public void ReplayCoyoteBuffer() => ReplayBuffer();
+
     // ── Private ───────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Handoff-coyote tiebreak: true when <paramref name="now"/> is at least as
+    /// close to the next window's start (CoyoteWindowStartOverride) as to the
+    /// current card's LAST scheduled note (in perform-window coordinates). Taps
+    /// before the last note always belong to the current card.
+    /// </summary>
+    private bool IsCloserToNextWindow(double now)
+    {
+        if (_scheduledBeats == null || _scheduledBeats.Count == 0) return true;
+        double lastNote = double.MinValue;
+        foreach (var b in _scheduledBeats)
+            if (b.scheduledTime > lastNote) lastNote = b.scheduledTime;
+        lastNote += _timeOffset;
+        return CoyoteWindowStartOverride.Value - now <= now - lastNote;
+    }
 
     private void ReplayBuffer()
     {

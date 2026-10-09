@@ -24,6 +24,16 @@ namespace KrumbleHut.Drummi.Dungeons
     /// Cards chain zero-gap: next card's reveal starts exactly at this card's
     /// evaluation boundary (PhraseTiming.NextPhraseStart), no accumulated drift.
     ///
+    /// PIPELINED REVEAL (endless runs only): the next card is pre-built at each
+    /// perform start and reveals beat-by-beat in the view's ON-DECK zone during
+    /// the current perform window's final stretch, so its ResponseStart coincides
+    /// with the current EvaluationTime — the player rolls straight from one card
+    /// into the next with no rest bar (OnNextCardRevealStart / OnNextSquareReveal
+    /// / OnCardHandoff). The only remaining breathers are stage-up breaks, which
+    /// intentionally fall back to the classic break + standalone reveal (a stage
+    /// queued while the next card is already pre-built therefore lands one card
+    /// late). Dungeon rooms keep the classic watch-then-play cycle unchanged.
+    ///
     /// Structurally a sibling of CallAndResponseController: same GameClock virtual-time
     /// round cycle (PhraseTiming), same DungeonInputReader gating contract
     /// (EncounterActive + allowInput + CoyoteWindowStartOverride), same evaluator
@@ -97,6 +107,27 @@ namespace KrumbleHut.Drummi.Dungeons
 
         /// <summary>Fired when a card's perform bar begins. Parameter: cardIndex.</summary>
         public event Action<int> OnPerformStart;
+
+        /// <summary>
+        /// Pipelined reveal (endless runs): fired when the NEXT card starts revealing
+        /// in the on-deck zone DURING the current card's perform window.
+        /// Parameters: next cardIndex, its slot count, its tempo multiplier.
+        /// </summary>
+        public event Action<int, int, float> OnNextCardRevealStart;
+
+        /// <summary>
+        /// Pipelined reveal: a next-card square flips in the on-deck zone, on its beat.
+        /// Parameters: next cardIndex, slot, template.
+        /// </summary>
+        public event Action<int, int, SquareTemplate> OnNextSquareReveal;
+
+        /// <summary>
+        /// Pipelined handoff: the pre-revealed next card just became the CURRENT card
+        /// at the zero-gap boundary — its perform window is already open. Fired instead
+        /// of OnCardRevealStart/OnSquareReveal; OnPerformStart follows immediately.
+        /// Parameter: cardIndex.
+        /// </summary>
+        public event Action<int> OnCardHandoff;
 
         /// <summary>
         /// Fired after a card's perform bar is graded.
@@ -200,6 +231,34 @@ namespace KrumbleHut.Drummi.Dungeons
         // Current card: scheduled notes in reveal-bar virtual times + full 8-slot templates.
         private List<DungeonScheduledBeat> _cardBeats;
         private SquareTemplate[]           _templates;
+
+        // ── Pipelined reveal (endless): the NEXT card is rolled + built at the
+        // current card's perform start and revealed in the on-deck zone during the
+        // perform window's final reveal-length stretch, so play is continuous —
+        // the boundary promotes it with zero gap (no standalone reveal bar).
+        // Skipped while a stage-up is pending: the stage keeps its telegraphed
+        // break + classic reveal bar (the breather is intentional), which also
+        // means a stage queued while a card is already pre-built lands one card
+        // later than in the classic flow.
+        private struct CardSpec
+        {
+            public float  tempoMultiplier;
+            public double beatInterval;
+            public int    slotCount;
+            public int    minNotes;
+            public int    maxNotes;
+            public int    revealBeats;
+            public double revealSlotInterval;
+        }
+
+        private bool         _nextPrepared;
+        private bool         _nextRevealStarted;
+        private int          _nextRevealSlot;
+        private double       _nextRevealOrigin;   // visual reveal start, clamped to the current perform start
+        private CardSpec     _nextSpec;
+        private PhraseTiming _nextTiming;
+        private List<DungeonScheduledBeat> _nextBeats;
+        private SquareTemplate[]           _nextTemplates;
 
         // One warning per encounter for the eighths tuning guard (see BuildCard).
         private bool _tuningGuardWarned;
@@ -415,6 +474,7 @@ namespace KrumbleHut.Drummi.Dungeons
             _cardBeats         = null;
             _templates         = null;
             _tuningGuardWarned = false;
+            ClearNextCard();
 
             // Gate input off for the reveal bar. SuppressSpawnMarkers is held true for
             // the whole encounter — the standard bar slider is BarTiming-coupled and
@@ -508,7 +568,8 @@ namespace KrumbleHut.Drummi.Dungeons
                 // Generate the card. No audio is scheduled anywhere — the reveal is
                 // purely visual, so no pre-scheduling headroom is needed (unlike C&R's
                 // PrepareCallPhrase, which exists only for PlayScheduled DSP lead).
-                _cardBeats = BuildCard(_current, out _templates);
+                _cardBeats = BuildCard(_current.ResponseStartTime, _cardSlotCount, _cardMinNotes,
+                                       _cardMaxNotes, _cardBeatInterval, out _templates);
                 LogCard(_cardIndex, _current, _templates);
 
                 _revealSlot = 0;
@@ -559,6 +620,37 @@ namespace KrumbleHut.Drummi.Dungeons
                 Debug.Log($"[FlashCard] PerformStart | card={_cardIndex} " +
                           $"expected={_current.ResponseStartTime:F6} actual={now:F6} delta=+{delta * 1000.0:F3}ms");
                 OnPerformStart?.Invoke(_cardIndex);
+                PrepareNextCard();
+            }
+
+            // ── Pipelined reveal: next card pops in the on-deck zone ─────────
+            // During the current perform window the pre-built next card reveals
+            // beat-by-beat so the player reads ahead while playing; at the
+            // boundary it is promoted with zero gap (see AdvanceCard).
+            if (_performFired && _nextPrepared)
+            {
+                if (!_nextRevealStarted && now >= _nextRevealOrigin)
+                {
+                    _nextRevealStarted = true;
+                    // Handoff coyote: boundary-adjacent taps are ambiguous between
+                    // this card's last note and the next card's first beat — arm
+                    // the reader's nearest-claim redirect toward the next window.
+                    if (inputReader != null)
+                        inputReader.CoyoteWindowStartOverride = _nextTiming.ResponseStartTime;
+                    Debug.Log($"[FlashCard] NextReveal   | card={_cardIndex + 1} tempo=x{_nextSpec.tempoMultiplier:F0} " +
+                              $"slots={_nextSpec.slotCount} origin={_nextRevealOrigin:F6}");
+                    OnNextCardRevealStart?.Invoke(_cardIndex + 1, _nextSpec.slotCount, _nextSpec.tempoMultiplier);
+                }
+
+                if (_nextRevealStarted)
+                {
+                    while (_nextRevealSlot < _nextSpec.slotCount &&
+                           now >= _nextRevealOrigin + _nextRevealSlot * _nextSpec.revealSlotInterval)
+                    {
+                        int slot = _nextRevealSlot++;
+                        OnNextSquareReveal?.Invoke(_cardIndex + 1, slot, _nextTemplates[slot]);
+                    }
+                }
             }
 
             // ── Evaluate ─────────────────────────────────────────────────────
@@ -598,6 +690,15 @@ namespace KrumbleHut.Drummi.Dungeons
         {
             _cardIndex++;
 
+            // Run stopped during OnCardEvaluated (strike-out → host StopEncounter):
+            // TerminateEncounter already closed the gates — promoting a pre-built
+            // card here would reopen them on a dead run.
+            if (!_running)
+            {
+                ClearNextCard();
+                return;
+            }
+
             if (!_endless && _cardIndex >= _activeCards)
             {
                 _running = false;
@@ -612,6 +713,43 @@ namespace KrumbleHut.Drummi.Dungeons
                 }
                 Debug.Log("[FlashCard] === ENCOUNTER COMPLETE ===");
                 OnEncounterComplete?.Invoke();
+                return;
+            }
+
+            // ── Pipelined handoff ────────────────────────────────────────────
+            // The next card was pre-revealed in the on-deck zone during this
+            // card's perform window — promote it and open its perform window in
+            // the SAME frame, so play continues with zero gap. A stage-up queued
+            // during this evaluation stays pending: PrepareNextCard skips while
+            // pending, so the stage lands at the NEXT boundary with its classic
+            // break + standalone reveal.
+            if (_nextPrepared)
+            {
+                ApplyCardSpec(_nextSpec); // boundary bpm retune — grading windows now match the new card
+                _current      = _nextTiming;
+                _cardBeats    = _nextBeats;
+                _templates    = _nextTemplates;
+                _revealFired  = true;
+                _performFired = true;
+                _revealSlot   = _cardSlotCount;
+                ClearNextCard();
+
+                OpenPerformWindow();
+
+                Debug.Log($"[FlashCard] Handoff      | card={_cardIndex} tempo=x{_cardTempoMultiplier:F0} " +
+                          $"slots={_cardSlotCount}  {_current}");
+                OnCardHandoff?.Invoke(_cardIndex);
+                OnPerformStart?.Invoke(_cardIndex);
+
+                // Same-frame close→reopen: the reader's false→true transition
+                // detection never sees the flip, so replay the handoff-coyote
+                // buffer (a boundary-adjacent early tap for this card's first
+                // beat). MUST run after OnCardHandoff/OnPerformStart — the replay
+                // fires OnPlayerHit synchronously, and the view drops hit visuals
+                // unless it is already in its Performing state on the new grid.
+                if (inputReader != null) inputReader.ReplayCoyoteBuffer();
+
+                PrepareNextCard();
                 return;
             }
 
@@ -652,10 +790,22 @@ namespace KrumbleHut.Drummi.Dungeons
         /// and applies the active slot count. Must be called before
         /// PhraseTiming.Compute for the card it applies to.
         /// </summary>
-        private void RollNextCardTempo()
+        private void RollNextCardTempo() => ApplyCardSpec(RollCardSpec());
+
+        /// <summary>
+        /// Rolls a card's tempo (1x, or 2x with _activeDoubleTimeChance), expansion,
+        /// note density, and reveal pacing from the active config. Pure roll — no
+        /// field/metronome side effects beyond the expansion cadence counter — so
+        /// the pipelined path can roll the NEXT card while the current one is
+        /// still performing.
+        /// </summary>
+        private CardSpec RollCardSpec()
         {
-            _cardTempoMultiplier = UnityEngine.Random.value < _activeDoubleTimeChance ? 2f : 1f;
-            _cardBeatInterval    = _baseBeatInterval / _cardTempoMultiplier;
+            var spec = new CardSpec
+            {
+                tempoMultiplier = UnityEngine.Random.value < _activeDoubleTimeChance ? 2f : 1f,
+            };
+            spec.beatInterval = _baseBeatInterval / spec.tempoMultiplier;
 
             // Expansion roll: occasionally a card is bigger than the step's base.
             bool expand = false;
@@ -671,18 +821,74 @@ namespace KrumbleHut.Drummi.Dungeons
                     expand = UnityEngine.Random.value < _activeExpandChance;
                 }
             }
-            _cardSlotCount = expand ? _activeExpandSlotCount : _activeSlotCount;
+            spec.slotCount = expand ? _activeExpandSlotCount : _activeSlotCount;
 
             // Proportional density: the authored range describes the base size.
-            float ratio   = (float)_cardSlotCount / _activeSlotCount;
-            _cardMinNotes = Mathf.Max(1, Mathf.RoundToInt(_activeMinNotes * ratio));
-            _cardMaxNotes = Mathf.Max(_cardMinNotes, Mathf.RoundToInt(_activeMaxNotes * ratio));
+            float ratio   = (float)spec.slotCount / _activeSlotCount;
+            spec.minNotes = Mathf.Max(1, Mathf.RoundToInt(_activeMinNotes * ratio));
+            spec.maxNotes = Mathf.Max(spec.minNotes, Mathf.RoundToInt(_activeMaxNotes * ratio));
 
-            _cardRevealBeats     = compressReveal
-                ? Mathf.Min(_cardSlotCount, revealBars * 4)
-                : _cardSlotCount;
-            _revealSlotInterval  = _cardRevealBeats * _cardBeatInterval / _cardSlotCount;
+            spec.revealBeats        = compressReveal
+                ? Mathf.Min(spec.slotCount, revealBars * 4)
+                : spec.slotCount;
+            spec.revealSlotInterval = spec.revealBeats * spec.beatInterval / spec.slotCount;
+            return spec;
+        }
+
+        /// <summary>
+        /// Makes <paramref name="spec"/> the CURRENT card's tempo/size config and
+        /// retunes metronome.bpm so the live-read grading windows match. Must run
+        /// at the card's boundary, never while the previous card is still graded —
+        /// the bpm write is why the pipelined path defers this to the handoff.
+        /// </summary>
+        private void ApplyCardSpec(CardSpec spec)
+        {
+            _cardTempoMultiplier = spec.tempoMultiplier;
+            _cardBeatInterval    = spec.beatInterval;
+            _cardSlotCount       = spec.slotCount;
+            _cardMinNotes        = spec.minNotes;
+            _cardMaxNotes        = spec.maxNotes;
+            _cardRevealBeats     = spec.revealBeats;
+            _revealSlotInterval  = spec.revealSlotInterval;
             if (metronome != null) metronome.bpm = _baseBpm * _cardTempoMultiplier;
+        }
+
+        /// <summary>
+        /// Pipelined reveal: rolls and builds the NEXT card so it can reveal in the
+        /// on-deck zone during the current perform window, ending exactly at the
+        /// boundary (next ResponseStart = current EvaluationTime). Called at every
+        /// perform start / handoff. No-ops outside endless runs, when already
+        /// prepared, or while a stage-up is pending — the stage keeps its classic
+        /// telegraphed break + standalone reveal bar.
+        /// </summary>
+        private void PrepareNextCard()
+        {
+            if (!_endless || _nextPrepared || _pendingStageMultiplier > 0f) return;
+
+            _nextSpec = RollCardSpec();
+            double callStart = _current.EvaluationTime - _nextSpec.revealBeats * _nextSpec.beatInterval;
+            _nextTiming = PhraseTiming.Compute(_cardIndex + 1, _nextSpec.slotCount, callStart,
+                                               _nextSpec.beatInterval, _nextSpec.revealBeats);
+            _nextBeats  = BuildCard(_nextTiming.ResponseStartTime, _nextSpec.slotCount, _nextSpec.minNotes,
+                                    _nextSpec.maxNotes, _nextSpec.beatInterval, out _nextTemplates);
+            LogCard(_cardIndex + 1, _nextTiming, _nextTemplates);
+
+            // Never reveal before the current perform window begins (exotic tempo
+            // mixes could push the reveal window earlier); the pop loop catches up.
+            _nextRevealOrigin  = Math.Max(callStart, _current.ResponseStartTime);
+            _nextRevealStarted = false;
+            _nextRevealSlot    = 0;
+            _nextPrepared      = true;
+        }
+
+        /// <summary>Discards any pre-built next card (teardown, stop, stage fallback).</summary>
+        private void ClearNextCard()
+        {
+            _nextPrepared      = false;
+            _nextRevealStarted = false;
+            _nextRevealSlot    = 0;
+            _nextBeats         = null;
+            _nextTemplates     = null;
         }
 
         /// <summary>
@@ -744,6 +950,7 @@ namespace KrumbleHut.Drummi.Dungeons
         {
             ClosePerformWindow();
             RestoreBaseBpm();
+            ClearNextCard();
             if (inputReader != null)
             {
                 inputReader.SuppressSpawnMarkers      = false;
@@ -800,22 +1007,23 @@ namespace KrumbleHut.Drummi.Dungeons
         #endregion
 
         #region Private — Card Generation
-        private List<DungeonScheduledBeat> BuildCard(PhraseTiming timing, out SquareTemplate[] templates)
+        private List<DungeonScheduledBeat> BuildCard(double responseStartTime, int slotCount, int minNotes,
+                                                     int maxNotes, double beatInterval, out SquareTemplate[] templates)
         {
             var beats  = _cardGenerator.GenerateCard(
-                _cardSlotCount, _cardMinNotes, _cardMaxNotes, ConstantType, _activeVocab, out templates);
+                slotCount, minNotes, maxNotes, ConstantType, _activeVocab, out templates);
             var result = new List<DungeonScheduledBeat>(beats.Count);
             // Beats are scheduled on the UNCOMPRESSED reveal timeline: an N-beat bar
             // ending exactly at ResponseStartTime, so scheduledTime + N*beatInterval
             // lands on the perform-bar target. With compression off this origin is
             // just CallStartTime; with it on, the visual reveal (compressed spacing)
             // and the grading timeline (full spacing) intentionally differ.
-            double revealOrigin = timing.ResponseStartTime - _cardSlotCount * _cardBeatInterval;
+            double revealOrigin = responseStartTime - slotCount * beatInterval;
             foreach (var b in beats)
             {
                 // b.timeSlot is in beats from card start (may be half-integral for
                 // eighths); multiply by the card's beat interval for seconds.
-                double virtualTime = revealOrigin + b.timeSlot * _cardBeatInterval;
+                double virtualTime = revealOrigin + b.timeSlot * beatInterval;
                 result.Add(new DungeonScheduledBeat(virtualTime, b.enemyType));
             }
 
@@ -858,8 +1066,8 @@ namespace KrumbleHut.Drummi.Dungeons
 
         private void LogCard(int cardIndex, PhraseTiming timing, SquareTemplate[] templates)
         {
-            var slots = new char[_cardSlotCount];
-            for (int i = 0; i < _cardSlotCount; i++) slots[i] = templates[i].ToLogChar();
+            var slots = new char[templates.Length];
+            for (int i = 0; i < templates.Length; i++) slots[i] = templates[i].ToLogChar();
             Debug.Log($"[FlashCard] Card stored  | card={cardIndex} pattern=[{new string(slots)}] " +
                       $"reveal=[{timing.CallStartTime:F6}, {timing.ResponseStartTime:F6})");
         }

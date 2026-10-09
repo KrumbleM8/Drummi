@@ -2943,6 +2943,7 @@ MonoBehaviour:
     expandRows: 5
     expandChance: 0.25
     tempoMultiplier: 1.5
+  maxRows: 2
   expandTrigger: 0
   expandEveryNCards: 4
   stageBreakBeats: 8
@@ -3112,6 +3113,16 @@ MonoBehaviour:
   completeHideDelay: 0.8
   wobbleRotationAmount: 6
   wobbleBeatsPerCycle: 2
+  onDeckScale: 0.77
+  onDeckGap: 84
+  onDeckDim: 0.95
+  onDeckLabelText: GET READY!
+  onDeckLabelFontSize: 56
+  onDeckPulseScale: 1.1
+  onDeckTickClip: {fileID: 0}
+  handoffPopDuration: 0.1
+  handoffSlideDistance: 80
+  alwaysOnDeckReveal: 1
 --- !u!4 &879554923
 Transform:
   m_ObjectHideFlags: 0
