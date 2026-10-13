@@ -116,6 +116,13 @@ namespace KrumbleHut.Drummi.FlashCards
                 return;
             }
 
+            // Locked signs can be focused and inspected but never launch.
+            if (node.IsLocked)
+            {
+                node.PlayLockedShake();
+                return;
+            }
+
             _leaving = true;
             if (spinner != null) spinner.SetInputEnabled(false);
             StartCoroutine(LaunchRun(node.Definition));
