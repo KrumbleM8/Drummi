@@ -45,9 +45,20 @@ public class BounceOnBeat : MonoBehaviour
     // the end of the outgoing room.  Staying on the old grid until the seam
     // means the bounce fires at regular beat intervals all the way to the bar
     // boundary, then re-aligns to the new grid exactly at beat 0.
+    //
+    // _activeBpm is the bpm the active grid was anchored under. FlashCards
+    // retunes metronome.bpm mid-run (stage-ups, per-card double time) at card
+    // boundaries WITHOUT re-anchoring startTick — Metronome caches timePerTick
+    // at init, so only live readers like this one see the change. Re-dividing
+    // the whole elapsed-since-startTick span by the new interval would shift
+    // the grid phase arbitrarily, so on a bpm change we re-anchor the grid at
+    // the nearest OLD-grid beat (the retune always lands on a card boundary,
+    // which sits on an old-grid beat) and count new-interval beats from there.
     private int    _lastBeatIndex    = -1;
     private double _activeStartTick  = double.MinValue;
     private double _pendingStartTick = 0.0;
+    private double _seenStartTick    = 0.0;
+    private double _activeBpm        = 0.0;
 
     private void Start()
     {
@@ -111,6 +122,8 @@ public class BounceOnBeat : MonoBehaviour
             // Drop the stale grid so the next session starts like a first init.
             _activeStartTick  = double.MinValue;
             _pendingStartTick = 0.0;
+            _seenStartTick    = 0.0;
+            _activeBpm        = 0.0;
             _lastBeatIndex    = -1;
             return;
         }
@@ -118,22 +131,38 @@ public class BounceOnBeat : MonoBehaviour
         if (metronome.startTick <= 0 || metronome.bpm <= 0)
             return;
 
-        double beatInterval = 60.0 / metronome.bpm;
+        double dspTime = AudioSettings.dspTime;
 
-        // Stage a new startTick whenever InitializeWithStartTime() assigns one.
-        // Two cases:
+        // Stage a new startTick whenever Metronome moves it. Three cases:
         //   a) First-ever init — no old grid exists, activate immediately.
-        //   b) Re-init (new room) — defer; keep the old grid alive until the seam.
-        if (metronome.startTick != _activeStartTick && metronome.startTick != _pendingStartTick)
+        //   b) Pause-resume — Metronome.OnResume() slides startTick forward by
+        //      the pause duration WITHOUT re-anchoring the grid (the shifted
+        //      tick is already in the past). Mirror the slide on our anchor
+        //      (and any staged seam grid) so phase is preserved.
+        //   c) Re-init (new room) — a future start time; defer, keep the old
+        //      grid alive until the seam.
+        if (metronome.startTick != _seenStartTick)
         {
-            _pendingStartTick = metronome.startTick;
+            double prevSeen = _seenStartTick;
+            _seenStartTick  = metronome.startTick;
 
             if (_activeStartTick == double.MinValue)
             {
                 // First init: activate now so beat detection can begin.
-                _activeStartTick  = _pendingStartTick;
+                _activeStartTick  = metronome.startTick;
+                _activeBpm        = metronome.bpm;
                 _lastBeatIndex    = -1;
                 _pendingStartTick = 0.0;
+            }
+            else if (prevSeen > 0.0 && metronome.startTick <= dspTime)
+            {
+                double shift = metronome.startTick - prevSeen;
+                _activeStartTick += shift;
+                if (_pendingStartTick > 0.0) _pendingStartTick += shift;
+            }
+            else
+            {
+                _pendingStartTick = metronome.startTick;
             }
         }
 
@@ -141,16 +170,37 @@ public class BounceOnBeat : MonoBehaviour
         // Doing this BEFORE the beat check below means the seam beat fires
         // on the new grid (index 0) rather than the old grid, so we never
         // double-fire the boundary beat.
-        if (_pendingStartTick > 0.0 && AudioSettings.dspTime >= _pendingStartTick)
+        if (_pendingStartTick > 0.0 && dspTime >= _pendingStartTick)
         {
             _activeStartTick  = _pendingStartTick;
             _pendingStartTick = 0.0;
+            _activeBpm        = metronome.bpm;
             _lastBeatIndex    = -1;
         }
 
         if (_activeStartTick <= 0.0) return;
 
-        double elapsed = AudioSettings.dspTime - _activeStartTick;
+        // Mid-run retune (FlashCards stage-up / per-card double time): bpm
+        // changed while startTick stayed put. The retune always happens at a
+        // card boundary, which lies on a beat of the OLD grid — re-anchor
+        // there and count new-interval beats from that boundary. Rounding to
+        // the nearest old beat tolerates the frame of latency between the
+        // boundary and the bpm write.
+        if (_activeBpm > 0.0 && metronome.bpm != _activeBpm)
+        {
+            double oldInterval   = 60.0 / _activeBpm;
+            long   boundaryBeat  = (long)Math.Round((dspTime - _activeStartTick) / oldInterval);
+            bool   boundaryFired = _lastBeatIndex >= boundaryBeat;
+            _activeStartTick += boundaryBeat * oldInterval;
+            _activeBpm        = metronome.bpm;
+            // If the old grid already bounced the boundary beat, the next
+            // bounce is new-grid index 1; otherwise let index 0 fire below so
+            // the boundary beat is neither skipped nor double-fired.
+            _lastBeatIndex    = boundaryFired ? 0 : -1;
+        }
+
+        double beatInterval = 60.0 / _activeBpm;
+        double elapsed = dspTime - _activeStartTick;
         if (elapsed < 0.0) return;
 
         int beatIndex = (int)Math.Floor(elapsed / beatInterval);
