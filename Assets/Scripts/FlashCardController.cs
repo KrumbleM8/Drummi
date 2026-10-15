@@ -93,6 +93,12 @@ namespace KrumbleHut.Drummi.Dungeons
                  "one bar (expanded cards pop double-time-style); 2 = the classic 8-beat reveal.")]
         [SerializeField, Min(1)] private int revealBars = 1;
 
+        [Header("Per-Block Judging (endless)")]
+        [Tooltip("Seconds past a slot's end boundary before it is judged. Covers same-frame input/Update " +
+                 "ordering races only — the eighths tuning guard keeps every note window closed before the " +
+                 "slot boundary, so no gameplay grace is needed here.")]
+        [SerializeField, Min(0f)] private float blockJudgeGraceSeconds = 0.05f;
+
         #endregion
 
         #region Events
@@ -132,8 +138,49 @@ namespace KrumbleHut.Drummi.Dungeons
         /// <summary>
         /// Fired after a card's perform bar is graded.
         /// Parameters: cardIndex, result (null when evaluation was skipped, e.g. paused).
+        /// Endless runs: the result is a synthesized aggregate of the per-block
+        /// judgements (PointsAwarded = 0 — points were already applied per bar group).
         /// </summary>
         public event Action<int, EvaluationResult> OnCardEvaluated;
+
+        /// <summary>
+        /// Endless only: a slot's judging window closed. Parameters: cardIndex, slot,
+        /// cleared (true when every note of the slot's template was hit in-window;
+        /// rests are always cleared — miss-taps on them are charged via OnPlayerMissTap).
+        /// </summary>
+        public event Action<int, int, bool> OnBlockJudged;
+
+        /// <summary>
+        /// Endless only: a bar group (4 consecutive blocks, plus any shorter remainder
+        /// at the card end) finished judging. Carries the group grade for sounds,
+        /// score, and streak — the per-block replacement for the old whole-card grade.
+        /// Parameters: cardIndex, judgement.
+        /// </summary>
+        public event Action<int, BarJudgement> OnBarJudged;
+
+        /// <summary>Aggregate judgement of one bar group (see OnBarJudged).</summary>
+        public readonly struct BarJudgement
+        {
+            public readonly int GroupIndex;     // 0-based group within the card
+            public readonly int BlocksInGroup;  // 4, or the remainder at card end
+            public readonly int MissedBlocks;
+            public readonly int NoteCount;      // scheduled notes across the group
+            public readonly int PerfectNotes;
+            public readonly int StrayTaps;
+            public readonly EvaluationGrade Grade;
+
+            public BarJudgement(int groupIndex, int blocksInGroup, int missedBlocks,
+                                int noteCount, int perfectNotes, int strayTaps, EvaluationGrade grade)
+            {
+                GroupIndex    = groupIndex;
+                BlocksInGroup = blocksInGroup;
+                MissedBlocks  = missedBlocks;
+                NoteCount     = noteCount;
+                PerfectNotes  = perfectNotes;
+                StrayTaps     = strayTaps;
+                Grade         = grade;
+            }
+        }
 
         /// <summary>
         /// Fired on a confirmed Perfect/Good tap during the perform bar.
@@ -288,6 +335,25 @@ namespace KrumbleHut.Drummi.Dungeons
         // Endless mode (standalone scene): AdvanceCard never terminates; the host
         // stops the run via StopEncounter. False for all dungeon-room encounters.
         private bool _endless;
+
+        // ── Per-block judging (endless only) ─────────────────────────────────
+        // Each slot is judged individually the moment its window closes (slot end
+        // + blockJudgeGraceSeconds) instead of batch-grading the card. Hits are
+        // CONSUMED against scheduled notes so a double-tap can't credit two slots.
+        // Rebuilt by InitBlockJudging() whenever a card becomes current (reveal
+        // branch and pipelined handoff). All arrays are null outside endless runs.
+        private bool[] _slotJudged;    // window closed + OnBlockJudged fired
+        private int[]  _slotExpected;  // scheduled notes per slot (rest = 0)
+        private int[]  _slotHits;      // consumed in-window hits per slot
+        private int[]  _slotPerfect;   // of which Perfect
+        private int[]  _slotStrays;    // reader miss-taps attributed to the slot
+        private bool[] _beatConsumed;  // parallel to _cardBeats
+        private int[]  _beatSlot;      // parallel to _cardBeats: host slot
+        private int    _nextJudgeSlot; // monotonic judging cursor
+        private int    _groupStart;    // first slot of the currently judging bar group
+
+        // Bar-group size for sounds/score/streak — one visual row.
+        private const int BarGroupSize = FlashCardPatternGenerator.SlotsPerRow;
         #endregion
 
         #region Public Properties
@@ -600,6 +666,7 @@ namespace KrumbleHut.Drummi.Dungeons
                 _cardBeats = BuildCard(_current.ResponseStartTime, _cardSlotCount, _cardMinNotes,
                                        _cardMaxNotes, _cardBeatInterval, out _templates);
                 LogCard(_cardIndex, _current, _templates);
+                InitBlockJudging();
 
                 _revealSlot = 0;
 
@@ -690,6 +757,13 @@ namespace KrumbleHut.Drummi.Dungeons
                 }
             }
 
+            // ── Per-block judging (endless): slots judged live as windows close ──
+            if (_endless && _performFired)
+            {
+                JudgeElapsedSlots(now);
+                if (!_running) return; // run ended inside a judgement event (health depleted)
+            }
+
             // ── Evaluate ─────────────────────────────────────────────────────
             if (_performFired && now >= _current.EvaluationTime)
             {
@@ -701,7 +775,19 @@ namespace KrumbleHut.Drummi.Dungeons
                           $"expected={_current.EvaluationTime:F6} actual={now:F6} delta=+{delta * 1000.0:F3}ms");
 
                 EvaluationResult result = null;
-                if (evaluator != null && _cardBeats != null && inputReader != null)
+                if (_endless)
+                {
+                    // Per-block path: finish any remaining slots/groups (all windows
+                    // are closed at the boundary), then synthesize an aggregate for
+                    // OnCardEvaluated consumers. EvaluateBar is NOT called — score
+                    // and sounds were already applied per bar group.
+                    JudgeRemainingSlots();
+                    if (!_running) { ClearNextCard(); return; }
+                    result = BuildCardResult();
+                    Debug.Log($"[FlashCard]   Aggregate={result.Grade}  " +
+                              $"blocks={result.CorrectHits}/{result.TotalBeats}");
+                }
+                else if (evaluator != null && _cardBeats != null && inputReader != null)
                 {
                     // timeOffset maps reveal-bar beats into perform-bar time coordinates,
                     // identical to C&R's echo evaluation (N * beatInterval window shift).
@@ -719,6 +805,130 @@ namespace KrumbleHut.Drummi.Dungeons
                 OnCardEvaluated?.Invoke(_cardIndex, result);
                 AdvanceCard();
             }
+        }
+        #endregion
+
+        #region Private — Per-Block Judging (endless)
+        /// <summary>
+        /// Resets the per-block judging state for the card that just became current.
+        /// Must run AFTER _cardBeats/_templates/_current/_cardSlotCount are assigned
+        /// and BEFORE any input can be recorded against the card (in the handoff
+        /// path: before OpenPerformWindow/ReplayCoyoteBuffer).
+        /// </summary>
+        private void InitBlockJudging()
+        {
+            if (!_endless || _cardBeats == null) return;
+
+            int n = _cardSlotCount;
+            _slotJudged    = new bool[n];
+            _slotExpected  = new int[n];
+            _slotHits      = new int[n];
+            _slotPerfect   = new int[n];
+            _slotStrays    = new int[n];
+            _beatConsumed  = new bool[_cardBeats.Count];
+            _beatSlot      = new int[_cardBeats.Count];
+            _nextJudgeSlot = 0;
+            _groupStart    = 0;
+
+            // Same floor math as HitCallback: slots measured on the uncompressed
+            // reveal timeline.
+            double revealOrigin = _current.ResponseStartTime - _cardSlotCount * _cardBeatInterval;
+            for (int i = 0; i < _cardBeats.Count; i++)
+            {
+                int slot = (int)Math.Floor((_cardBeats[i].scheduledTime - revealOrigin) / _cardBeatInterval + 1e-6);
+                slot = Mathf.Clamp(slot, 0, n - 1);
+                _beatSlot[i] = slot;
+                _slotExpected[slot]++;
+            }
+        }
+
+        /// <summary>
+        /// Judges every slot whose window (slot end + grace) has elapsed. Events may
+        /// end the run synchronously (health depletion → StopEncounter), hence the
+        /// _running re-check every iteration.
+        /// </summary>
+        private void JudgeElapsedSlots(double now)
+        {
+            if (_slotJudged == null) return;
+            while (_running && _nextJudgeSlot < _cardSlotCount &&
+                   now >= _current.ResponseStartTime + (_nextJudgeSlot + 1) * _cardBeatInterval + blockJudgeGraceSeconds)
+            {
+                JudgeSlot(_nextJudgeSlot++);
+            }
+        }
+
+        /// <summary>Force-judges all remaining slots at the evaluation boundary (all windows are closed by then).</summary>
+        private void JudgeRemainingSlots()
+        {
+            if (_slotJudged == null) return;
+            while (_running && _nextJudgeSlot < _cardSlotCount)
+                JudgeSlot(_nextJudgeSlot++);
+        }
+
+        private void JudgeSlot(int slot)
+        {
+            _slotJudged[slot] = true;
+            bool cleared = _slotHits[slot] >= _slotExpected[slot];
+
+            Debug.Log($"[FlashCard] BlockJudged  | card={_cardIndex} slot={slot} " +
+                      $"{(cleared ? "CLEAR" : "MISS")} hits={_slotHits[slot]}/{_slotExpected[slot]} " +
+                      $"perfect={_slotPerfect[slot]} strays={_slotStrays[slot]}");
+            OnBlockJudged?.Invoke(_cardIndex, slot, cleared);
+            if (!_running) return;
+
+            // Group boundary: every BarGroupSize blocks, plus the remainder at card end.
+            if (slot == _groupStart + BarGroupSize - 1 || slot == _cardSlotCount - 1)
+            {
+                FireBarJudgement(_groupStart, slot);
+                _groupStart = slot + 1;
+            }
+        }
+
+        private void FireBarJudgement(int from, int to)
+        {
+            int missed = 0, notes = 0, perfect = 0, strays = 0;
+            for (int s = from; s <= to; s++)
+            {
+                if (_slotHits[s] < _slotExpected[s]) missed++;
+                notes   += _slotExpected[s];
+                perfect += _slotPerfect[s];
+                strays  += _slotStrays[s];
+            }
+
+            var grade = GradeGroup(missed, notes, perfect, strays);
+            var judgement = new BarJudgement(from / BarGroupSize, to - from + 1, missed, notes, perfect, strays, grade);
+
+            Debug.Log($"[FlashCard] BarJudged    | card={_cardIndex} group={judgement.GroupIndex} " +
+                      $"blocks={judgement.BlocksInGroup} grade={grade} missed={missed} " +
+                      $"perfect={perfect}/{notes} strays={strays}");
+            OnBarJudged?.Invoke(_cardIndex, judgement);
+        }
+
+        // Missed block → Failed; cleared but sprayed with stray taps → Passable
+        // (preserves the old "spam breaks streaks" property); every note Perfect →
+        // AllPerfect; else AllGood.
+        private static EvaluationGrade GradeGroup(int missed, int notes, int perfect, int strays)
+            => missed  > 0      ? EvaluationGrade.Failed
+             : strays  > 0      ? EvaluationGrade.Passable
+             : perfect >= notes ? EvaluationGrade.AllPerfect
+             :                    EvaluationGrade.AllGood;
+
+        /// <summary>
+        /// Synthesized whole-card aggregate for OnCardEvaluated consumers (view border
+        /// flash, logs). PointsAwarded is 0 — points were already applied per bar group.
+        /// </summary>
+        private EvaluationResult BuildCardResult()
+        {
+            int missed = 0, notes = 0, perfect = 0, strays = 0;
+            for (int s = 0; s < _cardSlotCount; s++)
+            {
+                if (_slotHits[s] < _slotExpected[s]) missed++;
+                notes   += _slotExpected[s];
+                perfect += _slotPerfect[s];
+                strays  += _slotStrays[s];
+            }
+            var grade = GradeGroup(missed, notes, perfect, strays);
+            return new EvaluationResult(grade, _cardSlotCount - missed, perfect, _cardSlotCount, 0);
         }
         #endregion
 
@@ -770,6 +980,10 @@ namespace KrumbleHut.Drummi.Dungeons
                 _performFired = true;
                 _revealSlot   = _cardSlotCount;
                 ClearNextCard();
+
+                // Fresh judging state BEFORE the window opens / the coyote buffer
+                // replays — the replayed boundary tap must tally into THIS card.
+                InitBlockJudging();
 
                 OpenPerformWindow();
 
@@ -1056,12 +1270,45 @@ namespace KrumbleHut.Drummi.Dungeons
             }
             if (nearest == null) return;
 
+            ConsumeHit(now, timeOffset, quality);
+
             // Floor (with fp epsilon) so offbeat/subdivided notes map to their host square.
             // Slots are measured on the uncompressed reveal timeline (see BuildCard).
             double revealOrigin = _current.ResponseStartTime - _cardSlotCount * _cardBeatInterval;
             int slot = (int)Math.Floor((nearest.scheduledTime - revealOrigin) / _cardBeatInterval + 1e-6);
             slot = Mathf.Clamp(slot, 0, _cardSlotCount - 1);
             OnPlayerHit?.Invoke(slot, quality);
+        }
+
+        /// <summary>
+        /// Endless per-block tally: consumes the nearest UNCONSUMED scheduled note
+        /// within the live Good window. Consumption prevents a double-tap on one
+        /// note from crediting a neighbor. A confirmed hit with no consumable note
+        /// (reader/judge disagreement on a double-tap) credits nothing — cosmetic
+        /// pop only. Visual slot resolution above is intentionally untouched.
+        /// </summary>
+        private void ConsumeHit(double now, double timeOffset, InputMatch.MatchQuality quality)
+        {
+            if (!_endless || _beatConsumed == null) return;
+
+            int    bestIdx   = -1;
+            double bestDelta = double.MaxValue;
+            for (int i = 0; i < _cardBeats.Count; i++)
+            {
+                if (_beatConsumed[i]) continue;
+                double delta = Math.Abs(now - (_cardBeats[i].scheduledTime + timeOffset));
+                if (delta < bestDelta) { bestDelta = delta; bestIdx = i; }
+            }
+            if (bestIdx < 0) return;
+
+            double goodWindow = (60.0 / metronome.bpm) *
+                                (evaluator != null ? evaluator.EffectiveGoodWindowBeats : 0.25f);
+            if (bestDelta > goodWindow) return;
+
+            _beatConsumed[bestIdx] = true;
+            int s = _beatSlot[bestIdx];
+            _slotHits[s]++;
+            if (quality == InputMatch.MatchQuality.Perfect) _slotPerfect[s]++;
         }
 
         /// <summary>Out-of-window tap: resolves the square nearest the tap time and notifies the view.</summary>
@@ -1074,6 +1321,8 @@ namespace KrumbleHut.Drummi.Dungeons
             double now  = GameClock.Instance.GameTime;
             int    slot = (int)Math.Floor((now - _current.ResponseStartTime) / _cardBeatInterval);
             slot = Mathf.Clamp(slot, 0, _cardSlotCount - 1);
+            if (_endless && _slotStrays != null && slot < _slotStrays.Length)
+                _slotStrays[slot]++;
             OnPlayerMissTap?.Invoke(slot);
         }
         #endregion

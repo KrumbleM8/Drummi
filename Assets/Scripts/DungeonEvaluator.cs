@@ -125,6 +125,23 @@ public class DungeonEvaluator : MonoBehaviour
     }
 
     /// <summary>
+    /// Applies an externally determined grade (Flash Cards endless per-bar judging:
+    /// the controller judges each block live and grades 4-block groups itself).
+    /// Reuses CalculatePoints + ApplyResult so sounds (PlayAllPerfect/PlayCorrect/
+    /// PlayPassable/PlayIncorrect), score, scoreText, and high-score plumbing are
+    /// identical to the batch EvaluateBar path.
+    /// </summary>
+    public EvaluationResult ApplyBarJudgement(EvaluationGrade grade, int correctBlocks, int perfectNotes, int totalBlocks)
+    {
+        int points = CalculatePoints(grade);
+        var result = new EvaluationResult(grade, correctBlocks, perfectNotes, totalBlocks, points);
+        ApplyResult(result);
+        Debug.Log($"[DungeonEvaluator] Bar judgement: {grade}  blocks={correctBlocks}/{totalBlocks}  " +
+                  $"perfectNotes={perfectNotes}  +{points}  Total: {Score}");
+        return result;
+    }
+
+    /// <summary>
     /// Immediate single-input evaluation for visual feedback.
     /// Returns the MatchQuality and the specific beat that was matched so the caller
     /// can resolve the exact paired enemy (Bug 2 fix).

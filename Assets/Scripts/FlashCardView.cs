@@ -138,6 +138,8 @@ namespace KrumbleHut.Drummi.Dungeons
         [SerializeField] private Color missFlashColor = new Color(0.90f, 0.25f, 0.25f, 1f);
         [Tooltip("Squares shrink to this scale on an out-of-window tap.")]
         [SerializeField] private float missShrinkScale = 0.92f;
+        [Tooltip("Per-block judging (endless): tint of a block that breaks because its window closed un-hit.")]
+        [SerializeField] private Color blockFailColor = new Color(0.80f, 0.15f, 0.15f, 1f);
 
         [Header("Destroy (cosmetic)")]
         [Tooltip("Punch-grow scale right before the block collapses.")]
@@ -266,6 +268,7 @@ namespace KrumbleHut.Drummi.Dungeons
         // active card's height automatically. Built/resized on demand.
         private RectTransform _onDeckRoot;
         private Square[] _onDeckSquares = System.Array.Empty<Square>();
+        private UIRotateWobble[] _onDeckWobbles = System.Array.Empty<UIRotateWobble>();
         private Tween[]  _onDeckTweens  = System.Array.Empty<Tween>();
         private int      _onDeckBuiltCount;
         private TextMeshProUGUI _onDeckLabel;
@@ -335,6 +338,7 @@ namespace KrumbleHut.Drummi.Dungeons
             _onDeckRoot       = null;
             _onDeckLabel      = null;
             _onDeckSquares    = System.Array.Empty<Square>();
+            _onDeckWobbles    = System.Array.Empty<UIRotateWobble>();
             _onDeckTweens     = System.Array.Empty<Tween>();
             _onDeckPulseTween = null;
             _onDeckBuiltCount = 0;
@@ -514,14 +518,17 @@ namespace KrumbleHut.Drummi.Dungeons
             Debug.Log($"[FlashCardView] Column built: {slotCount} slots, pitch={columnPitch:F0}");
         }
 
-        private void AddWobble(int i, RectTransform rt)
+        private void AddWobble(int i, RectTransform rt) => _wobbles[i] = CreateWobble(rt);
+
+        /// <summary>Attaches a disabled, card-unison wobble (shared by active and on-deck squares).</summary>
+        private UIRotateWobble CreateWobble(RectTransform rt)
         {
             var wobble = rt.gameObject.AddComponent<UIRotateWobble>();
             wobble.rotationAmount   = wobbleRotationAmount;
             wobble.beatsPerCycle    = wobbleBeatsPerCycle;
             wobble.phaseOffsetBeats = 0f; // unison across the card
             wobble.enabled          = false;
-            _wobbles[i] = wobble;
+            return wobble;
         }
 
         /// <summary>
@@ -577,6 +584,7 @@ namespace KrumbleHut.Drummi.Dungeons
             controller.OnPerformStart        += HandlePerformStart;
             controller.OnPlayerHit           += HandlePlayerHit;
             controller.OnPlayerMissTap       += HandlePlayerMissTap;
+            controller.OnBlockJudged         += HandleBlockJudged;
             controller.OnCardEvaluated       += HandleCardEvaluated;
             controller.OnEncounterComplete   += HandleEncounterComplete;
             controller.OnEncounterStopped    += HandleEncounterStopped;
@@ -594,6 +602,7 @@ namespace KrumbleHut.Drummi.Dungeons
                 controller.OnPerformStart        -= HandlePerformStart;
                 controller.OnPlayerHit           -= HandlePlayerHit;
                 controller.OnPlayerMissTap       -= HandlePlayerMissTap;
+                controller.OnBlockJudged         -= HandleBlockJudged;
                 controller.OnCardEvaluated       -= HandleCardEvaluated;
                 controller.OnEncounterComplete   -= HandleEncounterComplete;
                 controller.OnEncounterStopped    -= HandleEncounterStopped;
@@ -878,6 +887,36 @@ namespace KrumbleHut.Drummi.Dungeons
             _popTweens[slot] = seq;
         }
 
+        /// <summary>
+        /// Per-block judging (endless): a missed block breaks red the moment its
+        /// window closes, so failure reads per-block as it passes — distinct from
+        /// the gold/green hit shatter and the grey rest dissolve. Cleared blocks
+        /// need nothing here: hits already tap-destroy and untouched rests dissolve.
+        /// The MOMENT is the controller's judgement; tweens are cosmetic only.
+        /// </summary>
+        private void HandleBlockJudged(int cardIndex, int slot, bool cleared)
+        {
+            if (cleared) return;
+            if (_state != ViewState.Performing) return;
+            if (slot < 0 || slot >= squares.Length) return;
+            if (_destroyed[slot]) return;
+            var sq = squares[slot];
+            if (sq?.root == null) return;
+
+            KillSquareTweens(slot);
+            SetWobble(slot, false);
+            sq.root.localRotation = Quaternion.identity;
+
+            // Short shrink-shake (miss-tap vocabulary) leading into the collapse,
+            // so a failing block visibly "gives out" rather than popping.
+            float baseScale = Mathf.Max(0.5f, 1f - chipShrinkStep * _hitCounts[slot]);
+            sq.root.localScale = Vector3.one * baseScale;
+            var seq = DOTween.Sequence().SetLink(sq.root.gameObject);
+            seq.Append(sq.root.DOScale(baseScale * missShrinkScale, chipDuration).SetEase(Ease.OutQuad));
+            seq.OnComplete(() => DestroyBlock(slot, sq, blockFailColor));
+            _popTweens[slot] = seq;
+        }
+
         private void HandleCardEvaluated(int cardIndex, EvaluationResult result)
         {
             // Final beat's untouched rest ends exactly on the evaluation boundary —
@@ -982,6 +1021,10 @@ namespace KrumbleHut.Drummi.Dungeons
                     ShowOnDeckFace(sq, tier[j]);
                     sq.root.localRotation = Quaternion.identity;
                     sq.root.localScale    = Vector3.one;
+                    // The whole visible stream wobbles in unison with the active card —
+                    // but only while input is open (perform bar). Run-start/reveal deals
+                    // stay still; SetAllWobbles(true) at perform start switches them on.
+                    SetOnDeckWobble(idx, _state == ViewState.Performing);
                 }
             }
             _onDeckRoot.gameObject.SetActive(true);
@@ -1037,6 +1080,10 @@ namespace KrumbleHut.Drummi.Dungeons
             _onDeckTweens[slot] = sq.root.DOScale(1f, revealPopDuration)
                                          .SetEase(Ease.OutBack)
                                          .SetLink(sq.root.gameObject);
+            // Revealed on-deck squares wobble with the beat like the live card
+            // (pop tween owns scale only — no fight over rotation). Gated on the
+            // perform bar so nothing animates before input opens.
+            SetOnDeckWobble(slot, _state == ViewState.Performing);
 
             // Whole-panel beat pulse + optional tick: the preview breathes with
             // the beat so the player's eye is drawn down while still performing.
@@ -1205,8 +1252,10 @@ namespace KrumbleHut.Drummi.Dungeons
         /// (Re)builds the on-deck mini-grid for <paramref name="slotCount"/> slots.
         /// The root is created on demand under cardRoot, anchored to its BOTTOM
         /// edge (pivot top) so it tracks the active card's height automatically,
-        /// scaled by onDeckScale. Squares reuse the live layout math; no wobble,
-        /// cursor, or hit state — the on-deck card is read-only.
+        /// scaled by onDeckScale. Squares reuse the live layout math; no cursor
+        /// or hit state — the on-deck card is read-only. Revealed squares DO
+        /// wobble (beat-synced, unison with the live card) so the whole visible
+        /// stream animates, not just the active four.
         /// </summary>
         private void EnsureOnDeckGrid(int slotCount)
         {
@@ -1277,6 +1326,7 @@ namespace KrumbleHut.Drummi.Dungeons
             }
 
             _onDeckSquares = new Square[slotCount];
+            _onDeckWobbles = new UIRotateWobble[slotCount];
             _onDeckTweens  = new Tween[slotCount];
 
             for (int i = 0; i < slotCount; i++)
@@ -1308,6 +1358,7 @@ namespace KrumbleHut.Drummi.Dungeons
                 }
 
                 _onDeckSquares[i] = new Square { root = rt, back = widget.back, glyph = widget.glyph, cursor = widget.cursor };
+                _onDeckWobbles[i] = CreateWobble(rt);
                 ResetOnDeckSquare(i);
             }
 
@@ -1321,6 +1372,7 @@ namespace KrumbleHut.Drummi.Dungeons
             if (sq?.root == null) return;
             _onDeckTweens[i]?.Kill();
             _onDeckTweens[i] = null;
+            SetOnDeckWobble(i, false);
             sq.root.localScale    = Vector3.zero;
             sq.root.localRotation = Quaternion.identity;
             if (sq.back   != null) { sq.back.enabled = true; sq.back.color = faceDownColor; }
@@ -1540,10 +1592,20 @@ namespace KrumbleHut.Drummi.Dungeons
                 _wobbles[i].enabled = on;
         }
 
+        private void SetOnDeckWobble(int i, bool on)
+        {
+            if (i >= 0 && i < _onDeckWobbles.Length && _onDeckWobbles[i] != null)
+                _onDeckWobbles[i].enabled = on;
+        }
+
         private void SetAllWobbles(bool on)
         {
             for (int i = 0; i < _wobbles.Length; i++)
                 SetWobble(i, on);
+            // On-deck stream wobbles in lockstep with the live card: on at perform
+            // start (input open), off at evaluation/teardown.
+            for (int i = 0; i < _onDeckWobbles.Length; i++)
+                SetOnDeckWobble(i, on);
         }
 
         private void HideCard()

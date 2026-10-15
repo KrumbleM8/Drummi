@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using TMPro;
 using UnityEngine;
+using UnityEngine.Serialization;
 using UnityEngine.UI;
 using KrumbleHut.Drummi.Dungeons;
 
@@ -10,18 +11,20 @@ namespace KrumbleHut.Drummi.FlashCards
     /// <summary>
     /// Standalone Flash Cards mode — ENDLESS free play. Continuous 2-bar
     /// reveal/perform card cycles (driven by FlashCardController.StartEndless)
-    /// until the player collects <see cref="maxStrikes"/> Failed cards.
+    /// until the player's health runs out.
     ///
-    /// Run rules:
-    ///   - Strike  = card graded Failed. 3 strikes = run over → results.
-    ///   - Cleared = card graded above Failed. Drives the escalation ladder.
-    ///   - Streak  = consecutive AllPerfect cards. AllPerfect requires
-    ///     Inputs == Beats (DungeonEvaluator.DetermineGrade), so spam breaks
-    ///     streaks by definition — no extra evaluator logic.
-    ///   - Score accumulates via DungeonEvaluator's existing per-card scoring.
+    /// Run rules (per-block judging — FlashCardController.OnBlockJudged/OnBarJudged):
+    ///   - Health  = 10 HP, no regen. −1 HP per missed block AND per stray
+    ///     (out-of-window) tap. 0 HP = run over → results.
+    ///   - Cleared = a block whose window closed with every note hit. Drives
+    ///     the escalation ladder (minBlocksCleared thresholds).
+    ///   - Streak  = consecutive AllPerfect bar groups (4 blocks each). A group
+    ///     containing stray taps grades Passable, so spam still breaks streaks.
+    ///   - Score accumulates per bar group via DungeonEvaluator.ApplyBarJudgement
+    ///     (same reward tiers/sounds as the old per-card scoring).
     ///
     /// Escalation ladder: serialized steps, applied via SetCardConfig from the
-    /// OnCardEvaluated handler — config lands on the NEXT card, never mid-card
+    /// OnBlockJudged handler — config lands on the NEXT card, never mid-card
     /// (BuildCard reads config at each reveal-bar start).
     ///
     /// Music: serialized AudioManager track index + BPM pair (stand-in until
@@ -32,7 +35,7 @@ namespace KrumbleHut.Drummi.FlashCards
     ///
     /// INSPECTOR SETUP (FlashCardsMenu scene):
     ///   metronome, cardController, evaluator — scene instances.
-    ///   strikePips (3 Images), streakText — HUD. bestStreakText,
+    ///   health (DungeonHealth + slider), streakText — HUD. bestStreakText,
     ///   cardsClearedText — texts on the Score page (written at run end,
     ///   before GameManager shows results; DisplayScore does not touch them).
     ///   Play button → StartFromMenu(). Double Time button → StartFromMenuDoubleTime().
@@ -47,8 +50,10 @@ namespace KrumbleHut.Drummi.FlashCards
         [Serializable]
         public class EscalationStep
         {
-            [Tooltip("Ladder step activates once this many cards have been CLEARED (graded above Failed).")]
-            public int minCardsCleared;
+            [Tooltip("Ladder step activates once this many BLOCKS have been cleared (per-block judging — " +
+                     "roughly 4x the old per-card thresholds).")]
+            [FormerlySerializedAs("minCardsCleared")]
+            public int minBlocksCleared;
 
             [Tooltip("Template vocabulary from this step onward.")]
             public FlashCardVocab vocab = FlashCardVocab.Quarter | FlashCardVocab.Rest;
@@ -108,22 +113,22 @@ namespace KrumbleHut.Drummi.FlashCards
         [SerializeField, Min(1f)] private float doubleTimeMultiplier = 2f;
 
         [Header("Run Rules")]
-        [Tooltip("Failed cards allowed before the run ends.")]
-        [SerializeField, Min(1)] private int maxStrikes = 3;
+        [Tooltip("Player health (10 HP, no regen). −1 HP per missed block and per stray tap; 0 HP ends the run.")]
+        [SerializeField] private DungeonHealth health;
 
-        [Tooltip("Escalation ladder, in ascending minCardsCleared order. Step 0 should have minCardsCleared = 0.")]
+        [Tooltip("Escalation ladder, in ascending minBlocksCleared order. Step 0 should have minBlocksCleared = 0.")]
         [SerializeField] private EscalationStep[] escalationSteps =
         {
-            new() { minCardsCleared = 0,  vocab = FlashCardVocab.Quarter | FlashCardVocab.Rest,                                                                                             noteRange = new Vector2Int(2, 3), rows = 1, expandRows = 2, expandChance = 0.20f },
-            new() { minCardsCleared = 4,  vocab = FlashCardVocab.Quarter | FlashCardVocab.EighthPair | FlashCardVocab.Rest,                                                                noteRange = new Vector2Int(2, 4), rows = 1, expandRows = 2, expandChance = 0.30f },
+            new() { minBlocksCleared = 0,   vocab = FlashCardVocab.Quarter | FlashCardVocab.Rest,                                                                                             noteRange = new Vector2Int(2, 3), rows = 1, expandRows = 2, expandChance = 0.20f },
+            new() { minBlocksCleared = 16,  vocab = FlashCardVocab.Quarter | FlashCardVocab.EighthPair | FlashCardVocab.Rest,                                                                noteRange = new Vector2Int(2, 4), rows = 1, expandRows = 2, expandChance = 0.30f },
             // doubleTimeChance intentionally 0 everywhere for now — the in-run DT
             // mechanic is built and verified but disabled pending tuning; re-enable
             // per step when wanted.
-            new() { minCardsCleared = 10, vocab = FlashCardVocab.Quarter | FlashCardVocab.EighthPair | FlashCardVocab.OffbeatEighth | FlashCardVocab.Rest,                                 noteRange = new Vector2Int(3, 4), rows = 1, expandRows = 2, expandChance = 0.35f, tempoMultiplier = 1.1f },
-            new() { minCardsCleared = 16, vocab = FlashCardVocab.Quarter | FlashCardVocab.EighthPair | FlashCardVocab.OffbeatEighth | FlashCardVocab.Triplet | FlashCardVocab.Rest,        noteRange = new Vector2Int(3, 4), rows = 1, expandRows = 3, expandChance = 0.30f, tempoMultiplier = 1.2f },
-            new() { minCardsCleared = 22, vocab = FlashCardVocab.Quarter | FlashCardVocab.EighthPair | FlashCardVocab.OffbeatEighth | FlashCardVocab.Triplet | FlashCardVocab.SixteenthQuad | FlashCardVocab.Rest, noteRange = new Vector2Int(3, 4), rows = 1, expandRows = 5, expandChance = 0.25f, tempoMultiplier = 1.3f },
-            new() { minCardsCleared = 28, vocab = FlashCardVocab.Quarter | FlashCardVocab.EighthPair | FlashCardVocab.OffbeatEighth | FlashCardVocab.Triplet | FlashCardVocab.SixteenthQuad | FlashCardVocab.Rest, noteRange = new Vector2Int(3, 4), rows = 1, expandRows = 5, expandChance = 0.25f, tempoMultiplier = 1.4f },
-            new() { minCardsCleared = 35, vocab = FlashCardVocab.Quarter | FlashCardVocab.EighthPair | FlashCardVocab.OffbeatEighth | FlashCardVocab.Triplet | FlashCardVocab.SixteenthQuad | FlashCardVocab.Rest, noteRange = new Vector2Int(3, 4), rows = 1, expandRows = 5, expandChance = 0.25f, tempoMultiplier = 1.5f },
+            new() { minBlocksCleared = 40,  vocab = FlashCardVocab.Quarter | FlashCardVocab.EighthPair | FlashCardVocab.OffbeatEighth | FlashCardVocab.Rest,                                 noteRange = new Vector2Int(3, 4), rows = 1, expandRows = 2, expandChance = 0.35f, tempoMultiplier = 1.1f },
+            new() { minBlocksCleared = 64,  vocab = FlashCardVocab.Quarter | FlashCardVocab.EighthPair | FlashCardVocab.OffbeatEighth | FlashCardVocab.Triplet | FlashCardVocab.Rest,        noteRange = new Vector2Int(3, 4), rows = 1, expandRows = 3, expandChance = 0.30f, tempoMultiplier = 1.2f },
+            new() { minBlocksCleared = 88,  vocab = FlashCardVocab.Quarter | FlashCardVocab.EighthPair | FlashCardVocab.OffbeatEighth | FlashCardVocab.Triplet | FlashCardVocab.SixteenthQuad | FlashCardVocab.Rest, noteRange = new Vector2Int(3, 4), rows = 1, expandRows = 5, expandChance = 0.25f, tempoMultiplier = 1.3f },
+            new() { minBlocksCleared = 112, vocab = FlashCardVocab.Quarter | FlashCardVocab.EighthPair | FlashCardVocab.OffbeatEighth | FlashCardVocab.Triplet | FlashCardVocab.SixteenthQuad | FlashCardVocab.Rest, noteRange = new Vector2Int(3, 4), rows = 1, expandRows = 5, expandChance = 0.25f, tempoMultiplier = 1.4f },
+            new() { minBlocksCleared = 140, vocab = FlashCardVocab.Quarter | FlashCardVocab.EighthPair | FlashCardVocab.OffbeatEighth | FlashCardVocab.Triplet | FlashCardVocab.SixteenthQuad | FlashCardVocab.Rest, noteRange = new Vector2Int(3, 4), rows = 1, expandRows = 5, expandChance = 0.25f, tempoMultiplier = 1.5f },
         };
 
         [Header("Card Expansion")]
@@ -171,10 +176,6 @@ namespace KrumbleHut.Drummi.FlashCards
         [SerializeField] private TMP_Text instrumentLabelText;
 
         [Header("HUD")]
-        [Tooltip("Strike pips, left to right. Filled as strikes accumulate.")]
-        [SerializeField] private Image[] strikePips = new Image[3];
-        [SerializeField] private Color   pipEmptyColor  = new(1f, 1f, 1f, 0.25f);
-        [SerializeField] private Color   pipStrikeColor = new(0.9f, 0.25f, 0.25f, 1f);
         [SerializeField] private TMP_Text streakText;
 
         [Header("Results (texts on the Score page)")]
@@ -204,8 +205,7 @@ namespace KrumbleHut.Drummi.FlashCards
         private FlashCardLayout _activeLayout = FlashCardLayout.Grid;
 
         private bool _runActive;
-        private int  _cardsCleared;
-        private int  _strikes;
+        private int  _blocksCleared;
         private int  _streak;
         private int  _bestStreak;
         private int  _appliedStep = -1;
@@ -320,12 +320,12 @@ namespace KrumbleHut.Drummi.FlashCards
             if (scorePage != null) scorePage.SetActive(false);
 
             evaluator.ResetScore();
-            _runActive    = true;
-            _cardsCleared = 0;
-            _strikes      = 0;
-            _streak       = 0;
-            _bestStreak   = 0;
-            _appliedStep  = -1;
+            if (health != null) health.ResetHealth();
+            _runActive     = true;
+            _blocksCleared = 0;
+            _streak        = 0;
+            _bestStreak    = 0;
+            _appliedStep   = -1;
             EndStageBreakPresentation();
             UpdateHud();
 
@@ -336,8 +336,11 @@ namespace KrumbleHut.Drummi.FlashCards
                 AudioManager.instance.PlayMusic(loop: true);
             }
 
-            cardController.OnCardEvaluated += HandleCardEvaluated;
-            cardController.OnStageUp      += HandleStageUp;
+            cardController.OnBlockJudged   += HandleBlockJudged;
+            cardController.OnBarJudged     += HandleBarJudged;
+            cardController.OnPlayerMissTap += HandleStrayTap;
+            cardController.OnStageUp       += HandleStageUp;
+            if (health != null) health.OnHealthDepleted += HandleHealthDepleted;
 
             // First reveal after the lead-in; grid origin = music start, so the
             // whole-bar lead-in keeps the start on the grid (snap is a no-op).
@@ -357,12 +360,8 @@ namespace KrumbleHut.Drummi.FlashCards
         public override void Cleanup()
         {
             if (evaluator != null) evaluator.SaveHighScore();
-            if (cardController != null)
-            {
-                cardController.OnCardEvaluated -= HandleCardEvaluated;
-                cardController.OnStageUp      -= HandleStageUp;
-                if (cardController.IsRunning) cardController.StopEncounter();
-            }
+            UnsubscribeRunEvents();
+            if (cardController != null && cardController.IsRunning) cardController.StopEncounter();
             EndStageBreakPresentation();
             RestoreRunBpm();
             _runActive = false;
@@ -370,24 +369,32 @@ namespace KrumbleHut.Drummi.FlashCards
 
         public override void ResetToInitialState()
         {
-            if (cardController != null)
-            {
-                cardController.OnCardEvaluated -= HandleCardEvaluated;
-                cardController.OnStageUp      -= HandleStageUp;
-                if (cardController.IsRunning) cardController.StopEncounter();
-            }
+            UnsubscribeRunEvents();
+            if (cardController != null && cardController.IsRunning) cardController.StopEncounter();
             if (evaluator != null) evaluator.ResetScore();
+            if (health    != null) health.ResetHealth();
 
             EndStageBreakPresentation();
             RestoreRunBpm();
-            _runActive    = false;
-            _cardsCleared = 0;
-            _strikes      = 0;
-            _streak       = 0;
-            _bestStreak   = 0;
-            _appliedStep  = -1;
+            _runActive     = false;
+            _blocksCleared = 0;
+            _streak        = 0;
+            _bestStreak    = 0;
+            _appliedStep   = -1;
             UpdateHud();
             Debug.Log("[FlashCardsMode] Reset to initial state");
+        }
+
+        private void UnsubscribeRunEvents()
+        {
+            if (cardController != null)
+            {
+                cardController.OnBlockJudged   -= HandleBlockJudged;
+                cardController.OnBarJudged     -= HandleBarJudged;
+                cardController.OnPlayerMissTap -= HandleStrayTap;
+                cardController.OnStageUp       -= HandleStageUp;
+            }
+            if (health != null) health.OnHealthDepleted -= HandleHealthDepleted;
         }
 
         public override void OnPause()
@@ -402,55 +409,75 @@ namespace KrumbleHut.Drummi.FlashCards
         #endregion
 
         #region Run Logic
-        private void HandleCardEvaluated(int cardIndex, EvaluationResult result)
+        /// <summary>
+        /// Per-block judgement: a cleared block advances the escalation ladder;
+        /// a missed block costs 1 HP (run ends via OnHealthDepleted at 0).
+        /// </summary>
+        private void HandleBlockJudged(int cardIndex, int slot, bool cleared)
         {
             if (!_runActive) return;
-            if (result == null) return; // evaluation skipped (defensive) — no strike, no clear
 
-            if (result.Grade == EvaluationGrade.Failed)
+            if (cleared)
             {
-                _strikes++;
-                _streak = 0;
-                Debug.Log($"[FlashCardsMode] STRIKE {_strikes}/{maxStrikes} (card {cardIndex})");
+                _blocksCleared++;
+                ApplyLadder();
+            }
+            else if (health != null)
+            {
+                health.TakeMissDamage(1);
+            }
+        }
+
+        /// <summary>Stray (out-of-window) tap: flat 1 HP penalty, same as a missed block.</summary>
+        private void HandleStrayTap(int slot)
+        {
+            if (!_runActive) return;
+            if (health != null) health.TakeOutOfWindowPenalty();
+        }
+
+        /// <summary>
+        /// Bar-group grade (4 blocks, remainder at card end): drives sounds + score
+        /// via the evaluator, and the streak — the per-block replacement for the old
+        /// whole-card grade.
+        /// </summary>
+        private void HandleBarJudged(int cardIndex, FlashCardController.BarJudgement bar)
+        {
+            if (!_runActive) return;
+
+            evaluator.ApplyBarJudgement(bar.Grade, bar.BlocksInGroup - bar.MissedBlocks,
+                                        bar.PerfectNotes, bar.BlocksInGroup);
+
+            if (bar.Grade == EvaluationGrade.AllPerfect)
+            {
+                _streak++;
+                if (_streak > _bestStreak) _bestStreak = _streak;
             }
             else
             {
-                _cardsCleared++;
-                if (result.Grade == EvaluationGrade.AllPerfect)
-                {
-                    _streak++;
-                    if (_streak > _bestStreak) _bestStreak = _streak;
-                }
-                else
-                {
-                    _streak = 0;
-                }
+                _streak = 0;
             }
 
             UpdateHud();
+        }
 
-            if (_strikes >= maxStrikes)
-            {
-                EndRun();
-                return;
-            }
-
-            ApplyLadder();
+        private void HandleHealthDepleted()
+        {
+            if (!_runActive) return;
+            EndRun();
         }
 
         private void EndRun()
         {
-            Debug.Log($"[FlashCardsMode] RUN OVER — score={Score} cleared={_cardsCleared} bestStreak={_bestStreak}");
+            Debug.Log($"[FlashCardsMode] RUN OVER — score={Score} cleared={_blocksCleared} bestStreak={_bestStreak}");
             _runActive = false;
-            cardController.OnCardEvaluated -= HandleCardEvaluated;
-            cardController.OnStageUp      -= HandleStageUp;
+            UnsubscribeRunEvents();
             cardController.StopEncounter();
             EndStageBreakPresentation();
 
             // Write the extra results lines BEFORE CompletMode — GameManager's
             // results sequence shows the Score page but never touches these texts.
             if (bestStreakText   != null) bestStreakText.text   = $"Best Streak: {_bestStreak}";
-            if (cardsClearedText != null) cardsClearedText.text = $"Cards Cleared: {_cardsCleared}";
+            if (cardsClearedText != null) cardsClearedText.text = $"Blocks Cleared: {_blocksCleared}";
 
             CompletMode();
         }
@@ -458,13 +485,13 @@ namespace KrumbleHut.Drummi.FlashCards
         /// <summary>Applies the highest ladder step reached, once, when it changes.</summary>
         private void ApplyLadder()
         {
-            int stepIndex = StepIndexFor(_cardsCleared);
+            int stepIndex = StepIndexFor(_blocksCleared);
             if (stepIndex == _appliedStep || stepIndex < 0) return;
 
             _appliedStep = stepIndex;
             var step = escalationSteps[stepIndex];
             float dtChance = EffectiveDoubleTimeChance(step);
-            Debug.Log($"[FlashCardsMode] Escalation step {stepIndex} at {_cardsCleared} cleared → " +
+            Debug.Log($"[FlashCardsMode] Escalation step {stepIndex} at {_blocksCleared} blocks cleared → " +
                       $"vocab={step.vocab} notes={step.noteRange.x}-{step.noteRange.y} dtChance={dtChance:F2} " +
                       $"rows={step.rows} expandRows={step.expandRows} expandChance={step.expandChance:F2} " +
                       $"tempo=x{TempoFor(step):F2}");
@@ -521,19 +548,19 @@ namespace KrumbleHut.Drummi.FlashCards
         private static float TempoFor(EscalationStep step)
             => Mathf.Max(1f, step.tempoMultiplier);
 
-        private int StepIndexFor(int cardsCleared)
+        private int StepIndexFor(int blocksCleared)
         {
             int best = -1;
             for (int i = 0; i < escalationSteps.Length; i++)
-                if (escalationSteps[i].minCardsCleared <= cardsCleared) best = i;
+                if (escalationSteps[i].minBlocksCleared <= blocksCleared) best = i;
             return best;
         }
 
-        private EscalationStep ResolveStep(int cardsCleared)
+        private EscalationStep ResolveStep(int blocksCleared)
         {
-            int i = StepIndexFor(cardsCleared);
+            int i = StepIndexFor(blocksCleared);
             if (i >= 0) return escalationSteps[i];
-            Debug.LogWarning("[FlashCardsMode] No escalation step with minCardsCleared <= 0 — using built-in Quarter|Rest default.");
+            Debug.LogWarning("[FlashCardsMode] No escalation step with minBlocksCleared <= 0 — using built-in Quarter|Rest default.");
             return new EscalationStep();
         }
         #endregion
@@ -692,11 +719,7 @@ namespace KrumbleHut.Drummi.FlashCards
         #region HUD
         private void UpdateHud()
         {
-            if (strikePips != null)
-                for (int i = 0; i < strikePips.Length; i++)
-                    if (strikePips[i] != null)
-                        strikePips[i].color = i < _strikes ? pipStrikeColor : pipEmptyColor;
-
+            // Health is rendered by DungeonHealth's own slider lerp — nothing to do here.
             if (streakText != null)
                 streakText.text = $"Streak: {_streak}  Best: {_bestStreak}";
         }
