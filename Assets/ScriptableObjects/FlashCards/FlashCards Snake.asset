@@ -12,7 +12,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 6e5ced300131ff34fa924fe6f01584c6, type: 3}
   m_Name: FlashCards Snake
   m_EditorClassIdentifier: 
-  displayName: Snake
+  displayName: Play
   tempoMultiplier: 1
   highScoreKey: FlashCardsSnakeHS
   layout: 1
