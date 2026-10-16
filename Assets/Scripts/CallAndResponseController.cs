@@ -619,9 +619,19 @@ namespace KrumbleHut.Drummi.Dungeons
         /// reproduces the symmetric behavior exactly.
         /// </summary>
         public static PhraseTiming Compute(int round, int n, double phraseStart, double beatInterval, int callBeats)
+            => Compute(round, n, phraseStart, beatInterval, callBeats, n);
+
+        /// <summary>
+        /// Variable-length response variant: the response window lasts
+        /// <paramref name="performBeats"/> beats instead of N. Used by FlashCards'
+        /// HalfRest cards (a half-beat rest shortens the card to N − 0.5 beats, and
+        /// NextPhraseStart = EvaluationTime then phase-shifts every later card onto
+        /// the off-beats). performBeats = n reproduces the integer overload exactly.
+        /// </summary>
+        public static PhraseTiming Compute(int round, int n, double phraseStart, double beatInterval, int callBeats, double performBeats)
         {
             double responseStart = phraseStart + callBeats * beatInterval;
-            double evalTime      = responseStart + n * beatInterval;
+            double evalTime      = responseStart + performBeats * beatInterval;
             return new PhraseTiming(round, n, phraseStart, responseStart, evalTime);
         }
 

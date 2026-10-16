@@ -125,10 +125,13 @@ namespace KrumbleHut.Drummi.FlashCards
             // mechanic is built and verified but disabled pending tuning; re-enable
             // per step when wanted.
             new() { minBlocksCleared = 40,  vocab = FlashCardVocab.Quarter | FlashCardVocab.EighthPair | FlashCardVocab.OffbeatEighth | FlashCardVocab.Rest,                                 noteRange = new Vector2Int(3, 4), rows = 1, expandRows = 2, expandChance = 0.35f, tempoMultiplier = 1.1f },
+            // HalfRest (off-beat episodes) is built + wired but DISABLED pending a
+            // playable difficulty pass — add FlashCardVocab.HalfRest to a step's
+            // vocab to re-enable (always alongside Rest).
             new() { minBlocksCleared = 64,  vocab = FlashCardVocab.Quarter | FlashCardVocab.EighthPair | FlashCardVocab.OffbeatEighth | FlashCardVocab.Triplet | FlashCardVocab.Rest,        noteRange = new Vector2Int(3, 4), rows = 1, expandRows = 3, expandChance = 0.30f, tempoMultiplier = 1.2f },
-            new() { minBlocksCleared = 88,  vocab = FlashCardVocab.Quarter | FlashCardVocab.EighthPair | FlashCardVocab.OffbeatEighth | FlashCardVocab.Triplet | FlashCardVocab.SixteenthQuad | FlashCardVocab.Rest, noteRange = new Vector2Int(3, 4), rows = 1, expandRows = 5, expandChance = 0.25f, tempoMultiplier = 1.3f },
-            new() { minBlocksCleared = 112, vocab = FlashCardVocab.Quarter | FlashCardVocab.EighthPair | FlashCardVocab.OffbeatEighth | FlashCardVocab.Triplet | FlashCardVocab.SixteenthQuad | FlashCardVocab.Rest, noteRange = new Vector2Int(3, 4), rows = 1, expandRows = 5, expandChance = 0.25f, tempoMultiplier = 1.4f },
-            new() { minBlocksCleared = 140, vocab = FlashCardVocab.Quarter | FlashCardVocab.EighthPair | FlashCardVocab.OffbeatEighth | FlashCardVocab.Triplet | FlashCardVocab.SixteenthQuad | FlashCardVocab.Rest, noteRange = new Vector2Int(3, 4), rows = 1, expandRows = 5, expandChance = 0.25f, tempoMultiplier = 1.5f },
+            new() { minBlocksCleared = 88,  vocab = FlashCardVocab.Quarter | FlashCardVocab.EighthPair | FlashCardVocab.OffbeatEighth | FlashCardVocab.Triplet | FlashCardVocab.Rest,                                 noteRange = new Vector2Int(3, 4), rows = 1, expandRows = 5, expandChance = 0.25f, tempoMultiplier = 1.3f },
+            new() { minBlocksCleared = 112, vocab = FlashCardVocab.Quarter | FlashCardVocab.EighthPair | FlashCardVocab.OffbeatEighth | FlashCardVocab.Triplet | FlashCardVocab.Rest,                                 noteRange = new Vector2Int(3, 4), rows = 1, expandRows = 5, expandChance = 0.25f, tempoMultiplier = 1.4f },
+            new() { minBlocksCleared = 140, vocab = FlashCardVocab.Quarter | FlashCardVocab.EighthPair | FlashCardVocab.OffbeatEighth | FlashCardVocab.Triplet | FlashCardVocab.Rest,                                 noteRange = new Vector2Int(3, 4), rows = 1, expandRows = 5, expandChance = 0.25f, tempoMultiplier = 1.5f },
         };
 
         [Header("Card Expansion")]
@@ -144,9 +147,11 @@ namespace KrumbleHut.Drummi.FlashCards
         [SerializeField, Min(2)] private int expandEveryNCards = 4;
 
         [Header("Stages")]
-        [Tooltip("Beats of telegraphed break at a stage-up, counted at the NEW tempo. With 8 (two 4-beat " +
-                 "bars): bar 1 = sting + banner, bar 2 = four count-in clicks at the new speed.")]
-        [SerializeField, Min(0)] private int stageBreakBeats = 8;
+        [Tooltip("Beats of telegraphed break at a stage-up, counted at the NEW tempo. The next card " +
+                 "REVEALS inside the break (under the banner, with the count-in clicks) and its perform " +
+                 "window opens the instant the banner drops. With 4 (one bar): sting + banner + count-in " +
+                 "+ reveal all share the bar; the 1-bar compressed reveal fits it exactly.")]
+        [SerializeField, Min(0)] private int stageBreakBeats = 4;
 
         [Tooltip("One-shot sting at the stage-up break start (WarioWare speed-up moment).")]
         [SerializeField] private AudioClip stageUpStingClip;
@@ -633,9 +638,10 @@ namespace KrumbleHut.Drummi.FlashCards
         #region Stage Break Presentation
         /// <summary>
         /// WarioWare-style stage-up moment, driven by FlashCardController.OnStageUp
-        /// at the break start. Bar 1: sting + banner; bar 2 (last four beats):
-        /// count-in clicks at the NEW tempo so the player hears the speed before
-        /// performing at it. GameClock-polled, so pausing freezes it for free.
+        /// at the break start. Sting + banner at break start; count-in clicks at
+        /// the NEW tempo on the break's last four beats while the next card reveals
+        /// underneath — the banner drops exactly as the perform window opens.
+        /// GameClock-polled, so pausing freezes it for free.
         /// </summary>
         private void HandleStageUp(float multiplier, double breakStart, int breakBeats, double beatInterval)
         {

@@ -83,6 +83,18 @@ namespace KrumbleHut.Drummi.Dungeons
                  "Quarter | Rest ≡ pre-eighths behavior (quarters and full rests only).")]
         [SerializeField] private FlashCardVocab vocabulary = FlashCardVocab.Quarter | FlashCardVocab.Rest;
 
+        [Tooltip("Chance that a card whose vocab contains HalfRest converts one of its Rests into a " +
+                 "half-beat rest (shifts all later play onto the off-beats). Endless only; stripped on " +
+                 "Double Time cards and in dungeon rooms.")]
+        [SerializeField, Range(0f, 1f)] private float halfRestChance = 0.35f;
+
+        [Tooltip("ON-BEAT cards guaranteed after an off-beat episode resolves before a new one can start.")]
+        [SerializeField, Min(0)] private int halfRestCooldownCards = 2;
+
+        [Tooltip("Fully off-beat cards between an episode's starting half-rest and the FORCED resolving " +
+                 "one. 1 = flip, one off-beat card, flip back — a tight, learnable shape.")]
+        [SerializeField, Min(0)] private int offbeatCardsPerEpisode = 1;
+
         [Header("Reveal Compression (dev toggle)")]
         [Tooltip("ON: the reveal phase is capped at revealBars bars — bigger cards pop their squares " +
                  "proportionally faster, so the wait never grows with row count. OFF: classic symmetric " +
@@ -279,6 +291,18 @@ namespace KrumbleHut.Drummi.Dungeons
         private List<DungeonScheduledBeat> _cardBeats;
         private SquareTemplate[]           _templates;
 
+        // Cumulative slot starts in card-beats (length N+1; last entry = card length).
+        // Identical to 0..N unless the card contains a HalfRest, which shortens its
+        // slot to half a beat and shifts every later slot. Rebuilt whenever a card
+        // becomes current; drives all slot↔time resolution.
+        private double[] _slotStartBeats;
+
+        // Global off-beat phase: flipped each time a finished card contained a
+        // HalfRest. Cards chain relative (NextPhraseStart = EvaluationTime), so the
+        // half-beat shift persists across cards on its own — this bool only exists
+        // for the view's phase tint and the stage-up re-alignment.
+        private bool _phaseShifted;
+
         // ── Pipelined reveal (endless): the NEXT card is rolled + built at the
         // current card's perform start and revealed in the on-deck zone during the
         // perform window's final reveal-length stretch, so play is continuous —
@@ -380,6 +404,23 @@ namespace KrumbleHut.Drummi.Dungeons
         /// than the perform-bar beat interval when the reveal is compressed.
         /// </summary>
         public double CurrentRevealSlotInterval => _revealSlotInterval;
+
+        /// <summary>
+        /// Cumulative slot starts of the current card in card-beats (length N+1;
+        /// last entry = card length). 0..N unless the card contains a HalfRest.
+        /// Null before the first reveal.
+        /// </summary>
+        public IReadOnlyList<double> CurrentSlotStartBeats => _slotStartBeats;
+
+        /// <summary>Seconds per card-beat of the CURRENT card (base interval / tempo multiplier).</summary>
+        public double CurrentCardBeatInterval => _cardBeatInterval;
+
+        /// <summary>
+        /// True while play is globally shifted half a beat off the metronome grid
+        /// (an odd number of HalfRest cards has elapsed). Flips at card boundaries;
+        /// reset by stage-up breaks. Drives the view's off-beat phase tint.
+        /// </summary>
+        public bool IsPhaseShifted => _phaseShifted;
 
         /// <summary>
         /// Templates of the pre-built NEXT card (pipelined flow). Valid from
@@ -512,6 +553,11 @@ namespace KrumbleHut.Drummi.Dungeons
             }
             _pendingStageMultiplier = Mathf.Max(1f, multiplier);
             _pendingStageBreakBeats = Mathf.Max(0, breakBeats);
+            // No fresh off-beat segments may stack in front of a speed-up: stop
+            // STARTING episodes now (an in-flight one still resolves; the boundary
+            // hold guarantees the break begins on-beat). Cleared by ResetEpisode
+            // when the stage applies.
+            if (_cardGenerator != null) _cardGenerator.suppressNewEpisodes = true;
             Debug.Log($"[FlashCard] Stage tempo queued → x{_pendingStageMultiplier:F2} " +
                       $"({_runBpm * _pendingStageMultiplier:F1} BPM), break={_pendingStageBreakBeats} beats (applies at next card boundary)");
         }
@@ -560,7 +606,12 @@ namespace KrumbleHut.Drummi.Dungeons
             _previewValid           = false;
             _previewPattern         = null;
             RollNextCardTempo();
-            _cardGenerator     = new FlashCardPatternGenerator();
+            _cardGenerator     = new FlashCardPatternGenerator
+            {
+                halfRestChance         = halfRestChance,
+                halfRestCooldownCards  = halfRestCooldownCards,
+                offbeatCardsPerEpisode = offbeatCardsPerEpisode,
+            };
             _cardIndex         = 0;
             _running           = true;
             _revealFired       = false;
@@ -568,6 +619,8 @@ namespace KrumbleHut.Drummi.Dungeons
             _revealSlot        = 0;
             _cardBeats         = null;
             _templates         = null;
+            _slotStartBeats    = null;
+            _phaseShifted      = false;
             _tuningGuardWarned = false;
             ClearNextCard();
 
@@ -664,7 +717,28 @@ namespace KrumbleHut.Drummi.Dungeons
                 // purely visual, so no pre-scheduling headroom is needed (unlike C&R's
                 // PrepareCallPhrase, which exists only for PlayScheduled DSP lead).
                 _cardBeats = BuildCard(_current.ResponseStartTime, _cardSlotCount, _cardMinNotes,
-                                       _cardMaxNotes, _cardBeatInterval, out _templates);
+                                       _cardMaxNotes, _cardBeatInterval, EffectiveVocab(_cardTempoMultiplier),
+                                       out _templates);
+
+                // The generator may return MORE slots than requested (the episode
+                // resolver appends a balancing Rest) — adopt the actual count so
+                // every slot↔time mapping stays consistent.
+                if (_templates.Length != _cardSlotCount)
+                {
+                    _cardSlotCount      = _templates.Length;
+                    _revealSlotInterval = _cardRevealBeats * _cardBeatInterval / _cardSlotCount;
+                }
+
+                // A HalfRest changes the card's length in beats: recompute the
+                // perform window from the actual length. CallStart/ResponseStart are
+                // invariant (reveal length is callBeats-based), so BuildCard's
+                // scheduling and the coyote override below stay valid; only
+                // EvaluationTime moves — and NextPhraseStart with it, phase-shifting
+                // every later card.
+                _slotStartBeats = SquareTemplateUtil.BuildSlotStartBeats(_templates);
+                _current = PhraseTiming.Compute(_cardIndex, _cardSlotCount, _current.CallStartTime,
+                                                _cardBeatInterval, _cardRevealBeats,
+                                                _slotStartBeats[_cardSlotCount]);
                 LogCard(_cardIndex, _current, _templates);
                 InitBlockJudging();
 
@@ -830,16 +904,27 @@ namespace KrumbleHut.Drummi.Dungeons
             _nextJudgeSlot = 0;
             _groupStart    = 0;
 
-            // Same floor math as HitCallback: slots measured on the uncompressed
-            // reveal timeline.
+            // Same slot resolution as HitCallback: slots measured on the uncompressed
+            // reveal timeline, mapped through the cumulative slot starts.
             double revealOrigin = _current.ResponseStartTime - _cardSlotCount * _cardBeatInterval;
             for (int i = 0; i < _cardBeats.Count; i++)
             {
-                int slot = (int)Math.Floor((_cardBeats[i].scheduledTime - revealOrigin) / _cardBeatInterval + 1e-6);
-                slot = Mathf.Clamp(slot, 0, n - 1);
+                int slot = SlotFromBeats((_cardBeats[i].scheduledTime - revealOrigin) / _cardBeatInterval);
                 _beatSlot[i] = slot;
                 _slotExpected[slot]++;
             }
+        }
+
+        /// <summary>
+        /// Maps a position in card-beats to its host slot via the cumulative slot
+        /// starts (replaces the old floor — slot index == beat index no longer holds
+        /// once a HalfRest shortens a slot). Clamps outside the card.
+        /// </summary>
+        private int SlotFromBeats(double beats)
+        {
+            for (int s = _cardSlotCount - 1; s >= 1; s--)
+                if (beats >= _slotStartBeats[s] - 1e-6) return s;
+            return 0;
         }
 
         /// <summary>
@@ -851,7 +936,7 @@ namespace KrumbleHut.Drummi.Dungeons
         {
             if (_slotJudged == null) return;
             while (_running && _nextJudgeSlot < _cardSlotCount &&
-                   now >= _current.ResponseStartTime + (_nextJudgeSlot + 1) * _cardBeatInterval + blockJudgeGraceSeconds)
+                   now >= _current.ResponseStartTime + _slotStartBeats[_nextJudgeSlot + 1] * _cardBeatInterval + blockJudgeGraceSeconds)
             {
                 JudgeSlot(_nextJudgeSlot++);
             }
@@ -895,6 +980,11 @@ namespace KrumbleHut.Drummi.Dungeons
                 strays  += _slotStrays[s];
             }
 
+            // An all-rest remainder group where nothing happened (the resolver
+            // card's lone balancing slot) carries no information — firing it would
+            // play a free AllPerfect sound for not playing.
+            if (notes == 0 && missed == 0 && strays == 0) return;
+
             var grade = GradeGroup(missed, notes, perfect, strays);
             var judgement = new BarJudgement(from / BarGroupSize, to - from + 1, missed, notes, perfect, strays, grade);
 
@@ -937,6 +1027,18 @@ namespace KrumbleHut.Drummi.Dungeons
         {
             _cardIndex++;
 
+            // Phase bookkeeping: each HalfRest in a finished card flips the global
+            // phase (opener → off-beat; resolver → back on; the resolver card's
+            // balancing Rest slot restores the deleted beat so bars never drift).
+            // The timing shift itself propagates through NextPhraseStart — this
+            // bool is for the view tint, the off-beat rails, and the stage-up
+            // hold only.
+            if (_templates != null)
+            {
+                foreach (var t in _templates)
+                    if (t.IsPhaseFlip()) _phaseShifted = !_phaseShifted;
+            }
+
             // Run stopped during OnCardEvaluated (strike-out → host StopEncounter):
             // TerminateEncounter already closed the gates — promoting a pre-built
             // card here would reopen them on a dead run.
@@ -973,12 +1075,13 @@ namespace KrumbleHut.Drummi.Dungeons
             if (_nextPrepared)
             {
                 ApplyCardSpec(_nextSpec); // boundary bpm retune — grading windows now match the new card
-                _current      = _nextTiming;
-                _cardBeats    = _nextBeats;
-                _templates    = _nextTemplates;
-                _revealFired  = true;
-                _performFired = true;
-                _revealSlot   = _cardSlotCount;
+                _current        = _nextTiming;
+                _cardBeats      = _nextBeats;
+                _templates      = _nextTemplates;
+                _slotStartBeats = SquareTemplateUtil.BuildSlotStartBeats(_templates);
+                _revealFired    = true;
+                _performFired   = true;
+                _revealSlot     = _cardSlotCount;
                 ClearNextCard();
 
                 // Fresh judging state BEFORE the window opens / the coyote buffer
@@ -1012,16 +1115,52 @@ namespace KrumbleHut.Drummi.Dungeons
             // Stage-up (endless ladder): the pending multiplier retunes the BASE grid
             // here — chaining is relative (next card starts at NextPhraseStart), so
             // no grid re-anchor is needed — and inserts the telegraphed break, counted
-            // in NEW-tempo beats, before the next card.
+            // in NEW-tempo beats. The next card's REVEAL runs inside the break
+            // (under the banner, alongside the count-in) so the perform window
+            // opens the instant the banner drops.
             double chainStart = _current.NextPhraseStart;
-            if (_pendingStageMultiplier > 0f)
+            bool   stagedUp   = _pendingStageMultiplier > 0f;
+
+            // Off-beat must RESOLVE before a speed-up — the break's count-in has to
+            // land on a clean on-beat boundary. Hold the pending stage one more card
+            // and force that card to carry the resolving half-rest. The stale
+            // preview (generated before this decision) is discarded so the forced
+            // card is actually the one built next.
+            if (stagedUp && _phaseShifted)
             {
+                stagedUp        = false; // stage stays pending; applies at the next on-beat boundary
+                _previewValid   = false;
+                _previewPattern = null;
+                _cardGenerator.ForceResolveNext();
+                Debug.Log("[FlashCard] Stage-up HELD: phase is off-beat — next card forced to resolve first.");
+            }
+
+            if (stagedUp)
+            {
+                // Backstop only — the stage-hold above means play is on-beat here.
+                // Kept defensively: card boundaries of a phase-shifted run sit 0.5
+                // OLD base beats before the grid; re-align and reset.
+                if (_phaseShifted)
+                {
+                    chainStart   += 0.5 * _baseBeatInterval;
+                    _phaseShifted = false;
+                    Debug.Log("[FlashCard] Stage-up re-align: +0.5 beat to clear the HalfRest phase shift.");
+                }
+
+                // Fresh on-beat start for the new stage: episode machine back to
+                // idle with the cooldown running (its in-flight cards died with the
+                // discarded preview).
+                _cardGenerator.ResetEpisode();
+
                 _baseBpm          = _runBpm * _pendingStageMultiplier;
                 _baseBeatInterval = 60.0 / _baseBpm;
+                // Break start AFTER the phase re-align — the count-in clicks and
+                // banner must line up with the actual re-aligned perform start.
+                double breakStart = chainStart;
                 chainStart       += _pendingStageBreakBeats * _baseBeatInterval;
                 Debug.Log($"[FlashCard] STAGE UP → x{_pendingStageMultiplier:F2} ({_baseBpm:F1} BPM), " +
-                          $"break={_pendingStageBreakBeats} beats, next card at {chainStart:F3}");
-                OnStageUp?.Invoke(_pendingStageMultiplier, _current.NextPhraseStart, _pendingStageBreakBeats, _baseBeatInterval);
+                          $"break={_pendingStageBreakBeats} beats, perform resumes at {chainStart:F3}");
+                OnStageUp?.Invoke(_pendingStageMultiplier, breakStart, _pendingStageBreakBeats, _baseBeatInterval);
                 _pendingStageMultiplier = 0f;
                 // The previewed card was generated under pre-stage config/beat
                 // interval — discard it; the post-break card rolls fresh below.
@@ -1029,6 +1168,11 @@ namespace KrumbleHut.Drummi.Dungeons
                 _previewPattern = null;
             }
             RollNextCardTempo();
+            // Staged: chainStart is the break END = the perform start, so pull the
+            // call (reveal) start back by the reveal span. If an authored break is
+            // shorter than the reveal, CallStartTime lands in the past and the pop
+            // loop catches up instantly — perform still opens at break end.
+            if (stagedUp) chainStart -= _cardRevealBeats * _cardBeatInterval;
             _current      = PhraseTiming.Compute(_cardIndex, _cardSlotCount, chainStart, _cardBeatInterval, _cardRevealBeats);
             _revealFired  = false;
             _performFired = false;
@@ -1147,16 +1291,27 @@ namespace KrumbleHut.Drummi.Dungeons
             else
             {
                 _nextBeats = BuildCard(_nextTiming.ResponseStartTime, _nextSpec.slotCount, _nextSpec.minNotes,
-                                       _nextSpec.maxNotes, _nextSpec.beatInterval, out _nextTemplates);
+                                       _nextSpec.maxNotes, _nextSpec.beatInterval,
+                                       EffectiveVocab(_nextSpec.tempoMultiplier), out _nextTemplates);
+                AdoptGeneratedSlotCount(ref _nextSpec, _nextTemplates);
             }
+
+            // A HalfRest changes the generated card's length — recompute the perform
+            // window from the actual slots. ResponseStartTime is invariant
+            // (callStart + revealBeats), so the scheduling above stays valid.
+            _nextTiming = PhraseTiming.Compute(_cardIndex + 1, _nextSpec.slotCount, callStart,
+                                               _nextSpec.beatInterval, _nextSpec.revealBeats,
+                                               SquareTemplateUtil.BuildSlotStartBeats(_nextTemplates)[_nextSpec.slotCount]);
             LogCard(_cardIndex + 1, _nextTiming, _nextTemplates);
 
             // Refill the preview: roll + generate the card AFTER the one just
             // prepared (pattern only — scheduled when consumed next boundary).
             _previewSpec    = RollCardSpec();
             _previewPattern = _cardGenerator.GenerateCard(_previewSpec.slotCount, _previewSpec.minNotes,
-                                                          _previewSpec.maxNotes, ConstantType, _activeVocab,
+                                                          _previewSpec.maxNotes, ConstantType,
+                                                          EffectiveVocab(_previewSpec.tempoMultiplier),
                                                           out _previewTemplates);
+            AdoptGeneratedSlotCount(ref _previewSpec, _previewTemplates);
             _previewValid   = true;
 
             // Never reveal before the current perform window begins (exotic tempo
@@ -1165,6 +1320,18 @@ namespace KrumbleHut.Drummi.Dungeons
             _nextRevealStarted = false;
             _nextRevealSlot    = 0;
             _nextPrepared      = true;
+        }
+
+        /// <summary>
+        /// Adopts the generator's ACTUAL slot count into a rolled spec — the episode
+        /// resolver appends a balancing Rest slot (slotCount+1). Reveal pacing is
+        /// re-spread so all pops still fit the reveal window.
+        /// </summary>
+        private static void AdoptGeneratedSlotCount(ref CardSpec spec, SquareTemplate[] templates)
+        {
+            if (templates == null || templates.Length == spec.slotCount) return;
+            spec.slotCount          = templates.Length;
+            spec.revealSlotInterval = spec.revealBeats * spec.beatInterval / spec.slotCount;
         }
 
         /// <summary>Discards any pre-built next card (teardown, stop, stage fallback).</summary>
@@ -1272,11 +1439,10 @@ namespace KrumbleHut.Drummi.Dungeons
 
             ConsumeHit(now, timeOffset, quality);
 
-            // Floor (with fp epsilon) so offbeat/subdivided notes map to their host square.
-            // Slots are measured on the uncompressed reveal timeline (see BuildCard).
+            // Cumulative slot lookup so offbeat/subdivided notes map to their host
+            // square. Slots are measured on the uncompressed reveal timeline (see BuildCard).
             double revealOrigin = _current.ResponseStartTime - _cardSlotCount * _cardBeatInterval;
-            int slot = (int)Math.Floor((nearest.scheduledTime - revealOrigin) / _cardBeatInterval + 1e-6);
-            slot = Mathf.Clamp(slot, 0, _cardSlotCount - 1);
+            int slot = SlotFromBeats((nearest.scheduledTime - revealOrigin) / _cardBeatInterval);
             OnPlayerHit?.Invoke(slot, quality);
         }
 
@@ -1319,8 +1485,7 @@ namespace KrumbleHut.Drummi.Dungeons
             if (GameClock.Instance == null) return;
 
             double now  = GameClock.Instance.GameTime;
-            int    slot = (int)Math.Floor((now - _current.ResponseStartTime) / _cardBeatInterval);
-            slot = Mathf.Clamp(slot, 0, _cardSlotCount - 1);
+            int    slot = SlotFromBeats((now - _current.ResponseStartTime) / _cardBeatInterval);
             if (_endless && _slotStrays != null && slot < _slotStrays.Length)
                 _slotStrays[slot]++;
             OnPlayerMissTap?.Invoke(slot);
@@ -1328,12 +1493,25 @@ namespace KrumbleHut.Drummi.Dungeons
         #endregion
 
         #region Private — Card Generation
+        /// <summary>
+        /// HalfRest is endless-only and 1x-only: dungeon rooms assume bar-aligned
+        /// card seams, and a Double Time card's half-beat is 0.25 base beats —
+        /// breaking the binary on/off-beat phase model.
+        /// </summary>
+        private FlashCardVocab EffectiveVocab(float tempoMultiplier)
+            => !_endless || tempoMultiplier > 1f ? _activeVocab & ~FlashCardVocab.HalfRest
+                                                 : _activeVocab;
+
         private List<DungeonScheduledBeat> BuildCard(double responseStartTime, int slotCount, int minNotes,
-                                                     int maxNotes, double beatInterval, out SquareTemplate[] templates)
+                                                     int maxNotes, double beatInterval, FlashCardVocab vocab,
+                                                     out SquareTemplate[] templates)
         {
             var beats = _cardGenerator.GenerateCard(
-                slotCount, minNotes, maxNotes, ConstantType, _activeVocab, out templates);
-            return ScheduleCard(beats, responseStartTime, slotCount, beatInterval, templates);
+                slotCount, minNotes, maxNotes, ConstantType, vocab, out templates);
+            // Schedule against the ACTUAL slot count — the episode resolver appends
+            // a balancing Rest slot, and the reveal-origin mapping must match the
+            // live timeOffset (actual count × beat interval).
+            return ScheduleCard(beats, responseStartTime, templates.Length, beatInterval, templates);
         }
 
         /// <summary>

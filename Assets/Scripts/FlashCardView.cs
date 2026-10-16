@@ -94,6 +94,8 @@ namespace KrumbleHut.Drummi.Dungeons
         [SerializeField] private Sprite offbeatEighthSprite;
         [SerializeField] private Sprite sixteenthQuadSprite;
         [SerializeField] private Sprite tripletSprite;
+        [Tooltip("Eighth-rest glyph for the HalfRest square (falls back to restSprite when unset).")]
+        [SerializeField] private Sprite halfRestSprite;
 
         [Header("Colors")]
         [SerializeField] private Color faceDownColor     = new Color(0.16f, 0.13f, 0.22f, 1f);
@@ -102,6 +104,40 @@ namespace KrumbleHut.Drummi.Dungeons
         [SerializeField] private Color borderIdleColor   = new Color(0f, 0f, 0f, 0.35f);
         [SerializeField] private Color borderYourTurnColor = new Color(1f, 0.82f, 0.25f, 0.9f);
         [SerializeField] private Color cursorColor       = new Color(1f, 1f, 1f, 0.35f);
+
+        [Header("Half-Rest (off-beat phase shift)")]
+        [Tooltip("Face color of a HalfRest square — bolder than the grey full rest: this block changes the grid.")]
+        [SerializeField] private Color halfRestFaceColor = new Color(0.85f, 0.45f, 0.75f, 1f);
+        [Tooltip("Border tint while play is shifted onto the off-beats (replaces the 'your turn' gold / idle " +
+                 "until another HalfRest or a stage break flips play back on-beat). No banner, no words.")]
+        [SerializeField] private Color borderOffbeatPhaseColor = new Color(0.65f, 0.35f, 0.95f, 0.9f);
+        [Tooltip("One-shot cue played as the HalfRest square's anticipatory pulse starts (misc speaker); optional.")]
+        [SerializeField] private AudioClip halfRestCueClip;
+        [Tooltip("Peak scale of the HalfRest square's warning pulse, fired pulseLeadBeats before its slot.")]
+        [SerializeField, Range(1f, 1.5f)] private float halfRestPulseScale = 1.18f;
+        [Tooltip("How many card-beats BEFORE the HalfRest slot the warning pulse + cue fire.")]
+        [SerializeField, Range(0.25f, 2f)] private float halfRestPulseLeadBeats = 1f;
+
+        [Tooltip("While play is phase-shifted, the square wobbles (active + on-deck stream) sway on the " +
+                 "SHIFTED grid (+0.5 beat) instead of the metronome's — the stream itself becomes the " +
+                 "off-beat rail the player entrains to. The BGM stays on-grid by design.")]
+        [SerializeField] private bool wobbleFollowsPhase = true;
+
+        [Tooltip("Audible rail: soft tick played on each of the PLAYER's beats while play is phase-shifted " +
+                 "(i.e. on the 'and's), through the misc speaker. The toggle for the off-beat click support.")]
+        [SerializeField] private bool playOffbeatTick = true;
+        [Tooltip("The off-beat tick clip. None = silent even when the toggle is on.")]
+        [SerializeField] private AudioClip offbeatTickClip;
+
+        [Tooltip("Column stream: lateral nudge (px) on OFF-BEAT blocks so the phase is readable per block " +
+                 "before it reaches the hit zone (the current block recenters as it lands). 0 = disabled — " +
+                 "the easy revert.")]
+        [SerializeField] private float offbeatLaneOffsetX = 60f;
+
+        [Tooltip("Column stream: half-rest 'skip notch' size as fractions of the cell (width, height). " +
+                 "A slim chip centered in its half-step — reads as 'the stream skips here', not a block, " +
+                 "and never overlaps its neighbors.")]
+        [SerializeField] private Vector2 halfRestNotchScale = new Vector2(0.7f, 0.35f);
 
         [Header("Double Time Telegraph")]
         [Tooltip("Banner root (e.g. a 'DOUBLE TIME!' TMP text under cardRoot, starts inactive). " +
@@ -235,6 +271,18 @@ namespace KrumbleHut.Drummi.Dungeons
         private double       _beatInterval;
         private int          _cursorIndex = -1;
 
+        // Cumulative slot starts of the current card in card-beats (controller's
+        // array, length N+1). Slot index == beat index no longer holds once a
+        // HalfRest shortens a slot — all local slot↔time math goes through this.
+        private System.Collections.Generic.IReadOnlyList<double> _slotStartBeats;
+        // Index of the current card's HalfRest slot (-1 = none) + one-shot latch
+        // for its anticipatory pulse/cue.
+        private int  _halfRestSlot = -1;
+        private bool _halfRestPulsed;
+        // Off-beat tick cursor: next slot whose start-beat tick is due (ticks play
+        // only on phase-shifted slots).
+        private int  _nextTickSlot;
+
         // Runtime-built grid: squares + all per-slot state are (re)allocated by
         // EnsureGrid whenever the card's slot count changes.
         private Square[] squares = System.Array.Empty<Square>();
@@ -292,6 +340,9 @@ namespace KrumbleHut.Drummi.Dungeons
         private RectTransform   _columnRoot;
         private RectTransform[] _slotHolders = System.Array.Empty<RectTransform>();
         private Tween[]         _holderScaleTweens = System.Array.Empty<Tween>();
+        // Per-holder layout X (0 on-beat, offbeatLaneOffsetX off-beat, half for the
+        // notch) — ColumnStep recenters the current holder and restores the rest.
+        private float[]         _holderBaseX = System.Array.Empty<float>();
         private Tween           _columnScrollTween;
         // cardRoot's authored rect (grid card framing), captured at Start and
         // restored when switching back to Grid — column mode re-anchors the root
@@ -386,6 +437,7 @@ namespace KrumbleHut.Drummi.Dungeons
             _homePositions  = new Vector2[slotCount];
             _slotHolders       = new RectTransform[slotCount];
             _holderScaleTweens = new Tween[slotCount];
+            _holderBaseX       = new float[slotCount];
 
             if (_layoutMode == FlashCardLayout.ColumnScroll) BuildColumnLayout(slotCount);
             else                                             BuildGridLayout(slotCount);
@@ -550,10 +602,104 @@ namespace KrumbleHut.Drummi.Dungeons
         }
 
         /// <summary>
+        /// Column mode per-card layout: UNIFORM one-pitch spacing — every slot,
+        /// including the flip notches, gets its own evenly-spaced cell so nothing
+        /// ever crowds or overlaps. Time compression is carried by the CURSOR
+        /// (the step past a notch comes half a beat early), not by the geometry.
+        /// X carries the phase: off-beat blocks nudge right, notches sit at the
+        /// midpoint. Runs after EnsureGrid whenever a card becomes current.
+        /// </summary>
+        private void LayoutColumnForCard()
+        {
+            if (_layoutMode != FlashCardLayout.ColumnScroll) return;
+            var templates = controller.CurrentTemplates;
+            bool shifted = controller != null && controller.IsPhaseShifted;
+            for (int i = 0; i < _slotHolders.Length; i++)
+            {
+                var template = templates != null && i < templates.Count
+                    ? templates[i] : SquareTemplate.Rest;
+                bool flip = template.IsPhaseFlip();
+
+                float x = flip ? offbeatLaneOffsetX * 0.5f
+                               : shifted ? offbeatLaneOffsetX : 0f;
+                if (flip) shifted = !shifted;
+
+                _holderBaseX[i] = x;
+                if (_slotHolders[i] != null)
+                    _slotHolders[i].anchoredPosition = new Vector2(x, columnHitZoneY + i * columnPitch);
+
+                var sq = squares[i];
+                if (sq?.root == null) continue;
+                sq.root.sizeDelta = flip
+                    ? new Vector2(cellSize * halfRestNotchScale.x, cellSize * halfRestNotchScale.y)
+                    : new Vector2(cellSize, cellSize);
+            }
+        }
+
+        /// <summary>
+        /// Grid mode per-card layout: within each visual row the X positions come
+        /// from cumulative beats — the HalfRest square renders HALF WIDTH and
+        /// everything after it in its row slides left half a pitch, so the time
+        /// compression is readable in the layout. Updates _homePositions (the
+        /// handoff-slide / tween-snap targets). Rows after the HalfRest look
+        /// normal; the wobble phase + border carry the shifted state there.
+        /// </summary>
+        private void LayoutGridForCard()
+        {
+            if (_layoutMode != FlashCardLayout.Grid) return;
+            var templates = controller.CurrentTemplates;
+            for (int i = 0; i < squares.Length; i++)
+            {
+                var sq = squares[i];
+                if (sq?.root == null) continue;
+                int    row      = i / columns;
+                double rowStart = SlotStartBeat(row * columns);
+                var template = templates != null && i < templates.Count
+                    ? templates[i] : SquareTemplate.Rest;
+                bool  flip       = template.IsPhaseFlip();
+                float len        = template.BeatLength();
+                float centerBeat = (float)(SlotStartBeat(i) - rowStart) + len * 0.5f;
+
+                sq.root.sizeDelta        = new Vector2(flip ? cellSize * len : cellSize, cellSize);
+                sq.root.anchoredPosition = new Vector2(
+                    (centerBeat - columns * 0.5f) * pitchX,
+                    -(topPadding + cellSize * 0.5f + row * pitchY));
+                _homePositions[i] = sq.root.anchoredPosition;
+            }
+        }
+
+        /// <summary>
+        /// Grid-mode on-deck variant of LayoutGridForCard — the next card's
+        /// preview compresses the same way the live card will.
+        /// </summary>
+        private void LayoutOnDeckGrid(System.Collections.Generic.IReadOnlyList<SquareTemplate> templates)
+        {
+            if (_layoutMode == FlashCardLayout.ColumnScroll || templates == null) return;
+            float cursor = 0f, rowStartBeat = 0f;
+            for (int i = 0; i < _onDeckSquares.Length && i < templates.Count; i++)
+            {
+                if (i % columns == 0) rowStartBeat = cursor;
+                var sq = _onDeckSquares[i];
+                bool  flip       = templates[i].IsPhaseFlip();
+                float len        = templates[i].BeatLength();
+                float centerBeat = cursor - rowStartBeat + len * 0.5f;
+                cursor += len;
+                if (sq?.root == null) continue;
+                int row = i / columns;
+                sq.root.sizeDelta        = new Vector2(flip ? cellSize * len : cellSize, cellSize);
+                sq.root.anchoredPosition = new Vector2(
+                    (centerBeat - columns * 0.5f) * pitchX,
+                    -(cellSize * 0.5f + row * pitchY));
+            }
+        }
+
+        /// <summary>
         /// Discrete scroll step: the column snaps down so slot <paramref name="idx"/>
         /// lands on the hit zone, growing to the current-beat scale while the
         /// slot it replaces shrinks back to trail size. The step MOMENT is the
         /// beat-cursor crossing (virtual time, Update) — the tween is cosmetic.
+        /// Spacing is uniform, so the step past a flip notch simply arrives half
+        /// a beat sooner.
         /// </summary>
         private void ColumnStep(int idx)
         {
@@ -567,12 +713,20 @@ namespace KrumbleHut.Drummi.Dungeons
             for (int i = 0; i < _slotHolders.Length; i++)
             {
                 if (_slotHolders[i] == null) continue;
-                float target = i == idx ? columnCurrentScale : columnTrailScale;
-                if (Mathf.Approximately(_slotHolders[i].localScale.x, target)) continue;
+                // Flip notches never grow — they're skip/catch markers, not targets.
+                bool notch = i < _templates.Length && _templates[i].IsPhaseFlip();
+                float targetScale = i == idx && !notch ? columnCurrentScale : columnTrailScale;
+                // The current block recenters as it lands on the hit zone; everything
+                // else holds its phase-offset lane position.
+                float targetX = i == idx && !notch ? 0f
+                              : i < _holderBaseX.Length ? _holderBaseX[i] : 0f;
+                if (Mathf.Approximately(_slotHolders[i].localScale.x, targetScale) &&
+                    Mathf.Approximately(_slotHolders[i].anchoredPosition.x, targetX)) continue;
                 _holderScaleTweens[i]?.Kill();
-                _holderScaleTweens[i] = _slotHolders[i].DOScale(target, columnStepDuration)
-                                                       .SetEase(Ease.OutBack)
-                                                       .SetLink(_slotHolders[i].gameObject);
+                var seq = DOTween.Sequence().SetLink(_slotHolders[i].gameObject);
+                seq.Join(_slotHolders[i].DOScale(targetScale, columnStepDuration).SetEase(Ease.OutBack));
+                seq.Join(_slotHolders[i].DOAnchorPosX(targetX, columnStepDuration).SetEase(Ease.OutCubic));
+                _holderScaleTweens[i] = seq;
             }
         }
 
@@ -621,34 +775,148 @@ namespace KrumbleHut.Drummi.Dungeons
             if (GameClock.Instance == null || GameClock.Instance.IsPaused) return;
 
             double now = GameClock.Instance.GameTime;
-            int idx = (int)((now - _timing.ResponseStartTime) / _beatInterval);
-            idx = Mathf.Clamp(idx, 0, squares.Length - 1);
+            int idx = SlotFromBeats((now - _timing.ResponseStartTime) / _beatInterval);
             if (idx != _cursorIndex)
             {
+                // Crossing PAST the HalfRest slot is the moment the grid flips —
+                // retint the border to the new effective phase (both directions).
+                bool crossedHalfRest = _halfRestSlot >= 0 &&
+                                       _cursorIndex <= _halfRestSlot && idx > _halfRestSlot;
                 SetCursor(idx);
                 // Column mode: the beat crossing IS the scroll step — the column
                 // snaps down one pitch so the new current beat lands on the hit zone.
                 if (_layoutMode == FlashCardLayout.ColumnScroll) ColumnStep(idx);
+                if (crossedHalfRest)
+                {
+                    // The grid just flipped under the cursor: the wobbles jump onto
+                    // the player's new grid and the border retints (both directions).
+                    ApplyWobblePhase();
+                    if (!_gradeFlashActive)
+                        SetBorder(EffectivePhaseShifted() ? borderOffbeatPhaseColor : borderYourTurnColor,
+                                  animate: true);
+                }
             }
 
             // Rests the player correctly left alone auto-destroy once their beat
             // has elapsed; a rest that was miss-tapped persists as the failure tell.
             FinalizeElapsedRests(now);
+
+            // HalfRest telegraph: pulse + cue, pulseLeadBeats before the shift moment.
+            MaybePulseHalfRest(now);
+
+            // Audible off-beat rail while phase-shifted.
+            MaybePlayOffbeatTick(now);
+        }
+
+        /// <summary>
+        /// Maps a perform-bar position in card-beats to its host slot via the
+        /// cumulative slot starts (mirrors the controller's SlotFromBeats). Falls
+        /// back to the linear beat index when no starts are cached. Clamped.
+        /// </summary>
+        private int SlotFromBeats(double beats)
+        {
+            if (_slotStartBeats == null || _slotStartBeats.Count != squares.Length + 1)
+                return Mathf.Clamp((int)beats, 0, squares.Length - 1);
+            for (int s = squares.Length - 1; s >= 1; s--)
+                if (beats >= _slotStartBeats[s] - 1e-6) return s;
+            return 0;
+        }
+
+        /// <summary>
+        /// True while PLAY is currently off the metronome grid: the controller's
+        /// phase (state at this card's start) XOR'd with whether this card's own
+        /// HalfRest has already elapsed under the cursor.
+        /// </summary>
+        private bool EffectivePhaseShifted()
+        {
+            bool shifted = controller != null && controller.IsPhaseShifted;
+            if (_halfRestSlot >= 0 && _cursorIndex > _halfRestSlot) shifted = !shifted;
+            return shifted;
+        }
+
+        /// <summary>
+        /// Beat-follows-you: while phase-shifted, every square wobble (active +
+        /// on-deck stream) sways half a beat late — on the PLAYER's grid — so the
+        /// visible stream is the off-beat rail. phaseOffsetBeats is in metronome
+        /// beats; the card tempo multiplier converts the half CARD-beat (relevant
+        /// only if a DT card ever runs while shifted).
+        /// </summary>
+        private void ApplyWobblePhase()
+        {
+            float offset = wobbleFollowsPhase && EffectivePhaseShifted()
+                ? 0.5f * (controller != null ? controller.CurrentCardTempoMultiplier : 1f)
+                : 0f;
+            for (int i = 0; i < _wobbles.Length; i++)
+                if (_wobbles[i] != null) _wobbles[i].phaseOffsetBeats = offset;
+            for (int i = 0; i < _onDeckWobbles.Length; i++)
+                if (_onDeckWobbles[i] != null) _onDeckWobbles[i].phaseOffsetBeats = offset;
+        }
+
+        /// <summary>Slot start in card-beats — cumulative when available, linear otherwise.</summary>
+        private double SlotStartBeat(int i)
+            => _slotStartBeats != null && i < _slotStartBeats.Count ? _slotStartBeats[i] : i;
+
+        /// <summary>
+        /// Audible off-beat rail: a soft tick on each of the PLAYER's beats (slot
+        /// starts) that are phase-shifted — the ear gets the 'and's marked while
+        /// the BGM keeps the downbeats. Polled from Update, same convention as the
+        /// cursor; ticks are support, not judged moments.
+        /// </summary>
+        private void MaybePlayOffbeatTick(double now)
+        {
+            if (!playOffbeatTick || offbeatTickClip == null) return;
+            while (_nextTickSlot < squares.Length &&
+                   now >= _timing.ResponseStartTime + SlotStartBeat(_nextTickSlot) * _beatInterval)
+            {
+                int slot = _nextTickSlot;
+                _nextTickSlot = _nextTickSlot + 1;
+                bool shiftedAtSlot = controller != null && controller.IsPhaseShifted;
+                if (_halfRestSlot >= 0 && slot > _halfRestSlot) shiftedAtSlot = !shiftedAtSlot;
+                if (shiftedAtSlot) PlayMiscClip(offbeatTickClip);
+            }
+        }
+
+        /// <summary>One-shot on the misc speaker — shared channel discipline for all card cues.</summary>
+        private void PlayMiscClip(AudioClip clip)
+        {
+            if (clip == null) return;
+            var audio = AudioManager.instance;
+            if (audio == null || audio.speakers == null || audio.speakers.Length < 3) return;
+            if (audio.speakers[2] == null) return;
+            audio.speakers[2].PlayOneShot(clip);
         }
         #endregion
 
         #region Event Handlers
+        /// <summary>
+        /// Caches the timing of the card that just became current: phrase timing,
+        /// the true per-beat interval (the old Eval−ResponseStart / N derivation is
+        /// wrong for HalfRest-shortened cards), the cumulative slot starts, and the
+        /// HalfRest slot (+ pulse latch) for the telegraph.
+        /// </summary>
+        private void SyncCardTimingState()
+        {
+            _timing         = controller.CurrentTiming;
+            _beatInterval   = controller.CurrentCardBeatInterval;
+            _slotStartBeats = controller.CurrentSlotStartBeats;
+            _halfRestSlot   = -1;
+            _halfRestPulsed = false;
+            _nextTickSlot   = 0;
+            var templates = controller.CurrentTemplates;
+            if (templates != null)
+                for (int i = 0; i < templates.Count; i++)
+                    if (templates[i].IsPhaseFlip()) { _halfRestSlot = i; break; }
+        }
+
         private void HandleCardRevealStart(int cardIndex)
         {
-            _timing       = controller.CurrentTiming;
-            // Derive from the PERFORM window (eval - responseStart): correct under
-            // per-card tempo AND compressed reveals, where the reveal window is
-            // shorter than N beats. Drives the cursor + rest finalization only.
-            _beatInterval = (_timing.EvaluationTime - _timing.ResponseStartTime)
-                            / _timing.PhraseLength;
+            SyncCardTimingState();
 
-            // Rebuild the grid when this card's slot count differs (escalation rows).
+            // Rebuild the grid when this card's slot count differs (escalation rows),
+            // then lay the card out beat-proportionally (HalfRest compresses space).
             EnsureGrid(_timing.PhraseLength);
+            LayoutColumnForCard();
+            LayoutGridForCard();
 
             // A pending post-completion hide belongs to a previous encounter — cancel it.
             _hideDelayTween?.Kill();
@@ -669,9 +937,14 @@ namespace KrumbleHut.Drummi.Dungeons
                 // the revealing card PLUS the already-pipelined next+preview cards
                 // as one full stack — the stream is constant from the first frame.
                 if (_layoutMode == FlashCardLayout.ColumnScroll)
+                {
                     DealIntroColumn();
+                }
                 else
+                {
                     ShowOnDeck(_timing.PhraseLength);
+                    LayoutOnDeckGrid(controller.CurrentTemplates);
+                }
             }
             else
             {
@@ -694,7 +967,11 @@ namespace KrumbleHut.Drummi.Dungeons
             SetDoubleTimeBanner(doubleTime);
             if (doubleTime) PlayDoubleTimeCue();
             if (!_gradeFlashActive)
-                SetBorder(doubleTime ? borderDoubleTimeColor : borderIdleColor, animate: doubleTime);
+                SetBorder(doubleTime                 ? borderDoubleTimeColor
+                        : controller.IsPhaseShifted  ? borderOffbeatPhaseColor
+                        :                              borderIdleColor,
+                          animate: doubleTime);
+            ApplyWobblePhase();
             _state = ViewState.Revealing;
         }
 
@@ -745,16 +1022,20 @@ namespace KrumbleHut.Drummi.Dungeons
             }
 
             _state = ViewState.Performing;
+            // Cursor first: EffectivePhaseShifted reads it, and a handoff leaves the
+            // previous card's index behind.
+            SetCursor(0);
             // At a pipelined handoff the previous card's grade flash started THIS
             // frame — let it bleed through the perform window's start instead of
             // stomping it (classic cycles have a whole reveal bar between the two).
             if (!_gradeFlashActive)
-                SetBorder(borderYourTurnColor, animate: true);
-            SetCursor(0);
+                SetBorder(EffectivePhaseShifted() ? borderOffbeatPhaseColor : borderYourTurnColor,
+                          animate: true);
             // Column mode: the promotion parked the column one pitch high — this
             // step slides slot 0 down onto the hit zone, continuing the per-beat
             // slither through the card boundary with zero visual gap.
             if (_layoutMode == FlashCardLayout.ColumnScroll) ColumnStep(0);
+            ApplyWobblePhase();
             SetAllWobbles(true);
         }
 
@@ -818,13 +1099,56 @@ namespace KrumbleHut.Drummi.Dungeons
             for (int i = 0; i < squares.Length; i++)
             {
                 if (_destroyed[i] || _missTapped[i]) continue;
-                if (_templates[i] != SquareTemplate.Rest) continue;
-                if (now < _timing.ResponseStartTime + (i + 1) * _beatInterval) continue;
+                if (_templates[i].IsNoteBearing()) continue;
+                if (now < _timing.ResponseStartTime + SlotEndBeats(i) * _beatInterval) continue;
                 DestroyRestSlot(i);
             }
         }
 
-        /// <summary>Rest auto-destroy: same collapse + shards, tinted with the rest face color.</summary>
+        /// <summary>Slot end in card-beats — cumulative when available (HalfRest cards), linear otherwise.</summary>
+        private double SlotEndBeats(int i)
+            => _slotStartBeats != null && i + 1 < _slotStartBeats.Count ? _slotStartBeats[i + 1] : i + 1;
+
+        /// <summary>
+        /// HalfRest telegraph (no banner, no words): pulseLeadBeats before the
+        /// HalfRest slot arrives, the square pulses (scale yoyo) and the cue plays —
+        /// warning that the on-beat is about to change. One-shot per card, polled
+        /// from Update (virtual time); the tween is cosmetic only.
+        /// </summary>
+        private void MaybePulseHalfRest(double now)
+        {
+            if (_halfRestPulsed || _halfRestSlot < 0 || _slotStartBeats == null) return;
+            if (_halfRestSlot >= squares.Length) return;
+            double pulseTime = _timing.ResponseStartTime +
+                               (_slotStartBeats[_halfRestSlot] - halfRestPulseLeadBeats) * _beatInterval;
+            if (now < pulseTime) return;
+
+            _halfRestPulsed = true;
+            PlayHalfRestCue();
+
+            int slot = _halfRestSlot;
+            if (_destroyed[slot]) return;
+            var sq = squares[slot];
+            if (sq?.root == null) return;
+
+            // Tween discipline: kill-before-reuse, pause the wobble (tweens own
+            // rotation/scale for their duration), restore the wobble on completion.
+            KillSquareTweens(slot);
+            SetWobble(slot, false);
+            sq.root.localRotation = Quaternion.identity;
+            sq.root.localScale    = Vector3.one;
+            _popTweens[slot] = sq.root.DOScale(halfRestPulseScale, 0.12f)
+                                      .SetLoops(4, LoopType.Yoyo) // ends back at scale 1
+                                      .SetEase(Ease.InOutSine)
+                                      .SetLink(sq.root.gameObject)
+                                      .OnComplete(() =>
+                                      {
+                                          sq.root.localScale = Vector3.one;
+                                          SetWobble(slot, _state == ViewState.Performing && !_destroyed[slot]);
+                                      });
+        }
+
+        /// <summary>Rest auto-destroy: same collapse + shards, tinted with the slot's face color.</summary>
         private void DestroyRestSlot(int i)
         {
             var sq = squares[i];
@@ -832,7 +1156,7 @@ namespace KrumbleHut.Drummi.Dungeons
             KillSquareTweens(i);
             SetWobble(i, false);
             sq.root.localRotation = Quaternion.identity;
-            DestroyBlock(i, sq, restFaceColor);
+            DestroyBlock(i, sq, _faceColors[i]);
         }
 
         /// <summary>Final (or only) note hit: punch-grow, collapse to 0 with a shard burst; slot stays empty.</summary>
@@ -922,7 +1246,7 @@ namespace KrumbleHut.Drummi.Dungeons
             // Final beat's untouched rest ends exactly on the evaluation boundary —
             // Update may not tick between then and now, so finalize here too.
             for (int i = 0; i < squares.Length; i++)
-                if (!_destroyed[i] && !_missTapped[i] && _templates[i] == SquareTemplate.Rest)
+                if (!_destroyed[i] && !_missTapped[i] && !_templates[i].IsNoteBearing())
                     DestroyRestSlot(i);
 
             // Card stays visible (Held) until the next card's reveal resets it —
@@ -953,9 +1277,14 @@ namespace KrumbleHut.Drummi.Dungeons
             // nothing ever visibly pops into the frame. Grid mode keeps the
             // beat-by-beat on-deck reveal (OnNextSquareReveal).
             if (_layoutMode == FlashCardLayout.ColumnScroll)
+            {
                 DealOnDeckColumn();
+            }
             else
+            {
                 ShowOnDeck(slotCount);
+                LayoutOnDeckGrid(controller.NextTemplates);
+            }
 
             if (tempoMultiplier > 1f)
             {
@@ -972,6 +1301,7 @@ namespace KrumbleHut.Drummi.Dungeons
         /// </summary>
         private void DealOnDeckColumn()
             => DealColumnStack(columnHitZoneY + _builtSlotCount * columnPitch,
+                               controller.IsPhaseShifted ^ (_halfRestSlot >= 0),
                                controller.NextTemplates, controller.PreviewTemplates);
 
         /// <summary>
@@ -983,6 +1313,7 @@ namespace KrumbleHut.Drummi.Dungeons
         /// </summary>
         private void DealIntroColumn()
             => DealColumnStack(columnHitZoneY + columnPitch,
+                               controller.IsPhaseShifted,
                                controller.CurrentTemplates, controller.NextTemplates, controller.PreviewTemplates);
 
         /// <summary>
@@ -992,7 +1323,8 @@ namespace KrumbleHut.Drummi.Dungeons
         /// rebuild + face set completes within one frame, so visible blocks
         /// never blink or pop across redeals.
         /// </summary>
-        private void DealColumnStack(float baseY, params System.Collections.Generic.IReadOnlyList<SquareTemplate>[] tiers)
+        private void DealColumnStack(float baseY, bool startShifted,
+                                     params System.Collections.Generic.IReadOnlyList<SquareTemplate>[] tiers)
         {
             int total = 0;
             foreach (var tier in tiers) total += tier?.Count ?? 0;
@@ -1008,7 +1340,12 @@ namespace KrumbleHut.Drummi.Dungeons
             _onDeckRoot.anchoredPosition = new Vector2(0f, baseY);
             _onDeckRoot.localScale       = Vector3.one;
 
-            int idx = 0;
+            // Uniform one-pitch spacing through the whole stack (a card boundary
+            // is just another step). Flip notches get their own evenly-spaced
+            // cells; off-beat blocks hold the nudged lane.
+            int   idx       = 0;
+            float trailCell = cellSize * columnTrailScale;
+            bool  shifted   = startShifted;
             foreach (var tier in tiers)
             {
                 if (tier == null) continue;
@@ -1019,6 +1356,14 @@ namespace KrumbleHut.Drummi.Dungeons
                     _onDeckTweens[idx]?.Kill();
                     _onDeckTweens[idx] = null;
                     ShowOnDeckFace(sq, tier[j]);
+                    bool flip = tier[j].IsPhaseFlip();
+                    float x = flip ? offbeatLaneOffsetX * 0.5f
+                                   : shifted ? offbeatLaneOffsetX : 0f;
+                    if (flip) shifted = !shifted;
+                    sq.root.anchoredPosition = new Vector2(x, idx * columnPitch);
+                    sq.root.sizeDelta        = flip
+                        ? new Vector2(trailCell * halfRestNotchScale.x, trailCell * halfRestNotchScale.y)
+                        : new Vector2(trailCell, trailCell);
                     sq.root.localRotation = Quaternion.identity;
                     sq.root.localScale    = Vector3.one;
                     // The whole visible stream wobbles in unison with the active card —
@@ -1110,10 +1455,10 @@ namespace KrumbleHut.Drummi.Dungeons
         /// </summary>
         private void HandleCardHandoff(int cardIndex)
         {
-            _timing       = controller.CurrentTiming;
-            _beatInterval = (_timing.EvaluationTime - _timing.ResponseStartTime)
-                            / _timing.PhraseLength;
+            SyncCardTimingState();
             EnsureGrid(_timing.PhraseLength);
+            LayoutColumnForCard();
+            LayoutGridForCard();
 
             _hideDelayTween?.Kill();
             _hideDelayTween = null;
@@ -1237,7 +1582,9 @@ namespace KrumbleHut.Drummi.Dungeons
         private void ShowFace(int slot, Square sq, SquareTemplate template)
         {
             bool isNote = template.IsNoteBearing();
-            _faceColors[slot] = isNote ? noteFaceColor : restFaceColor;
+            _faceColors[slot] = isNote                 ? noteFaceColor
+                              : template.IsPhaseFlip() ? halfRestFaceColor
+                              :                          restFaceColor;
             if (sq.back != null) sq.back.color = _faceColors[slot];
             if (sq.glyph != null)
             {
@@ -1363,6 +1710,9 @@ namespace KrumbleHut.Drummi.Dungeons
             }
 
             _onDeckBuiltCount = slotCount;
+            // Freshly created on-deck wobbles default to zero phase offset — match
+            // them to the current phase so the whole stream sways as one.
+            ApplyWobblePhase();
             Debug.Log($"[FlashCardView] On-deck grid built: {slotCount} slots ({(column ? "column" : "grid")})");
         }
 
@@ -1385,7 +1735,10 @@ namespace KrumbleHut.Drummi.Dungeons
         {
             bool  isNote = template.IsNoteBearing();
             Color dim    = new Color(onDeckDim, onDeckDim, onDeckDim, 1f);
-            if (sq.back != null) sq.back.color = (isNote ? noteFaceColor : restFaceColor) * dim;
+            Color face   = isNote                 ? noteFaceColor
+                         : template.IsPhaseFlip() ? halfRestFaceColor
+                         :                          restFaceColor;
+            if (sq.back != null) sq.back.color = face * dim;
             if (sq.glyph != null)
             {
                 sq.glyph.sprite  = GlyphSprite(template);
@@ -1430,6 +1783,7 @@ namespace KrumbleHut.Drummi.Dungeons
             SquareTemplate.OffbeatEighth => offbeatEighthSprite,
             SquareTemplate.SixteenthQuad => sixteenthQuadSprite,
             SquareTemplate.Triplet       => tripletSprite,
+            SquareTemplate.HalfRest      => halfRestSprite != null ? halfRestSprite : restSprite,
             _                            => restSprite,
         };
 
@@ -1520,6 +1874,19 @@ namespace KrumbleHut.Drummi.Dungeons
             if (audio == null || audio.speakers == null || audio.speakers.Length < 3) return;
             if (audio.speakers[2] == null) return;
             audio.speakers[2].PlayOneShot(doubleTimeCueClip);
+        }
+
+        /// <summary>
+        /// Audio half of the HalfRest telegraph: one-shot on the misc speaker as the
+        /// warning pulse starts (same channel discipline as the Double Time cue).
+        /// </summary>
+        private void PlayHalfRestCue()
+        {
+            if (halfRestCueClip == null) return;
+            var audio = AudioManager.instance;
+            if (audio == null || audio.speakers == null || audio.speakers.Length < 3) return;
+            if (audio.speakers[2] == null) return;
+            audio.speakers[2].PlayOneShot(halfRestCueClip);
         }
 
         private void SetBorder(Color color, bool animate)

@@ -3228,7 +3228,7 @@ MonoBehaviour:
     expandChance: 0.3
     tempoMultiplier: 1.2
   - minBlocksCleared: 88
-    vocab: 123
+    vocab: 91
     noteRange: {x: 3, y: 4}
     doubleTimeChance: 0
     rows: 1
@@ -3236,7 +3236,7 @@ MonoBehaviour:
     expandChance: 0.25
     tempoMultiplier: 1.3
   - minBlocksCleared: 112
-    vocab: 123
+    vocab: 91
     noteRange: {x: 3, y: 4}
     doubleTimeChance: 0
     rows: 1
@@ -3244,7 +3244,7 @@ MonoBehaviour:
     expandChance: 0.25
     tempoMultiplier: 1.4
   - minBlocksCleared: 140
-    vocab: 123
+    vocab: 91
     noteRange: {x: 3, y: 4}
     doubleTimeChance: 0
     rows: 1
@@ -3254,7 +3254,7 @@ MonoBehaviour:
   maxRows: 2
   expandTrigger: 0
   expandEveryNCards: 4
-  stageBreakBeats: 8
+  stageBreakBeats: 4
   stageUpStingClip: {fileID: 8300000, guid: 3f1342bdec851f14faca1fe6e8c1df0e, type: 3}
   stageCountInClip: {fileID: 8300000, guid: 2a969eb5f12f98a4894a5f8e7a1fb3c6, type: 3}
   stageBannerText: {fileID: 872772906}
@@ -3314,6 +3314,9 @@ MonoBehaviour:
   minNotes: 3
   maxNotes: 6
   vocabulary: 17
+  halfRestChance: 0.35
+  halfRestCooldownCards: 2
+  offbeatCardsPerEpisode: 1
   compressReveal: 1
   revealBars: 1
   blockJudgeGraceSeconds: 0.05
@@ -3382,12 +3385,23 @@ MonoBehaviour:
   offbeatEighthSprite: {fileID: 21300000, guid: bebf061393663a84bbf421893dd9a218, type: 3}
   sixteenthQuadSprite: {fileID: 21300000, guid: da8644eef08176d42b443d60dd496f53, type: 3}
   tripletSprite: {fileID: 21300000, guid: 77dbab6979eb88d4d82e43d1a2746240, type: 3}
+  halfRestSprite: {fileID: 21300000, guid: 739f3ed097cfc874187bd007fb56ebc8, type: 3}
   faceDownColor: {r: 0.16, g: 0.13, b: 0.22, a: 1}
   noteFaceColor: {r: 0.96, g: 0.93, b: 0.82, a: 1}
   restFaceColor: {r: 0.62, g: 0.6, b: 0.68, a: 1}
   borderIdleColor: {r: 0, g: 0, b: 0, a: 0.35}
   borderYourTurnColor: {r: 1, g: 0.82, b: 0.25, a: 0.9}
   cursorColor: {r: 1, g: 1, b: 1, a: 0.35}
+  halfRestFaceColor: {r: 0.85, g: 0.45, b: 0.75, a: 1}
+  borderOffbeatPhaseColor: {r: 0.65, g: 0.35, b: 0.95, a: 0.9}
+  halfRestCueClip: {fileID: 8300000, guid: 66d9e6a200c111e4b896174e9ec17d95, type: 3}
+  halfRestPulseScale: 1.18
+  halfRestPulseLeadBeats: 1
+  wobbleFollowsPhase: 1
+  playOffbeatTick: 1
+  offbeatTickClip: {fileID: 8300000, guid: bd6c480eb33dcfc4c996144138d101fb, type: 3}
+  offbeatLaneOffsetX: 60
+  halfRestNotchScale: {x: 0.7, y: 0.35}
   doubleTimeBanner: {fileID: 1566992778}
   borderDoubleTimeColor: {r: 1, g: 0.25, b: 0.55, a: 0.95}
   doubleTimeCueClip: {fileID: 8300000, guid: 3f1342bdec851f14faca1fe6e8c1df0e, type: 3}
