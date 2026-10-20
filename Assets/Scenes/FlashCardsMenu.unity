@@ -6081,7 +6081,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 3958006029565952366, guid: 739076fc8a2db3d4285f9d644daecc73, type: 3}
       propertyPath: m_Name
-      value: MenuSign_DoubleTime
+      value: MenuSign_Classic
       objectReference: {fileID: 0}
     - target: {fileID: 5425629841168750780, guid: 739076fc8a2db3d4285f9d644daecc73, type: 3}
       propertyPath: m_Camera
@@ -6094,10 +6094,10 @@ PrefabInstance:
     - target: {fileID: 8769215976315606097, guid: 739076fc8a2db3d4285f9d644daecc73, type: 3}
       propertyPath: definition
       value: 
-      objectReference: {fileID: 11400000, guid: 3ad792151af49164289fa18d45f4e49c, type: 2}
+      objectReference: {fileID: 11400000, guid: 1ae5fff08abc513438ab3041d2ea5029, type: 2}
     - target: {fileID: 8769215976315606097, guid: 739076fc8a2db3d4285f9d644daecc73, type: 3}
       propertyPath: lockedByDefault
-      value: 1
+      value: 0
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects:
@@ -6195,7 +6195,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 3958006029565952366, guid: 739076fc8a2db3d4285f9d644daecc73, type: 3}
       propertyPath: m_Name
-      value: MenuSign_Variant3
+      value: MenuSign_Bongo
       objectReference: {fileID: 0}
     - target: {fileID: 5425629841168750780, guid: 739076fc8a2db3d4285f9d644daecc73, type: 3}
       propertyPath: m_Camera
@@ -6208,10 +6208,10 @@ PrefabInstance:
     - target: {fileID: 8769215976315606097, guid: 739076fc8a2db3d4285f9d644daecc73, type: 3}
       propertyPath: definition
       value: 
-      objectReference: {fileID: 11400000, guid: 96a9dfd62bf63924eb97b7543b1168b2, type: 2}
+      objectReference: {fileID: 11400000, guid: bef5852b07a2e054fa08aa1526379da7, type: 2}
     - target: {fileID: 8769215976315606097, guid: 739076fc8a2db3d4285f9d644daecc73, type: 3}
       propertyPath: lockedByDefault
-      value: 1
+      value: 0
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects:

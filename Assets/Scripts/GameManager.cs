@@ -448,7 +448,8 @@ public class GameManager : MonoBehaviour
         if (scoreScreen != null)
         {
             int roomsCleared = dungeonRunner != null ? dungeonRunner.RoomsCleared : 0;
-            scoreScreen.DisplayScore(score, perfectHits, isNewHighScore, roomsCleared);
+            string highScoreKey = _activeMode != null ? _activeMode.HighScoreKey : null;
+            scoreScreen.DisplayScore(score, perfectHits, isNewHighScore, roomsCleared, highScoreKey);
             // Win presentation seam: placeholder title on the shared Score page.
             // Swap this for a dedicated victory screen when one exists.
             scoreScreen.SetResultTitle(_runWon ? "Run Complete!" : null);

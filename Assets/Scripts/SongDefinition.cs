@@ -32,6 +32,10 @@ namespace KrumbleHut.Drummi.UI
         [Tooltip("Player's personal best score for this song. Persisted externally (PlayerPrefs / save file).")]
         [SerializeField] private int bestScore;
 
+        [Tooltip("PlayerPrefs key for this song's Bongo high score. Leave empty to derive one from the " +
+                 "asset name (\"BongoHS_<asset name>\"). Set to \"GlitchyHS\" to adopt the legacy shared board.")]
+        [SerializeField] private string highScoreKey;
+
         // ── Accessors ─────────────────────────────────────────────────────────
 
         /// <summary>Display name shown in the song-select UI.</summary>
@@ -53,6 +57,12 @@ namespace KrumbleHut.Drummi.UI
 
         /// <summary>Player's personal best score for this song.</summary>
         public int BestScore => bestScore;
+
+        /// <summary>
+        /// PlayerPrefs key for this song's Bongo high score — the authored key, or
+        /// "BongoHS_&lt;asset name&gt;" when none is set.
+        /// </summary>
+        public string HighScoreKey => string.IsNullOrEmpty(highScoreKey) ? $"BongoHS_{name}" : highScoreKey;
 
         /// <summary>
         /// Start time (seconds) within the audio track for the song-select preview loop.

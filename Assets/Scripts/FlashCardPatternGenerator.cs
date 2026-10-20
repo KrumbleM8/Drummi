@@ -45,6 +45,16 @@ namespace KrumbleHut.Drummi.Dungeons
         public const int SlotsPerRow = 4;
 
         /// <summary>
+        /// ON: rests may land on consecutive slots and the note count is not raised
+        /// to keep them apart — the ORIGINAL 2x4 placement (Classic variant). With
+        /// the default non-adjacent rule an 8-slot card with 3–4 notes has exactly
+        /// one legal layout (note-rest alternating), which reads as "always the
+        /// same card". HalfRest episodes are skipped while ON (they rely on the
+        /// non-adjacent guarantee). Set by the owning controller.
+        /// </summary>
+        public bool allowAdjacentRests = false;
+
+        /// <summary>
         /// Chance that a card whose vocab contains HalfRest converts one of its
         /// placed Rests into a HalfRest. Set by the owning controller.
         /// </summary>
@@ -151,28 +161,47 @@ namespace KrumbleHut.Drummi.Dungeons
             if (!hasRest) { minNotes = slotCount; maxNotes = slotCount; }
             int noteCount = Random.Range(minNotes, maxNotes + 1);
 
-            // Rests must never land on consecutive slots. Slot 0 is always a note,
-            // so at most slotCount/2 rests fit among slots 1..slotCount-1 without
-            // two touching — raise noteCount when the roll would exceed that.
-            noteCount = Mathf.Max(noteCount, slotCount - slotCount / 2);
+            // Rests must never land on consecutive slots (default rule). Slot 0 is
+            // always a note, so at most slotCount/2 rests fit among slots
+            // 1..slotCount-1 without two touching — raise noteCount when the roll
+            // would exceed that. allowAdjacentRests (Classic) keeps the rolled count.
+            if (!allowAdjacentRests)
+                noteCount = Mathf.Max(noteCount, slotCount - slotCount / 2);
             int restCount = slotCount - noteCount;
 
             templates = new SquareTemplate[slotCount];
 
-            // Place the rests: draw uniformly over all non-adjacent combinations of
-            // slots 1..slotCount-1 (gap method — sample a plain combination from a
-            // range shrunk by the mandatory one-slot gaps, then re-expand each
-            // sorted pick by its index).
-            _freeSlots.Clear();
-            for (int v = 0; v < slotCount - restCount; v++) _freeSlots.Add(v);
-            for (int i = 0; i < restCount; i++)
+            if (allowAdjacentRests)
             {
-                int pick = Random.Range(i, _freeSlots.Count);
-                (_freeSlots[i], _freeSlots[pick]) = (_freeSlots[pick], _freeSlots[i]);
+                // Original placement: rests drawn uniformly from slots 1..slotCount-1
+                // with no adjacency constraint (partial Fisher–Yates over the slots).
+                _freeSlots.Clear();
+                for (int v = 1; v < slotCount; v++) _freeSlots.Add(v);
+                for (int i = 0; i < restCount; i++)
+                {
+                    int pick = Random.Range(i, _freeSlots.Count);
+                    (_freeSlots[i], _freeSlots[pick]) = (_freeSlots[pick], _freeSlots[i]);
+                }
+                for (int i = 0; i < restCount; i++)
+                    templates[_freeSlots[i]] = SquareTemplate.Rest;
             }
-            _freeSlots.Sort(0, restCount, null);
-            for (int i = 0; i < restCount; i++)
-                templates[1 + _freeSlots[i] + i] = SquareTemplate.Rest;
+            else
+            {
+                // Place the rests: draw uniformly over all non-adjacent combinations of
+                // slots 1..slotCount-1 (gap method — sample a plain combination from a
+                // range shrunk by the mandatory one-slot gaps, then re-expand each
+                // sorted pick by its index).
+                _freeSlots.Clear();
+                for (int v = 0; v < slotCount - restCount; v++) _freeSlots.Add(v);
+                for (int i = 0; i < restCount; i++)
+                {
+                    int pick = Random.Range(i, _freeSlots.Count);
+                    (_freeSlots[i], _freeSlots[pick]) = (_freeSlots[pick], _freeSlots[i]);
+                }
+                _freeSlots.Sort(0, restCount, null);
+                for (int i = 0; i < restCount; i++)
+                    templates[1 + _freeSlots[i] + i] = SquareTemplate.Rest;
+            }
 
             // Fill every non-rest slot. Slot 0 anchor: downbeat-bearing template
             // only; other row-start slots (s % 4 == 0) also draw from the anchor
@@ -197,7 +226,7 @@ namespace KrumbleHut.Drummi.Dungeons
             {
                 case EpisodePhase.Idle:
                     bool started = false;
-                    if (!suppressNewEpisodes &&
+                    if (!suppressNewEpisodes && !allowAdjacentRests &&
                         (vocab & FlashCardVocab.HalfRest) != 0 &&
                         _cardsSinceHalfRest >= halfRestCooldownCards &&
                         Random.value < halfRestChance)

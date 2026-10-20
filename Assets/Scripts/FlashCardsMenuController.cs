@@ -51,6 +51,14 @@ namespace KrumbleHut.Drummi.FlashCards
         [Tooltip("Active only during a run: FlashCardsCanvas, FlashCardSystems, GameplayCamera.")]
         [SerializeField] private List<GameObject> gameplayObjects = new();
 
+        /// <summary>
+        /// Sign index to focus when this scene next loads (-1 = default 0). Set
+        /// before a SceneLaunchDefinition leaves the scene so returning from the
+        /// launched scene (e.g. Bongo) lands back on that sign. Consumed and reset
+        /// in Start — statics survive domain-reload-off play sessions.
+        /// </summary>
+        public static int PendingFocusIndex = -1;
+
         private int  _index;
 
         // Latched while leaving the menu (gameplay running or scene transition
@@ -65,7 +73,10 @@ namespace KrumbleHut.Drummi.FlashCards
             if (backButton != null) backButton.onClick.AddListener(BackToHome);
             if (spinner != null) spinner.FocusedIndexChanged += HandleFocusedIndexChanged;
 
-            _index = 0;
+            _index = PendingFocusIndex >= 0 && nodes.Count > 0
+                ? Mathf.Clamp(PendingFocusIndex, 0, nodes.Count - 1)
+                : 0;
+            PendingFocusIndex = -1;
             SnapToCurrent();
             UpdateFocusVisuals();
         }
@@ -125,7 +136,26 @@ namespace KrumbleHut.Drummi.FlashCards
 
             _leaving = true;
             if (spinner != null) spinner.SetInputEnabled(false);
-            StartCoroutine(LaunchRun(node.Definition));
+
+            switch (node.Definition)
+            {
+                case FlashCardsModeDefinition flashCards:
+                    StartCoroutine(LaunchRun(flashCards));
+                    break;
+
+                case SceneLaunchDefinition sceneLaunch:
+                    // Remember this sign so the launched scene's exit lands back on it.
+                    PendingFocusIndex = _index;
+                    StartCoroutine(TransitionToScene(sceneLaunch.sceneName));
+                    break;
+
+                default:
+                    Debug.LogError($"[FlashCardsMenu] Sign '{node.name}' has an unsupported definition type " +
+                                   $"({node.Definition.GetType().Name}) — nothing launched.");
+                    _leaving = false;
+                    if (spinner != null) spinner.SetInputEnabled(true);
+                    break;
+            }
         }
 
         /// <summary>
@@ -189,6 +219,11 @@ namespace KrumbleHut.Drummi.FlashCards
 
         private IEnumerator TransitionToScene(string sceneName)
         {
+            // AudioManager persists across scenes (DontDestroyOnLoad) — stop any
+            // menu music here so it never bleeds into the loaded scene. Explicit
+            // != null: Unity's overloaded null check must run on the static.
+            if (AudioManager.instance != null) AudioManager.instance.StopMusic();
+
             if (screenTransitioner != null)
             {
                 // Same local-multiplier pattern as HomeFlowController — do NOT

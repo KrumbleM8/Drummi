@@ -39,7 +39,12 @@ public class ScoreScreen : MonoBehaviour
         }
     }
 
-    public void DisplayScore(int score, int perfectHits, bool isNewHighScore = false, int roomsCleared = 0)
+    /// <param name="highScoreKey">
+    /// PlayerPrefs key of the board to show when the run is not a new record.
+    /// Null falls back to the legacy shared Bongo board.
+    /// </param>
+    public void DisplayScore(int score, int perfectHits, bool isNewHighScore = false, int roomsCleared = 0,
+                             string highScoreKey = null)
     {
         targetScore = score;
 
@@ -74,7 +79,7 @@ public class ScoreScreen : MonoBehaviour
             }
             else
             {
-                int highScore = PlayerPrefs.GetInt("GlitchyHS", 0);
+                int highScore = PlayerPrefs.GetInt(string.IsNullOrEmpty(highScoreKey) ? "GlitchyHS" : highScoreKey, 0);
                 highScoreText.text = $"High Score: {highScore}";
                 highScoreText.color = Color.white;
             }

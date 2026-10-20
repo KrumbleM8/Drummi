@@ -3676,16 +3676,16 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls:
-      - m_Target: {fileID: 1601808757}
-        m_TargetAssemblyTypeName: UIMenuManager, Assembly-CSharp
-        m_MethodName: ShowPageRight
-        m_Mode: 5
+      - m_Target: {fileID: 2036487707}
+        m_TargetAssemblyTypeName: KrumbleHut.Drummi.UI.OverlayUIController, Assembly-CSharp
+        m_MethodName: GoToFlashCardsScene
+        m_Mode: 1
         m_Arguments:
           m_ObjectArgument: {fileID: 0}
-          m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
+          m_ObjectArgumentAssemblyTypeName: 
           m_IntArgument: 0
           m_FloatArgument: 0
-          m_StringArgument: Main
+          m_StringArgument: 
           m_BoolArgument: 0
         m_CallState: 2
 --- !u!114 &675219905
@@ -4934,6 +4934,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   inputReader: {fileID: 0}
   bongoInputReader: {fileID: 891851646}
+  dungeonRunner: {fileID: 0}
   padGroups:
   - {fileID: 1958032453}
   - {fileID: 1670835262}
@@ -9765,29 +9766,29 @@ MonoBehaviour:
   - pageName: Main
     pageTransform: {fileID: 686828141}
     onScreenPosition: {x: 0, y: 0}
-    offScreenLeftPosition: {x: -655.76, y: 0}
-    offScreenRightPosition: {x: 655.76, y: 0}
+    offScreenLeftPosition: {x: -1136, y: 0}
+    offScreenRightPosition: {x: 1136, y: 0}
   - pageName: Song
     pageTransform: {fileID: 498961237}
     onScreenPosition: {x: 0, y: 0}
-    offScreenLeftPosition: {x: -655.76, y: 0}
-    offScreenRightPosition: {x: 655.76, y: 0}
+    offScreenLeftPosition: {x: -1136, y: 0}
+    offScreenRightPosition: {x: 1136, y: 0}
   - pageName: Difficulty
     pageTransform: {fileID: 1373578963}
     onScreenPosition: {x: 0, y: 0}
-    offScreenLeftPosition: {x: -655.76, y: 0}
-    offScreenRightPosition: {x: 655.76, y: 0}
+    offScreenLeftPosition: {x: -1136, y: 0}
+    offScreenRightPosition: {x: 1136, y: 0}
   - pageName: Customize
     pageTransform: {fileID: 1030085468}
     onScreenPosition: {x: 0, y: 0}
-    offScreenLeftPosition: {x: -655.76, y: 0}
-    offScreenRightPosition: {x: 655.76, y: 0}
+    offScreenLeftPosition: {x: -1136, y: 0}
+    offScreenRightPosition: {x: 1136, y: 0}
   - pageName: Score
     pageTransform: {fileID: 373518197}
     onScreenPosition: {x: 0, y: 0}
-    offScreenLeftPosition: {x: -655.76, y: 0}
-    offScreenRightPosition: {x: 655.76, y: 0}
-  startingPageName: Main
+    offScreenLeftPosition: {x: -1136, y: 0}
+    offScreenRightPosition: {x: 1136, y: 0}
+  startingPageName: Song
   transitionDuration: 0.5
   transitionCurve:
     serializedVersion: 2
@@ -12613,6 +12614,10 @@ PrefabInstance:
       propertyPath: pauseHandler
       value: 
       objectReference: {fileID: 891851652}
+    - target: {fileID: 8432586498176499567, guid: 4fb77e020c598954dbb5efaddf76e2e9, type: 3}
+      propertyPath: homeSceneName
+      value: FlashCardsMenu
+      objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
@@ -12627,6 +12632,17 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 3fbbfedbfdfa92d4f99ff5c7be2b647d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+--- !u!114 &2036487707 stripped
+MonoBehaviour:
+  m_CorrespondingSourceObject: {fileID: 8432586498176499567, guid: 4fb77e020c598954dbb5efaddf76e2e9, type: 3}
+  m_PrefabInstance: {fileID: 2036487705}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0590fbe9f255403499bdb2f9f28647c6, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
 --- !u!114 &2047690907

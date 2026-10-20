@@ -1,0 +1,66 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6e5ced300131ff34fa924fe6f01584c6, type: 3}
+  m_Name: FlashCards Classic
+  m_EditorClassIdentifier: 
+  displayName: Classic
+  highScoreKey: FlashCardsClassicHS
+  tempoMultiplier: 1
+  layout: 0
+  overrideRules: 1
+  escalationSteps:
+  - minBlocksCleared: 0
+    vocab: 17
+    noteRange: {x: 3, y: 4}
+    doubleTimeChance: 0
+    rows: 2
+    expandRows: 0
+    expandChance: 0
+    tempoMultiplier: 1
+  - minBlocksCleared: 32
+    vocab: 19
+    noteRange: {x: 3, y: 5}
+    doubleTimeChance: 0
+    rows: 2
+    expandRows: 0
+    expandChance: 0
+    tempoMultiplier: 1
+  - minBlocksCleared: 80
+    vocab: 27
+    noteRange: {x: 4, y: 6}
+    doubleTimeChance: 0
+    rows: 2
+    expandRows: 0
+    expandChance: 0
+    tempoMultiplier: 1
+  - minBlocksCleared: 128
+    vocab: 91
+    noteRange: {x: 4, y: 6}
+    doubleTimeChance: 0
+    rows: 2
+    expandRows: 0
+    expandChance: 0
+    tempoMultiplier: 1
+  - minBlocksCleared: 176
+    vocab: 123
+    noteRange: {x: 4, y: 6}
+    doubleTimeChance: 0
+    rows: 2
+    expandRows: 0
+    expandChance: 0
+    tempoMultiplier: 1
+  pipelineReveal: 0
+  compressReveal: 0
+  revealBars: 2
+  onDeckReveal: 0
+  wholeCardGrading: 1
+  allowAdjacentRests: 1

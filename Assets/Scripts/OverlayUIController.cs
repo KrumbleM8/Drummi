@@ -28,6 +28,11 @@ namespace KrumbleHut.Drummi.UI
         [Tooltip("Optional. When assigned, opening/closing settings automatically pauses and resumes the game. Leave null on scenes with no gameplay (e.g. Home).")]
         [SerializeField] private PauseHandler pauseHandler;
 
+        [Header("Navigation")]
+        [Tooltip("Scene the settings panel's Main Menu button returns to. Default New_Home; scenes " +
+                 "entered from the FlashCards globe (e.g. Bongo) override this to FlashCardsMenu.")]
+        [SerializeField] private string homeSceneName = "New_Home";
+
         [Header("Scene Transition")]
         [SerializeField] private ScreenTransition screenTransitioner;
 
@@ -168,12 +173,19 @@ namespace KrumbleHut.Drummi.UI
 
         // ── Scene Loading ──────────────────────────────────────────────────────
 
-        /// <summary>Transitions to the home menu (New_Home), skipping its curtain/tap-to-start intro.</summary>
+        /// <summary>
+        /// Transitions to this scene's home menu (homeSceneName — New_Home by default,
+        /// FlashCardsMenu for scenes entered from the globe). New_Home's curtain/tap-to-start
+        /// intro is skipped.
+        /// </summary>
         public void GoToHomeScene()
         {
             HomeFlowController.SkipIntro = true;
-            StartCoroutine(SceneTransitionRoutine("New_Home"));
+            StartCoroutine(SceneTransitionRoutine(string.IsNullOrEmpty(homeSceneName) ? "New_Home" : homeSceneName));
         }
+
+        /// <summary>Transitions to the FlashCards globe menu (the game's main scene).</summary>
+        public void GoToFlashCardsScene() => StartCoroutine(SceneTransitionRoutine("FlashCardsMenu"));
 
         /// <summary>Reloads the current scene, restarting the active game mode from its own menu.</summary>
         public void RestartScene() => StartCoroutine(SceneTransitionRoutine(SceneManager.GetActiveScene().name));

@@ -243,6 +243,9 @@ namespace KrumbleHut.Drummi.Dungeons
                  "classic in-place reveal (keep OFF for dungeon rooms).")]
         [SerializeField] private bool alwaysOnDeckReveal = false;
 
+        // Per-run override of alwaysOnDeckReveal (null = scene value). See SetOnDeckRevealMode.
+        private bool? _onDeckRevealOverride;
+
         [Header("Column Scroll (Snake variant layout)")]
         [Tooltip("Center-to-center vertical spacing between column slots.")]
         [SerializeField] private float columnPitch = 150f;
@@ -377,6 +380,13 @@ namespace KrumbleHut.Drummi.Dungeons
         /// A mode change tears down the layout roots so the next EnsureGrid
         /// rebuilds everything in the new mode's math.
         /// </summary>
+        /// <summary>
+        /// Per-run override of alwaysOnDeckReveal (FlashCardsModeController.BeginRun,
+        /// before StartGame). null = use the serialized scene value. false = classic
+        /// in-place reveal on the main card (Classic variant).
+        /// </summary>
+        public void SetOnDeckRevealMode(bool? onDeck) => _onDeckRevealOverride = onDeck;
+
         public void SetLayoutMode(FlashCardLayout layout)
         {
             if (_layoutMode == layout) return;
@@ -930,7 +940,7 @@ namespace KrumbleHut.Drummi.Dungeons
             // stale — snap the column to rest before anything shows.
             if (_layoutMode == FlashCardLayout.ColumnScroll) ResetColumnScroll();
 
-            if (alwaysOnDeckReveal)
+            if (_onDeckRevealOverride ?? alwaysOnDeckReveal)
             {
                 _promoteOnPerform = true;
                 // Column mode: classic reveals (run start / post-stage-break) deal

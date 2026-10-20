@@ -79,6 +79,12 @@ public abstract class ModeController : MonoBehaviour
     /// <summary>True if the final score beats the high score from the start of this session.</summary>
     public virtual bool IsNewHighScore => false;
 
+    /// <summary>
+    /// PlayerPrefs key of the high-score board this run was scored against, or null
+    /// if the mode has none. Read by GameManager so ScoreScreen shows the right board.
+    /// </summary>
+    public virtual string HighScoreKey => null;
+
     // ── Pause / Resume — override if mode has components to notify ────────
 
     /// <summary>

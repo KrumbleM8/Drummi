@@ -39,8 +39,21 @@ public class BeatEvaluator : MonoBehaviour
     public bool IsNewHighScore => Score > _previousHighScore;
     #endregion
 
-    #region Constants
-    private const string HIGH_SCORE_KEY = "GlitchyHS";
+    #region High Score Key
+    // Legacy single board. Per-song boards: SongSelectController.FinalizeSong
+    // sets the song's key via BongoModeController.SetHighScoreKey before StartGame.
+    private const string DefaultHighScoreKey = "GlitchyHS";
+    private string _highScoreKey = DefaultHighScoreKey;
+
+    /// <summary>PlayerPrefs key of the board the current/last run is scored against.</summary>
+    public string HighScoreKey => _highScoreKey;
+
+    /// <summary>
+    /// Overrides the PlayerPrefs high-score key (one board per song). Call BEFORE
+    /// ResetScore so IsNewHighScore compares against the right board.
+    /// </summary>
+    public void SetHighScoreKey(string key)
+        => _highScoreKey = string.IsNullOrEmpty(key) ? DefaultHighScoreKey : key;
     #endregion
 
     private int _previousHighScore;
@@ -418,12 +431,12 @@ public class BeatEvaluator : MonoBehaviour
     #region Score Management
     public void SaveHighScore()
     {
-        int currentHighScore = PlayerPrefs.GetInt(HIGH_SCORE_KEY, 0);
+        int currentHighScore = PlayerPrefs.GetInt(_highScoreKey, 0);
         if (Score > currentHighScore)
         {
-            PlayerPrefs.SetInt(HIGH_SCORE_KEY, Score);
+            PlayerPrefs.SetInt(_highScoreKey, Score);
             PlayerPrefs.Save();
-            Debug.Log($"[BeatEvaluator] New high score: {Score}");
+            Debug.Log($"[BeatEvaluator] New high score: {Score} ({_highScoreKey})");
         }
     }
 
@@ -437,7 +450,7 @@ public class BeatEvaluator : MonoBehaviour
 
     public void ResetScore()
     {
-        _previousHighScore = PlayerPrefs.GetInt(HIGH_SCORE_KEY, 0);
+        _previousHighScore = PlayerPrefs.GetInt(_highScoreKey, 0);
         _claimedBeats.Clear();
         Score = 0;
         PerfectHits = 0;

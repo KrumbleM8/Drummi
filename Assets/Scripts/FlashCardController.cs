@@ -322,6 +322,21 @@ namespace KrumbleHut.Drummi.Dungeons
             public double revealSlotInterval;
         }
 
+        // Per-run reveal rules (FlashCardsModeController.BeginRun). Pipelining
+        // defaults ON; the nullable overrides fall back to the serialized
+        // compressReveal / revealBars when null, so variants without overrides
+        // keep the scene-authored behavior.
+        private bool  _pipelineReveal = true;
+        private bool? _compressRevealOverride;
+        private int?  _revealBarsOverride;
+
+        // Classic judging/generation rules (SetRunRules). wholeCardGrading: one
+        // bar-group judgement (sound/score/streak) per CARD instead of per 4-block
+        // row — per-block HP damage and visuals are unchanged. allowAdjacentRests:
+        // original rest placement (see FlashCardPatternGenerator.allowAdjacentRests).
+        private bool _wholeCardGrading;
+        private bool _allowAdjacentRests;
+
         private bool         _nextPrepared;
         private bool         _nextRevealStarted;
         private int          _nextRevealSlot;
@@ -538,6 +553,29 @@ namespace KrumbleHut.Drummi.Dungeons
         }
 
         /// <summary>
+        /// Per-run rules — call BEFORE the run starts (read at StartCore / every card roll).
+        /// <paramref name="pipelineReveal"/> OFF = classic watch-then-play cycle: no
+        /// on-deck next-card reveal, each card reveals after the previous one is
+        /// evaluated. <paramref name="compressReveal"/> / <paramref name="revealBars"/>
+        /// null = keep the serialized Inspector values. <paramref name="wholeCardGrading"/>
+        /// = one graded group per card instead of per row. <paramref name="allowAdjacentRests"/>
+        /// = original free rest placement.
+        /// </summary>
+        public void SetRunRules(bool pipelineReveal, bool? compressReveal, int? revealBars,
+                                bool wholeCardGrading = false, bool allowAdjacentRests = false)
+        {
+            _pipelineReveal         = pipelineReveal;
+            _compressRevealOverride = compressReveal;
+            _revealBarsOverride     = revealBars.HasValue ? Mathf.Max(1, revealBars.Value) : (int?)null;
+            _wholeCardGrading       = wholeCardGrading;
+            _allowAdjacentRests     = allowAdjacentRests;
+            Debug.Log($"[FlashCard] Run rules → pipeline={_pipelineReveal} " +
+                      $"compress={(_compressRevealOverride.HasValue ? _compressRevealOverride.Value.ToString() : "scene")} " +
+                      $"revealBars={(_revealBarsOverride.HasValue ? _revealBarsOverride.Value.ToString() : "scene")} " +
+                      $"wholeCardGrading={_wholeCardGrading} allowAdjacentRests={_allowAdjacentRests}");
+        }
+
+        /// <summary>
         /// Queues a stage tempo change (endless escalation ladder). At the next card
         /// boundary the BASE grid is retuned to runStartBpm * multiplier and a
         /// breakBeats-long telegraphed break — counted at the NEW tempo — is inserted
@@ -611,6 +649,7 @@ namespace KrumbleHut.Drummi.Dungeons
                 halfRestChance         = halfRestChance,
                 halfRestCooldownCards  = halfRestCooldownCards,
                 offbeatCardsPerEpisode = offbeatCardsPerEpisode,
+                allowAdjacentRests     = _allowAdjacentRests,
             };
             _cardIndex         = 0;
             _running           = true;
@@ -962,7 +1001,9 @@ namespace KrumbleHut.Drummi.Dungeons
             if (!_running) return;
 
             // Group boundary: every BarGroupSize blocks, plus the remainder at card end.
-            if (slot == _groupStart + BarGroupSize - 1 || slot == _cardSlotCount - 1)
+            // Whole-card grading (Classic): the only boundary is the card end.
+            int groupSize = _wholeCardGrading ? _cardSlotCount : BarGroupSize;
+            if (slot == _groupStart + groupSize - 1 || slot == _cardSlotCount - 1)
             {
                 FireBarJudgement(_groupStart, slot);
                 _groupStart = slot + 1;
@@ -986,7 +1027,8 @@ namespace KrumbleHut.Drummi.Dungeons
             if (notes == 0 && missed == 0 && strays == 0) return;
 
             var grade = GradeGroup(missed, notes, perfect, strays);
-            var judgement = new BarJudgement(from / BarGroupSize, to - from + 1, missed, notes, perfect, strays, grade);
+            int groupIndex = _wholeCardGrading ? 0 : from / BarGroupSize;
+            var judgement = new BarJudgement(groupIndex, to - from + 1, missed, notes, perfect, strays, grade);
 
             Debug.Log($"[FlashCard] BarJudged    | card={_cardIndex} group={judgement.GroupIndex} " +
                       $"blocks={judgement.BlocksInGroup} grade={grade} missed={missed} " +
@@ -1227,8 +1269,10 @@ namespace KrumbleHut.Drummi.Dungeons
             spec.minNotes = Mathf.Max(1, Mathf.RoundToInt(_activeMinNotes * ratio));
             spec.maxNotes = Mathf.Max(spec.minNotes, Mathf.RoundToInt(_activeMaxNotes * ratio));
 
-            spec.revealBeats        = compressReveal
-                ? Mathf.Min(spec.slotCount, revealBars * 4)
+            bool compress = _compressRevealOverride ?? compressReveal;
+            int  bars     = _revealBarsOverride     ?? revealBars;
+            spec.revealBeats        = compress
+                ? Mathf.Min(spec.slotCount, bars * 4)
                 : spec.slotCount;
             spec.revealSlotInterval = spec.revealBeats * spec.beatInterval / spec.slotCount;
             return spec;
@@ -1262,7 +1306,7 @@ namespace KrumbleHut.Drummi.Dungeons
         /// </summary>
         private void PrepareNextCard()
         {
-            if (!_endless || _nextPrepared || _pendingStageMultiplier > 0f) return;
+            if (!_endless || !_pipelineReveal || _nextPrepared || _pendingStageMultiplier > 0f) return;
 
             // Consume the preview buffer when valid — the card the player has
             // been reading in the stream MUST be the card they get. Scheduling

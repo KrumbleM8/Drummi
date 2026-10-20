@@ -579,6 +579,11 @@ namespace KrumbleHut.Drummi.UI
             GameManager.instance.SetMode("Bongo");
             GameManager.instance.SetDifficulty(selectedDifficulty);
 
+            // Per-song high-score board — must land before StartGame so the
+            // evaluator's ResetScore compares against this song's record.
+            if (GameManager.instance.ActiveMode is BongoModeController bongo)
+                bongo.SetHighScoreKey(song.HighScoreKey);
+
             // 7. Hand off to GameManager — the screen-cover transition will hide all UI.
             GameManager.instance.StartGame();
         }

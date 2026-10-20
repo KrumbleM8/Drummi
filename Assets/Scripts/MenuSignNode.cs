@@ -17,8 +17,8 @@ namespace KrumbleHut.Drummi.FlashCards
     /// </summary>
     public class MenuSignNode : MonoBehaviour
     {
-        [Tooltip("The Flash Cards variant this sign launches.")]
-        [SerializeField] private FlashCardsModeDefinition definition;
+        [Tooltip("What this sign launches: a Flash Cards variant (in-scene run) or a scene launch (e.g. Bongo).")]
+        [SerializeField] private MenuSignDefinition definition;
 
         [Tooltip("World-space button on the sign face.")]
         [SerializeField] private Button signButton;
@@ -43,7 +43,7 @@ namespace KrumbleHut.Drummi.FlashCards
         /// <summary>Raised when the sign's button is pressed.</summary>
         public event Action<MenuSignNode> Selected;
 
-        public FlashCardsModeDefinition Definition => definition;
+        public MenuSignDefinition Definition => definition;
 
         /// <summary>True while this sign's variant has not been unlocked.</summary>
         public bool IsLocked { get; private set; }

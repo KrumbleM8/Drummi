@@ -22,6 +22,20 @@ public class BongoModeController : ModeController
     public override int Score => beatEvaluator != null ? beatEvaluator.Score : 0;
     public override int TotalPerfectHits => beatEvaluator != null ? beatEvaluator.TotalPerfectHits : 0;
     public override bool IsNewHighScore => beatEvaluator != null && beatEvaluator.IsNewHighScore;
+    public override string HighScoreKey => beatEvaluator != null ? beatEvaluator.HighScoreKey : null;
+    #endregion
+
+    #region Song Setup
+    /// <summary>
+    /// Selects the high-score board for the upcoming run (one per song). Call after
+    /// GameManager.SetMode("Bongo") and BEFORE StartGame — ResetToInitialState /
+    /// StartMode read the board when they reset the evaluator.
+    /// </summary>
+    public void SetHighScoreKey(string key)
+    {
+        if (beatEvaluator != null) beatEvaluator.SetHighScoreKey(key);
+        Debug.Log($"[BongoModeController] High-score board → {key}");
+    }
     #endregion
 
     #region Lifecycle

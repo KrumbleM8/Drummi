@@ -209,6 +209,22 @@ namespace KrumbleHut.Drummi.FlashCards
         // kept so RestartFromResults preserves the full variant identity.
         private FlashCardLayout _activeLayout = FlashCardLayout.Grid;
 
+        // Definition of the current/last run (null for the legacy in-scene Play /
+        // Double Time buttons). Supplies per-variant rule overrides (ladder,
+        // reveal pacing) when its overrideRules flag is ON; persists across
+        // RestartFromResults.
+        private FlashCardsModeDefinition _activeDefinition;
+
+        /// <summary>
+        /// Escalation ladder in force for this run: the active definition's
+        /// override when enabled and non-empty, else the scene-authored ladder.
+        /// </summary>
+        private EscalationStep[] ActiveSteps =>
+            _activeDefinition != null && _activeDefinition.overrideRules
+            && _activeDefinition.escalationSteps != null && _activeDefinition.escalationSteps.Length > 0
+                ? _activeDefinition.escalationSteps
+                : escalationSteps;
+
         private bool _runActive;
         private int  _blocksCleared;
         private int  _streak;
@@ -247,6 +263,7 @@ namespace KrumbleHut.Drummi.FlashCards
         public override int    Score                    => evaluator != null ? evaluator.Score : 0;
         public override int    TotalPerfectHits         => evaluator != null ? evaluator.TotalPerfectHits : 0;
         public override bool   IsNewHighScore           => evaluator != null && evaluator.IsNewHighScore;
+        public override string HighScoreKey             => _activeHighScoreKey;
         #endregion
 
         #region Menu Entry
@@ -266,14 +283,23 @@ namespace KrumbleHut.Drummi.FlashCards
             // Defensive — the scene's GameManager should already default to this
             // mode, but SetMode is idempotent and cheap.
             GameManager.instance.SetMode(ModeId);
+            _activeDefinition = definition;
             BeginRun(definition.tempoMultiplier, definition.highScoreKey, definition.layout);
         }
 
         /// <summary>Play-button entry point: normal speed (1x grid).</summary>
-        public void StartFromMenu() => BeginRun(1f, "FlashCardsHS", FlashCardLayout.Grid);
+        public void StartFromMenu()
+        {
+            _activeDefinition = null;
+            BeginRun(1f, "FlashCardsHS", FlashCardLayout.Grid);
+        }
 
         /// <summary>Double Time button entry point: 2x beat grid over the same music.</summary>
-        public void StartFromMenuDoubleTime() => BeginRun(doubleTimeMultiplier, "FlashCardsDoubleHS", FlashCardLayout.Grid);
+        public void StartFromMenuDoubleTime()
+        {
+            _activeDefinition = null;
+            BeginRun(doubleTimeMultiplier, "FlashCardsDoubleHS", FlashCardLayout.Grid);
+        }
 
         /// <summary>Again-button entry point: restarts at whatever variant the last run used.</summary>
         public void RestartFromResults() => BeginRun(_activeTempoMultiplier, _activeHighScoreKey, _activeLayout);
@@ -291,12 +317,29 @@ namespace KrumbleHut.Drummi.FlashCards
             _activeHighScoreKey    = highScoreKey;
             _activeLayout          = layout;
 
+            // Per-variant rule overrides (Classic): null = keep the scene-authored
+            // FlashCardController / FlashCardView values, so every other variant
+            // plays exactly as before.
+            bool  overrideRules = _activeDefinition != null && _activeDefinition.overrideRules;
+            bool  pipeline      = !overrideRules || _activeDefinition.pipelineReveal;
+            bool? compress      = overrideRules ? _activeDefinition.compressReveal : (bool?)null;
+            int?  revealBars    = overrideRules ? _activeDefinition.revealBars     : (int?)null;
+            bool? onDeck        = overrideRules ? _activeDefinition.onDeckReveal   : (bool?)null;
+            bool  wholeCard     = overrideRules && _activeDefinition.wholeCardGrading;
+            bool  adjacentRests = overrideRules && _activeDefinition.allowAdjacentRests;
+
             // The view lives on the controller's GameObject (FlashCardSystems) —
             // set BEFORE StartGame so the first card builds in the right layout.
             if (cardController != null)
             {
+                cardController.SetRunRules(pipeline, compress, revealBars, wholeCard, adjacentRests);
+
                 var view = cardController.GetComponent<FlashCardView>();
-                if (view != null) view.SetLayoutMode(layout);
+                if (view != null)
+                {
+                    view.SetLayoutMode(layout);
+                    view.SetOnDeckRevealMode(onDeck);
+                }
                 else Debug.LogError("[FlashCardsMode] No FlashCardView on the cardController object — layout not applied.");
             }
 
@@ -494,7 +537,7 @@ namespace KrumbleHut.Drummi.FlashCards
             if (stepIndex == _appliedStep || stepIndex < 0) return;
 
             _appliedStep = stepIndex;
-            var step = escalationSteps[stepIndex];
+            var step = ActiveSteps[stepIndex];
             float dtChance = EffectiveDoubleTimeChance(step);
             Debug.Log($"[FlashCardsMode] Escalation step {stepIndex} at {_blocksCleared} blocks cleared → " +
                       $"vocab={step.vocab} notes={step.noteRange.x}-{step.noteRange.y} dtChance={dtChance:F2} " +
@@ -555,16 +598,17 @@ namespace KrumbleHut.Drummi.FlashCards
 
         private int StepIndexFor(int blocksCleared)
         {
+            var steps = ActiveSteps;
             int best = -1;
-            for (int i = 0; i < escalationSteps.Length; i++)
-                if (escalationSteps[i].minBlocksCleared <= blocksCleared) best = i;
+            for (int i = 0; i < steps.Length; i++)
+                if (steps[i].minBlocksCleared <= blocksCleared) best = i;
             return best;
         }
 
         private EscalationStep ResolveStep(int blocksCleared)
         {
             int i = StepIndexFor(blocksCleared);
-            if (i >= 0) return escalationSteps[i];
+            if (i >= 0) return ActiveSteps[i];
             Debug.LogWarning("[FlashCardsMode] No escalation step with minBlocksCleared <= 0 — using built-in Quarter|Rest default.");
             return new EscalationStep();
         }
