@@ -9,9 +9,10 @@ namespace KrumbleHut.Drummi.FlashCards
 {
     /// <summary>
     /// Tiny-planet menu for the Home scene — the game's main scene,
-    /// which also contains the Flash Cards gameplay systems. Signs stand on the
-    /// rim of a planet disc at the bottom of the screen; PlanetSpinner spins the
-    /// disc (vertical drag + inertia + snap) past a STATIC menu camera. Tapping
+    /// which also contains the Flash Cards gameplay systems. Signs stand on a
+    /// 3D globe; PlanetSpinner rolls it (vertical drag + inertia + snap) past a
+    /// menu camera that is static once HomeIntroDirector's title intro has
+    /// flown it in (SetInteractive gates the menu meanwhile). Tapping
     /// a distant sign spins it into focus; tapping the focused sign hides the
     /// menu objects, shows the gameplay objects, and starts the run in-scene via
     /// FlashCardsModeController.StartRun (no scene load).
@@ -196,6 +197,17 @@ namespace KrumbleHut.Drummi.FlashCards
             _leaving = false;
 
             if (screenTransitioner != null) screenTransitioner.StartReveal();
+        }
+
+        /// <summary>
+        /// Lock/unlock the whole menu (sign taps + planet drag). HomeIntroDirector
+        /// locks it while the title banner shows and the camera flies in, then
+        /// unlocks it once the planet has settled on sign 0.
+        /// </summary>
+        public void SetInteractive(bool interactive)
+        {
+            _leaving = !interactive;
+            if (spinner != null) spinner.SetInputEnabled(interactive);
         }
 
         private void SetMenuShown(bool menuShown)

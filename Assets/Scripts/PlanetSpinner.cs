@@ -31,11 +31,17 @@ namespace KrumbleHut.Drummi.FlashCards
     /// HORIZON SORTING: the project uses URP's 2D renderer, where the sphere
     /// mesh gets no depth occlusion over sprites/canvases — far-side signs
     /// would bleed through the globe. So every pivot child (signs + decor) is
-    /// painter-sorted against the globe: ring angle &lt; horizonFlipAngle →
-    /// sorting order in front of the globe mesh, beyond it → behind (the
-    /// globe's silhouette then clips it per-pixel, so signs still crest the
-    /// horizon gradually). Flipping right at the ridge makes the swap
-    /// invisible. Caches renderers in Awake — no per-spin allocations.
+    /// painter-sorted against the globe: inside the visible arc → sorting
+    /// order in front of the globe mesh, beyond it → behind (the globe's
+    /// silhouette then clips it per-pixel, so signs still crest the horizon
+    /// gradually). Flipping right at the ridge makes the swap invisible.
+    /// With sortingCamera assigned the visible arc is derived from the camera
+    /// each update (centre = camera's ring direction, half-width =
+    /// acos(R/ρ)), so it stays correct while HomeIntroDirector flies the
+    /// camera in from far away and for decor on the lower half of the globe;
+    /// for the menu camera (0,13.5,−8) it is (−81°, +19.8°) — the same ridge
+    /// as the fixed horizonFlipAngle fallback. Caches renderers in Awake — no
+    /// per-spin allocations.
     ///
     /// INSPECTOR SETUP: signMounts — one child mount per sign, in index order
     /// (index 0 = start focus). Use the ArrangeSigns context menu to lay the
@@ -70,6 +76,9 @@ namespace KrumbleHut.Drummi.FlashCards
         [Header("Horizon Sorting (2D renderer)")]
         [Tooltip("Ring angle (deg from the focus point) past which a pivot child sorts behind the globe. Set to the angle where a sign BASE crosses the visible horizon silhouette (≈20° for camera at (0,13.5,-8), R=10) — flipping exactly there makes the front/behind swap pixel-identical. Too high and far-side signs float over the planet face.")]
         [SerializeField, Range(10f, 90f)] private float horizonFlipAngle = 20f;
+
+        [Tooltip("Optional. When set, the visible horizon arc is derived from this camera's position every update (needed while the intro camera flies in). Null = fixed horizonFlipAngle.")]
+        [SerializeField] private Transform sortingCamera;
 
         /// <summary>Raised whenever the planet's angle changes (parallax layers listen).</summary>
         public event Action<float> AngleChanged;
@@ -199,6 +208,25 @@ namespace KrumbleHut.Drummi.FlashCards
         }
 
         /// <summary>
+        /// Set the planet angle directly, UNCLAMPED — for the title intro, which
+        /// starts the globe rolled past the sign range and rolls it back to 0.
+        /// Input must be disabled while this drives the planet. force re-fires
+        /// AngleChanged/FocusedIndexChanged even when the angle is unchanged.
+        /// </summary>
+        public void SetAngle(float angle, bool force = false)
+        {
+            KillSnapTween();
+            _angularVelocity = 0f;
+            ApplyAngle(angle, force);
+        }
+
+        /// <summary>
+        /// Re-evaluate horizon sorting without changing the angle — call after
+        /// moving sortingCamera while the planet is still.
+        /// </summary>
+        public void RefreshRimSorting() => UpdateRimSorting();
+
+        /// <summary>
         /// Gate pointer input (same contract as CarouselController.SetInputEnabled).
         /// Disabling also stops any in-flight glide so the planet is still under
         /// the launch cover; state is cleaned so inertia can't resume on enable.
@@ -326,10 +354,27 @@ namespace KrumbleHut.Drummi.FlashCards
         {
             if (_rimItems == null) return;
 
+            // Camera-derived horizon: a point on the forward great circle is on
+            // the camera's visible hemisphere iff its ring angle lies within
+            // acos(R/ρ) of the camera's own ring direction (ρ = camera distance
+            // from the globe centre in the YZ plane). Two-sided, so lower-half
+            // decor sorts correctly too.
+            bool useCamera = sortingCamera != null;
+            float arcCentre = 0f, arcHalfWidth = 0f;
+            if (useCamera)
+            {
+                Vector3 c = sortingCamera.position - transform.position;
+                float rho = Mathf.Sqrt(c.y * c.y + c.z * c.z);
+                arcCentre = Mathf.Atan2(c.z, c.y) * Mathf.Rad2Deg;
+                arcHalfWidth = rho > radius ? Mathf.Acos(radius / rho) * Mathf.Rad2Deg : 0f;
+            }
+
             for (int i = 0; i < _rimItems.Length; i++)
             {
                 float ringAngle = _rimItems[i].BaseAngle - _currentAngle;
-                bool inFront = ringAngle < horizonFlipAngle;
+                bool inFront = useCamera
+                    ? Mathf.Abs(Mathf.DeltaAngle(ringAngle, arcCentre)) < arcHalfWidth
+                    : ringAngle < horizonFlipAngle;
                 if (!force && inFront == _rimItems[i].InFront) continue;
                 _rimItems[i].InFront = inFront;
 

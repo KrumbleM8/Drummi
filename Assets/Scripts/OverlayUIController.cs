@@ -188,7 +188,15 @@ namespace KrumbleHut.Drummi.UI
         public void GoToFlashCardsScene() => StartCoroutine(SceneTransitionRoutine("Home"));
 
         /// <summary>Reloads the current scene, restarting the active game mode from its own menu.</summary>
-        public void RestartScene() => StartCoroutine(SceneTransitionRoutine(SceneManager.GetActiveScene().name));
+        public void RestartScene()
+        {
+            // Flash Cards runs live inside Home: a restart there must land on
+            // the sign menu, not replay the title intro (HomeIntroDirector
+            // consumes this flag, like the Home buttons above).
+            string sceneName = SceneManager.GetActiveScene().name;
+            if (sceneName == "Home") HomeFlowController.SkipIntro = true;
+            StartCoroutine(SceneTransitionRoutine(sceneName));
+        }
 
         /// <summary>Transitions to the Arcade scene.</summary>
         public void GoToArcadeScene()  => StartCoroutine(SceneTransitionRoutine("Arcade"));
