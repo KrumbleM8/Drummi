@@ -9,9 +9,11 @@ namespace KrumbleHut.Drummi.FlashCards
     /// <summary>
     /// Title state + intro for the Home globe menu. On a fresh load the player
     /// sees the title banner (OverlayCanvas/TitleBanner) over the whole globe
-    /// seen from far away: the camera sits at introCameraPosition, the planet
-    /// is rolled to introRollAngle + 360·extraRotations (signs still on top,
-    /// leaning), the parallax MountainMid is hidden and the menu is locked via
+    /// seen from far away, down-right of centre: the camera sits at
+    /// introCameraPosition, the planet is rolled to
+    /// introRollAngle + 360·extraRotations (signs on the lower front face, the
+    /// on-globe mountain on top) and floats/wobbles via PlanetIdleMotion, the
+    /// parallax MountainMid is hidden and the menu is locked via
     /// FlashCardsMenuController.SetInteractive(false).
     ///
     /// Play → one linear progress tween. Phase 1 (introDuration): the camera
@@ -46,6 +48,9 @@ namespace KrumbleHut.Drummi.FlashCards
         [Tooltip("Parallax layers held still (identity rotation, component disabled) while the planet spins its intro turn — a 360° roll would otherwise swing the sky. Re-enabled when the camera arrives; they re-sync to angle 0 with no jump.")]
         [SerializeField] private List<ParallaxRotationLayer> parallaxFrozenDuringIntro = new();
 
+        [Tooltip("Optional idle float/wobble on PlanetPivot for the title state; faded out over the first idleBlendOutFraction of the zoom, then deactivated.")]
+        [SerializeField] private PlanetIdleMotion idleMotion;
+
         [Header("Title Banner (OverlayCanvas)")]
         [SerializeField] private CanvasGroup titleBanner;
         [SerializeField] private RectTransform titleArt;
@@ -56,13 +61,18 @@ namespace KrumbleHut.Drummi.FlashCards
 
         [Header("Far View (title pose)")]
         [SerializeField] private Vector3 introCameraPosition = new(0f, 18f, -64f);
-        [SerializeField] private Vector3 introCameraEuler = new(10f, 0f, 0f);
 
-        [Tooltip("Planet angle in the far view (mod 360); the intro rolls it back to 0 (sign 0 on top). Positive = signs rolled toward the camera.")]
-        [SerializeField] private float introRollAngle = 35f;
+        [Tooltip("Pitch less than the line to the globe centre puts the planet low in frame; a negative yaw puts it to the right.")]
+        [SerializeField] private Vector3 introCameraEuler = new(6f, -5f, 0f);
+
+        [Tooltip("Planet angle in the far view (mod 360); the intro rolls it back to 0 (sign 0 on top). Positive = signs rolled toward the camera, so the roll back is 'backwards'.")]
+        [SerializeField] private float introRollAngle = 115f;
 
         [Tooltip("Extra full backwards turns the planet makes before easing onto the signs (start angle = introRollAngle + 360·n).")]
-        [SerializeField, Min(0)] private int extraRotations = 1;
+        [SerializeField, Min(0)] private int extraRotations = 0;
+
+        [Tooltip("Fraction of the zoom over which the idle float/wobble fades out.")]
+        [SerializeField, Range(0.05f, 1f)] private float idleBlendOutFraction = 0.35f;
 
         [Header("Zoom")]
         [SerializeField, Min(0.1f)] private float introDuration = 3.5f;
@@ -141,6 +151,12 @@ namespace KrumbleHut.Drummi.FlashCards
             _startAngle = introRollAngle + 360f * extraRotations;
             if (spinner != null) spinner.SetAngle(_startAngle, force: true);
 
+            if (idleMotion != null)
+            {
+                idleMotion.Weight = 1f;
+                idleMotion.enabled = true;
+            }
+
             foreach (GameObject go in hudHiddenDuringTitle)
                 if (go != null) go.SetActive(false);
 
@@ -211,6 +227,16 @@ namespace KrumbleHut.Drummi.FlashCards
                     spinner.RefreshRimSorting();
                 }
 
+                // Idle float/wobble settles out as the roll takes over
+                // (PlanetIdleMotion.LateUpdate recomposes rotation from the
+                // spinner's angle, so the two never fight).
+                if (idleMotion != null && idleMotion.enabled)
+                {
+                    float fade = DOVirtual.EasedValue(0f, 1f, Mathf.Clamp01(tz / idleBlendOutFraction), Ease.InOutSine);
+                    if (fade >= 1f) idleMotion.Deactivate();
+                    else idleMotion.Weight = 1f - fade;
+                }
+
                 if (tz >= 1f) ArriveMenu();
             }
 
@@ -230,6 +256,7 @@ namespace KrumbleHut.Drummi.FlashCards
             if (_arrived) return;
             _arrived = true;
 
+            if (idleMotion != null && idleMotion.enabled) idleMotion.Deactivate();
             if (menuCamera != null) menuCamera.transform.SetPositionAndRotation(_menuPos, _menuRot);
             if (spinner != null)
             {

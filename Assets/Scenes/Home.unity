@@ -251,8 +251,8 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 162879997}
   serializedVersion: 2
-  m_LocalRotation: {x: 0.819152, y: 0, z: 0, w: -0.57357645}
-  m_LocalPosition: {x: 0, y: -4.104241, z: -11.276312}
+  m_LocalRotation: {x: 0.9396926, y: 0, z: 0, w: 0.34202015}
+  m_LocalPosition: {x: 0, y: -9.1925335, z: 7.7134514}
   m_LocalScale: {x: 2.4, y: 2, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -1989,15 +1989,17 @@ MonoBehaviour:
   parallaxFrozenDuringIntro:
   - {fileID: 1571798613}
   - {fileID: 1744562720}
+  idleMotion: {fileID: 1704582115}
   titleBanner: {fileID: 293313414}
   titleArt: {fileID: 841111179}
   playButton: {fileID: 1539308702}
   hudHiddenDuringTitle:
   - {fileID: 217196927}
   introCameraPosition: {x: 0, y: 18, z: -64}
-  introCameraEuler: {x: 10, y: 0, z: 0}
-  introRollAngle: 35
-  extraRotations: 1
+  introCameraEuler: {x: 6, y: -5, z: 0}
+  introRollAngle: 115
+  extraRotations: 0
+  idleBlendOutFraction: 0.35
   introDuration: 3.5
   zoomEase: 4
   rollEase: 4
@@ -7427,6 +7429,7 @@ GameObject:
   m_Component:
   - component: {fileID: 1704582114}
   - component: {fileID: 1704582113}
+  - component: {fileID: 1704582115}
   m_Layer: 0
   m_Name: PlanetPivot
   m_TagString: Untagged
@@ -7486,6 +7489,25 @@ Transform:
   - {fileID: 162879998}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1704582115
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1704582112}
+  m_Enabled: 0
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: bb12e377b07e8d24aa59e4eaae35fc38, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  spinner: {fileID: 1704582113}
+  floatAmplitude: 0.8
+  floatPeriod: 3.6
+  tiltDegrees: 4
+  tiltPeriod: 5.2
+  twistDegrees: 3
+  twistPeriod: 7.1
 --- !u!1 &1717900118
 GameObject:
   m_ObjectHideFlags: 0
