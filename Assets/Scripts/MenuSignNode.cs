@@ -7,7 +7,7 @@ using UnityEngine.UI;
 namespace KrumbleHut.Drummi.FlashCards
 {
     /// <summary>
-    /// One signpost on the planet rim in the FlashCardsMenu scene. Holds the
+    /// One signpost on the planet rim in the Home scene. Holds the
     /// variant definition it represents. The sign face carries a world-space
     /// Canvas Button that is ALWAYS tappable: FlashCardsMenuController spins a
     /// tapped distant sign into focus and launches on a focused-sign tap. A

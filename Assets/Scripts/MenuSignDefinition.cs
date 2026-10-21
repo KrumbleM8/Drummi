@@ -3,7 +3,7 @@ using UnityEngine;
 namespace KrumbleHut.Drummi.FlashCards
 {
     /// <summary>
-    /// Base config for one sign on the FlashCardsMenu globe. A MenuSignNode
+    /// Base config for one sign on the Home globe. A MenuSignNode
     /// carries one of these; FlashCardsMenuController decides what a tap does
     /// from the concrete type (FlashCardsModeDefinition = in-scene run,
     /// SceneLaunchDefinition = load another scene).

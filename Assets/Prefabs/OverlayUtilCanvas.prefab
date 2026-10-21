@@ -667,6 +667,7 @@ MonoBehaviour:
   musicVolumeParam: MusicVolume
   sfxVolumeParam: SFXVolume
   pauseHandler: {fileID: 0}
+  homeSceneName: Home
   screenTransitioner: {fileID: 2540076732884628323}
 --- !u!1 &4480287031946651429
 GameObject:

@@ -8,7 +8,7 @@ using KrumbleHut.Drummi.UI;
 namespace KrumbleHut.Drummi.FlashCards
 {
     /// <summary>
-    /// Tiny-planet menu for the FlashCardsMenu scene — the game's main scene,
+    /// Tiny-planet menu for the Home scene — the game's main scene,
     /// which also contains the Flash Cards gameplay systems. Signs stand on the
     /// rim of a planet disc at the bottom of the screen; PlanetSpinner spins the
     /// disc (vertical drag + inertia + snap) past a STATIC menu camera. Tapping
@@ -16,7 +16,7 @@ namespace KrumbleHut.Drummi.FlashCards
     /// menu objects, shows the gameplay objects, and starts the run in-scene via
     /// FlashCardsModeController.StartRun (no scene load).
     ///
-    /// INSPECTOR SETUP (FlashCardsMenu scene):
+    /// INSPECTOR SETUP (Home scene):
     ///   nodes — sign nodes in angular order (index 0 = start focus); must match
     ///   the spinner's signMounts order. spinner — the PlanetSpinner pivot.
     ///   backButton — overlay back-to-home (wired to BackToHome()).

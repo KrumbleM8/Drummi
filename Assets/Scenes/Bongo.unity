@@ -12616,7 +12616,7 @@ PrefabInstance:
       objectReference: {fileID: 891851652}
     - target: {fileID: 8432586498176499567, guid: 4fb77e020c598954dbb5efaddf76e2e9, type: 3}
       propertyPath: homeSceneName
-      value: FlashCardsMenu
+      value: Home
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []

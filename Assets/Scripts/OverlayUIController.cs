@@ -29,9 +29,9 @@ namespace KrumbleHut.Drummi.UI
         [SerializeField] private PauseHandler pauseHandler;
 
         [Header("Navigation")]
-        [Tooltip("Scene the settings panel's Main Menu button returns to. Default New_Home; scenes " +
-                 "entered from the FlashCards globe (e.g. Bongo) override this to FlashCardsMenu.")]
-        [SerializeField] private string homeSceneName = "New_Home";
+        [Tooltip("Scene the settings panel's Main Menu button returns to. Default Home (the FlashCards " +
+                 "globe). Override only for a scene that should return somewhere else.")]
+        [SerializeField] private string homeSceneName = "Home";
 
         [Header("Scene Transition")]
         [SerializeField] private ScreenTransition screenTransitioner;
@@ -174,18 +174,18 @@ namespace KrumbleHut.Drummi.UI
         // ── Scene Loading ──────────────────────────────────────────────────────
 
         /// <summary>
-        /// Transitions to this scene's home menu (homeSceneName — New_Home by default,
-        /// FlashCardsMenu for scenes entered from the globe). New_Home's curtain/tap-to-start
+        /// Transitions to this scene's home menu (homeSceneName — Home, the FlashCards globe, by default).
+        /// If the target is New_Home its curtain/tap-to-start
         /// intro is skipped.
         /// </summary>
         public void GoToHomeScene()
         {
             HomeFlowController.SkipIntro = true;
-            StartCoroutine(SceneTransitionRoutine(string.IsNullOrEmpty(homeSceneName) ? "New_Home" : homeSceneName));
+            StartCoroutine(SceneTransitionRoutine(string.IsNullOrEmpty(homeSceneName) ? "Home" : homeSceneName));
         }
 
         /// <summary>Transitions to the FlashCards globe menu (the game's main scene).</summary>
-        public void GoToFlashCardsScene() => StartCoroutine(SceneTransitionRoutine("FlashCardsMenu"));
+        public void GoToFlashCardsScene() => StartCoroutine(SceneTransitionRoutine("Home"));
 
         /// <summary>Reloads the current scene, restarting the active game mode from its own menu.</summary>
         public void RestartScene() => StartCoroutine(SceneTransitionRoutine(SceneManager.GetActiveScene().name));

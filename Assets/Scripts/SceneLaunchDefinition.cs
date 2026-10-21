@@ -3,9 +3,9 @@ using UnityEngine;
 namespace KrumbleHut.Drummi.FlashCards
 {
     /// <summary>
-    /// A globe-menu sign that leaves the FlashCardsMenu scene and loads another
+    /// A globe-menu sign that leaves the Home scene and loads another
     /// scene (e.g. Bongo). The target scene is responsible for returning to
-    /// "FlashCardsMenu" when the player exits.
+    /// "Home" when the player exits.
     /// </summary>
     [CreateAssetMenu(fileName = "NewSceneLaunchSign", menuName = "Drummi/Scene Launch Sign")]
     public class SceneLaunchDefinition : MenuSignDefinition

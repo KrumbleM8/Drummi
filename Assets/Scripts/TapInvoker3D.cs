@@ -5,7 +5,7 @@ using UnityEngine.InputSystem;
 
 /// <summary>
 /// 3D counterpart of TapInvoker2D for perspective-camera scenes (e.g. the
-/// FlashCardsMenu tiny-planet): fires OnTapped when a press ray hits this
+/// Home tiny-planet): fires OnTapped when a press ray hits this
 /// object's own Collider. Tests only the cached collider, so overlapping
 /// decor never steals the tap.
 /// </summary>

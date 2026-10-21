@@ -290,13 +290,13 @@ public class UIMenuManager : MonoBehaviour
     public void GoToHomeScene()
     {
         KrumbleHut.Drummi.UI.HomeFlowController.SkipIntro = true;
-        TransitionToScene("New_Home", swipeLeft: true);
+        TransitionToScene("Home", swipeLeft: true);
     }
     public void GoToArcadeScene() => TransitionToScene("Arcade", swipeLeft: true);
     public void GoToGardenScene() => TransitionToScene("Garden", swipeLeft: true);
     public void GoToDungeonScene() => TransitionToScene("Dungeon", swipeLeft: true);
     public void GoToBongoScene() => TransitionToScene("Bongo", swipeLeft: true);
-    public void GoToFlashCardsScene() => TransitionToScene("FlashCards", swipeLeft: true);
+    public void GoToFlashCardsScene() => TransitionToScene("Home", swipeLeft: true);
 
 #if UNITY_EDITOR
     private void OnValidate()

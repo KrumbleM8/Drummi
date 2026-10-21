@@ -33,7 +33,7 @@ namespace KrumbleHut.Drummi.FlashCards
     /// have no rescheduling obligations (PauseHandler + AudioManager handle
     /// the BGM centrally).
     ///
-    /// INSPECTOR SETUP (FlashCardsMenu scene):
+    /// INSPECTOR SETUP (Home scene):
     ///   metronome, cardController, evaluator — scene instances.
     ///   health (DungeonHealth + slider), streakText — HUD. bestStreakText,
     ///   cardsClearedText — texts on the Score page (written at run end,

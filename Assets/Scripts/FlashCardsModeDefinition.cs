@@ -4,7 +4,7 @@ using KrumbleHut.Drummi.Dungeons;
 namespace KrumbleHut.Drummi.FlashCards
 {
     /// <summary>
-    /// Config for one Flash Cards variant, selected from the FlashCardsMenu
+    /// Config for one Flash Cards variant, selected from the Home globe
     /// globe. A MenuSignNode carries one of these; on selection the menu hands
     /// it to FlashCardsModeController.StartRun, which starts the run in-scene.
     /// </summary>
