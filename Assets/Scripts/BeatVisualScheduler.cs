@@ -16,6 +16,10 @@ public class BeatVisualScheduler : MonoBehaviour
     public Color leftBongoColor = Color.green;
     public Color rightBongoColor = Color.red;
 
+    [Header("Flash Mode")]
+    [Tooltip("Optional. When assigned and its Use Flash is on, Custard's beats flash large near screen centre instead of spawning dots on the slider.")]
+    public BongoBeatFlash beatFlash;
+
     [Header("Metronome Reference")]
     public Metronome metronome;
 
@@ -38,6 +42,13 @@ public class BeatVisualScheduler : MonoBehaviour
     }
 
     private List<ScheduledVisualEvent> scheduledEvents = new List<ScheduledVisualEvent>();
+
+    private void Awake()
+    {
+        // Scene wiring is preferred; fall back to a lookup so the flash still works if the reference is lost.
+        if (beatFlash == null)
+            beatFlash = FindFirstObjectByType<BongoBeatFlash>(FindObjectsInactive.Include);
+    }
 
     private void OnEnable()
     {
@@ -182,6 +193,13 @@ public class BeatVisualScheduler : MonoBehaviour
         else
             custardAnimator.PlayRightBongo();
 
+        // Flash mode: big centre flash instead of a dot on the (hidden) slider bar.
+        if (beatFlash != null && beatFlash.useFlash)
+        {
+            beatFlash.FlashCall(beatIndicatorPrefab, isRightBongo, isRightBongo ? rightBongoColor : leftBongoColor);
+            return;
+        }
+
         GameObject indicator = Instantiate(beatIndicatorPrefab, indicatorParent);
         Image img = indicator.GetComponent<Image>();
         if (img != null)
@@ -249,6 +267,8 @@ public class BeatVisualScheduler : MonoBehaviour
             frozenSliderValue = 0f;
         }
 
+        if (beatFlash != null) beatFlash.Clear();
+
         enabled = false;
 
         Debug.Log("[BeatVisualScheduler] Cleanup complete");
@@ -273,6 +293,8 @@ public class BeatVisualScheduler : MonoBehaviour
         {
             barSlider.value = 0f;
         }
+
+        if (beatFlash != null) beatFlash.Clear();
 
         isFrozen = false;
         frozenSliderValue = 0f;
