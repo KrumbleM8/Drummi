@@ -1986,21 +1986,27 @@ MonoBehaviour:
   spinner: {fileID: 1704582113}
   menuController: {fileID: 505431488}
   mountainMid: {fileID: 1785354724}
+  parallaxFrozenDuringIntro:
+  - {fileID: 1571798613}
+  - {fileID: 1744562720}
   titleBanner: {fileID: 293313414}
   titleArt: {fileID: 841111179}
   playButton: {fileID: 1539308702}
   hudHiddenDuringTitle:
   - {fileID: 217196927}
-  introCameraPosition: {x: 0, y: 14, z: -48}
+  introCameraPosition: {x: 0, y: 18, z: -64}
   introCameraEuler: {x: 10, y: 0, z: 0}
   introRollAngle: 35
+  extraRotations: 1
+  introDuration: 3.5
+  zoomEase: 4
+  rollEase: 4
   mountainHideOffsetY: 14
-  mountainRiseStart: 0.4
-  introDuration: 2.5
+  mountainRiseDelay: 0
+  mountainRiseDuration: 0.9
+  mountainEase: 3
   bannerFadeDuration: 0.4
   bannerRisePixels: 300
-  zoomEase: 4
-  mountainEase: 3
 --- !u!1 &546956408
 GameObject:
   m_ObjectHideFlags: 0

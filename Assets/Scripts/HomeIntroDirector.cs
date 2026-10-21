@@ -10,16 +10,20 @@ namespace KrumbleHut.Drummi.FlashCards
     /// Title state + intro for the Home globe menu. On a fresh load the player
     /// sees the title banner (OverlayCanvas/TitleBanner) over the whole globe
     /// seen from far away: the camera sits at introCameraPosition, the planet
-    /// is rolled to introRollAngle (signs still on top, leaning), the parallax
-    /// MountainMid is sunk below the back horizon and the menu is locked via
+    /// is rolled to introRollAngle + 360·extraRotations (signs still on top,
+    /// leaning), the parallax MountainMid is hidden and the menu is locked via
     /// FlashCardsMenuController.SetInteractive(false).
     ///
-    /// Play → one linear progress tween drives three channels in lock-step:
-    /// camera flies to the menu pose it had in the scene (captured in Awake, no
-    /// duplicated numbers), the planet rolls BACKWARDS to angle 0 (sign 0 on
-    /// top) and MountainMid slides straight up into its rest position over the
-    /// far horizon. The banner fades/rises meanwhile but keeps blocking taps
-    /// until Finish unlocks the menu.
+    /// Play → one linear progress tween. Phase 1 (introDuration): the camera
+    /// flies to the menu pose it had in the scene (captured in Awake, no
+    /// duplicated numbers) while the planet rolls BACKWARDS through its extra
+    /// turn(s) and eases onto angle 0 (sign 0 on top); the parallax layers are
+    /// frozen at identity so the spin doesn't swing the sky. When the camera
+    /// arrives the menu unlocks (ArriveMenu). Phase 2 (mountainRiseDelay +
+    /// mountainRiseDuration): MountainMid's renderer comes on below the horizon
+    /// and it slides straight up into its rest position. The rise waits for
+    /// the camera because from far away the globe is too small to occlude the
+    /// 25 u wide sprite — its corners would poke out beside the planet.
     ///
     /// Skips (lands directly on the signs) when HomeFlowController.SkipIntro
     /// (pause-menu Home / Restart) or FlashCardsMenuController.PendingFocusIndex
@@ -36,8 +40,11 @@ namespace KrumbleHut.Drummi.FlashCards
         [SerializeField] private PlanetSpinner spinner;
         [SerializeField] private FlashCardsMenuController menuController;
 
-        [Tooltip("ParallaxMid/MountainMid — hidden below the horizon in the far view, slides up during the zoom.")]
+        [Tooltip("ParallaxMid/MountainMid — hidden during the zoom, slides up over the horizon once the camera has arrived.")]
         [SerializeField] private Transform mountainMid;
+
+        [Tooltip("Parallax layers held still (identity rotation, component disabled) while the planet spins its intro turn — a 360° roll would otherwise swing the sky. Re-enabled when the camera arrives; they re-sync to angle 0 with no jump.")]
+        [SerializeField] private List<ParallaxRotationLayer> parallaxFrozenDuringIntro = new();
 
         [Header("Title Banner (OverlayCanvas)")]
         [SerializeField] private CanvasGroup titleBanner;
@@ -48,37 +55,48 @@ namespace KrumbleHut.Drummi.FlashCards
         [SerializeField] private List<GameObject> hudHiddenDuringTitle = new();
 
         [Header("Far View (title pose)")]
-        [SerializeField] private Vector3 introCameraPosition = new(0f, 14f, -48f);
+        [SerializeField] private Vector3 introCameraPosition = new(0f, 18f, -64f);
         [SerializeField] private Vector3 introCameraEuler = new(10f, 0f, 0f);
 
-        [Tooltip("Planet angle in the far view; the intro rolls it back to 0 (sign 0 on top). Positive = signs rolled toward the camera.")]
+        [Tooltip("Planet angle in the far view (mod 360); the intro rolls it back to 0 (sign 0 on top). Positive = signs rolled toward the camera.")]
         [SerializeField] private float introRollAngle = 35f;
 
-        [Tooltip("World units MountainMid starts below its rest position (fully behind the globe from the far camera).")]
-        [SerializeField, Min(0f)] private float mountainHideOffsetY = 14f;
+        [Tooltip("Extra full backwards turns the planet makes before easing onto the signs (start angle = introRollAngle + 360·n).")]
+        [SerializeField, Min(0)] private int extraRotations = 1;
 
-        [Tooltip("Normalised intro time at which MountainMid starts rising.")]
-        [SerializeField, Range(0f, 0.95f)] private float mountainRiseStart = 0.4f;
-
-        [Header("Timing")]
-        [SerializeField, Min(0.1f)] private float introDuration = 2.5f;
-        [SerializeField, Min(0.05f)] private float bannerFadeDuration = 0.4f;
-        [SerializeField] private float bannerRisePixels = 300f;
+        [Header("Zoom")]
+        [SerializeField, Min(0.1f)] private float introDuration = 3.5f;
         [SerializeField] private Ease zoomEase = Ease.InOutSine;
+
+        [Tooltip("Ease of the whole roll (extra turns + settle) — an in/out ease spins fast through the turn and eases into the signs.")]
+        [SerializeField] private Ease rollEase = Ease.InOutSine;
+
+        [Header("Mountain Rise (after the camera arrives)")]
+        [Tooltip("World units MountainMid starts below its rest position (top below the menu camera's horizon).")]
+        [SerializeField, Min(0f)] private float mountainHideOffsetY = 14f;
+        [SerializeField, Min(0f)] private float mountainRiseDelay = 0f;
+        [SerializeField, Min(0.05f)] private float mountainRiseDuration = 0.9f;
         [SerializeField] private Ease mountainEase = Ease.OutSine;
 
+        [Header("Banner Exit")]
+        [SerializeField, Min(0.05f)] private float bannerFadeDuration = 0.4f;
+        [SerializeField] private float bannerRisePixels = 300f;
+
         /// <summary>True while the title banner is up or the zoom is in flight.</summary>
-        public bool IntroPending => _playIntro && !_finished;
+        public bool IntroPending => _playIntro && !_arrived;
 
         private bool _playIntro;
         private bool _started;
-        private bool _finished;
+        private bool _arrived;
         private float _progress;
+        private float _startAngle;
+        private float _totalDuration;
 
         private Vector3    _menuPos;
         private Quaternion _menuRot;
         private Quaternion _introRot;
         private Vector3    _mountainRest;
+        private Renderer[] _mountainRenderers = System.Array.Empty<Renderer>();
 
         private void Awake()
         {
@@ -92,7 +110,11 @@ namespace KrumbleHut.Drummi.FlashCards
                 _menuRot = menuCamera.transform.rotation;
             }
             _introRot = Quaternion.Euler(introCameraEuler);
-            if (mountainMid != null) _mountainRest = mountainMid.localPosition;
+            if (mountainMid != null)
+            {
+                _mountainRest = mountainMid.localPosition;
+                _mountainRenderers = mountainMid.GetComponentsInChildren<Renderer>(true);
+            }
         }
 
         private void Start()
@@ -105,8 +127,19 @@ namespace KrumbleHut.Drummi.FlashCards
 
             if (menuController != null) menuController.SetInteractive(false);
             if (menuCamera != null) menuCamera.transform.SetPositionAndRotation(introCameraPosition, _introRot);
+
+            // Freeze the backdrop first so the start angle below doesn't roll it.
+            foreach (ParallaxRotationLayer layer in parallaxFrozenDuringIntro)
+            {
+                if (layer == null) continue;
+                layer.enabled = false;
+                layer.transform.localRotation = Quaternion.identity;
+            }
             if (mountainMid != null) mountainMid.localPosition = _mountainRest - Vector3.up * mountainHideOffsetY;
-            if (spinner != null) spinner.SetAngle(introRollAngle, force: true);
+            SetMountainVisible(false);
+
+            _startAngle = introRollAngle + 360f * extraRotations;
+            if (spinner != null) spinner.SetAngle(_startAngle, force: true);
 
             foreach (GameObject go in hudHiddenDuringTitle)
                 if (go != null) go.SetActive(false);
@@ -137,15 +170,16 @@ namespace KrumbleHut.Drummi.FlashCards
             if (titleBanner != null)
             {
                 // Alpha only — blocksRaycasts stays on so signs/bushes can't be
-                // poked mid-zoom; Finish deactivates the banner outright.
+                // poked mid-zoom; ArriveMenu deactivates the banner outright.
                 titleBanner.DOFade(0f, bannerFadeDuration).SetUpdate(true).SetLink(titleBanner.gameObject);
                 if (titleArt != null)
                     titleArt.DOAnchorPosY(titleArt.anchoredPosition.y + bannerRisePixels, bannerFadeDuration)
                             .SetEase(Ease.InSine).SetUpdate(true).SetLink(titleArt.gameObject);
             }
 
+            _totalDuration = introDuration + mountainRiseDelay + mountainRiseDuration;
             _progress = 0f;
-            DOTween.To(() => _progress, Apply, 1f, introDuration)
+            DOTween.To(() => _progress, Apply, 1f, _totalDuration)
                    .SetEase(Ease.Linear)
                    .SetUpdate(true)
                    .SetLink(gameObject)
@@ -155,45 +189,80 @@ namespace KrumbleHut.Drummi.FlashCards
         private void Apply(float t)
         {
             _progress = t;
-            float e = DOVirtual.EasedValue(0f, 1f, t, zoomEase);
+            float time = t * _totalDuration;
 
-            if (menuCamera != null)
-                menuCamera.transform.SetPositionAndRotation(
-                    Vector3.LerpUnclamped(introCameraPosition, _menuPos, e),
-                    Quaternion.SlerpUnclamped(_introRot, _menuRot, e));
-
-            if (mountainMid != null)
+            // ── Phase 1: camera zoom + planet roll ───────────────────────────
+            if (!_arrived)
             {
-                float rise = DOVirtual.EasedValue(0f, 1f, Mathf.InverseLerp(mountainRiseStart, 1f, t), mountainEase);
-                mountainMid.localPosition = _mountainRest - Vector3.up * (mountainHideOffsetY * (1f - rise));
+                float tz = Mathf.Clamp01(time / introDuration);
+                float e = DOVirtual.EasedValue(0f, 1f, tz, zoomEase);
+
+                if (menuCamera != null)
+                    menuCamera.transform.SetPositionAndRotation(
+                        Vector3.LerpUnclamped(introCameraPosition, _menuPos, e),
+                        Quaternion.SlerpUnclamped(_introRot, _menuRot, e));
+
+                // Last: the roll re-sorts rim children against the camera's new
+                // pose; Refresh covers frames where the eased angle hasn't moved.
+                if (spinner != null)
+                {
+                    float r = DOVirtual.EasedValue(0f, 1f, tz, rollEase);
+                    spinner.SetAngle(Mathf.Lerp(_startAngle, 0f, r));
+                    spinner.RefreshRimSorting();
+                }
+
+                if (tz >= 1f) ArriveMenu();
             }
 
-            // Last: the roll re-sorts rim children against the camera's new pose;
-            // Refresh covers frames where the eased angle hasn't moved.
-            if (spinner != null)
+            // ── Phase 2: MountainMid slides up over the horizon ──────────────
+            float riseStart = introDuration + mountainRiseDelay;
+            if (time >= riseStart && mountainMid != null)
             {
-                spinner.SetAngle(Mathf.Lerp(introRollAngle, 0f, e));
-                spinner.RefreshRimSorting();
+                SetMountainVisible(true);
+                float m = DOVirtual.EasedValue(0f, 1f, Mathf.Clamp01((time - riseStart) / mountainRiseDuration), mountainEase);
+                mountainMid.localPosition = _mountainRest - Vector3.up * (mountainHideOffsetY * (1f - m));
             }
         }
 
-        private void Finish()
+        /// <summary>Camera has landed: snap the menu pose exactly and hand the menu back to the player.</summary>
+        private void ArriveMenu()
         {
-            _finished = true;
+            if (_arrived) return;
+            _arrived = true;
 
             if (menuCamera != null) menuCamera.transform.SetPositionAndRotation(_menuPos, _menuRot);
-            if (mountainMid != null) mountainMid.localPosition = _mountainRest;
             if (spinner != null)
             {
                 spinner.SetAngle(0f, force: true);
                 spinner.RefreshRimSorting();
             }
 
+            // Angle is 0 now, so OnEnable re-syncs each layer to identity — no jump.
+            foreach (ParallaxRotationLayer layer in parallaxFrozenDuringIntro)
+                if (layer != null) layer.enabled = true;
+
             if (titleBanner != null) titleBanner.gameObject.SetActive(false);
             foreach (GameObject go in hudHiddenDuringTitle)
                 if (go != null) go.SetActive(true);
 
             if (menuController != null) menuController.SetInteractive(true);
+        }
+
+        private void Finish()
+        {
+            ArriveMenu();
+            if (mountainMid != null)
+            {
+                mountainMid.localPosition = _mountainRest;
+                SetMountainVisible(true);
+            }
+        }
+
+        private void SetMountainVisible(bool visible)
+        {
+            for (int i = 0; i < _mountainRenderers.Length; i++)
+                if (_mountainRenderers[i] != null && _mountainRenderers[i].enabled != visible)
+                    _mountainRenderers[i].enabled = visible;
         }
     }
 }
