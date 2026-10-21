@@ -51,6 +51,9 @@ namespace KrumbleHut.Drummi.FlashCards
         [Tooltip("Optional idle float/wobble on PlanetPivot for the title state; faded out over the first idleBlendOutFraction of the zoom, then deactivated.")]
         [SerializeField] private PlanetIdleMotion idleMotion;
 
+        [Tooltip("Sky sprites (Clouds, Sun) scaled by camera-distance ratio during the intro so they keep the apparent size they have from the menu camera instead of shrinking with the far view. Restored exactly on arrival.")]
+        [SerializeField] private List<Transform> constantSizeBackdrop = new();
+
         [Header("Title Banner (OverlayCanvas)")]
         [SerializeField] private CanvasGroup titleBanner;
         [SerializeField] private RectTransform titleArt;
@@ -62,8 +65,8 @@ namespace KrumbleHut.Drummi.FlashCards
         [Header("Far View (title pose)")]
         [SerializeField] private Vector3 introCameraPosition = new(0f, 18f, -64f);
 
-        [Tooltip("Pitch less than the line to the globe centre puts the planet low in frame; a negative yaw puts it to the right.")]
-        [SerializeField] private Vector3 introCameraEuler = new(6f, -5f, 0f);
+        [Tooltip("Pitch less than the line to the globe centre (~15.7° for the default position) puts the planet low in frame; a negative yaw puts it to the right.")]
+        [SerializeField] private Vector3 introCameraEuler = new(12f, -5f, 0f);
 
         [Tooltip("Planet angle in the far view (mod 360); the intro rolls it back to 0 (sign 0 on top). Positive = signs rolled toward the camera, so the roll back is 'backwards'.")]
         [SerializeField] private float introRollAngle = 115f;
@@ -107,6 +110,8 @@ namespace KrumbleHut.Drummi.FlashCards
         private Quaternion _introRot;
         private Vector3    _mountainRest;
         private Renderer[] _mountainRenderers = System.Array.Empty<Renderer>();
+        private Vector3[]  _backdropBaseScale = System.Array.Empty<Vector3>();
+        private float[]    _backdropRefDistance = System.Array.Empty<float>();
 
         private void Awake()
         {
@@ -124,6 +129,18 @@ namespace KrumbleHut.Drummi.FlashCards
             {
                 _mountainRest = mountainMid.localPosition;
                 _mountainRenderers = mountainMid.GetComponentsInChildren<Renderer>(true);
+            }
+
+            // Apparent size ∝ scale / distance: remember each sky sprite's menu
+            // scale and its distance from the menu camera.
+            _backdropBaseScale   = new Vector3[constantSizeBackdrop.Count];
+            _backdropRefDistance = new float[constantSizeBackdrop.Count];
+            for (int i = 0; i < constantSizeBackdrop.Count; i++)
+            {
+                Transform t = constantSizeBackdrop[i];
+                if (t == null) continue;
+                _backdropBaseScale[i]   = t.localScale;
+                _backdropRefDistance[i] = Mathf.Max(0.01f, Vector3.Distance(_menuPos, t.position));
             }
         }
 
@@ -147,6 +164,7 @@ namespace KrumbleHut.Drummi.FlashCards
             }
             if (mountainMid != null) mountainMid.localPosition = _mountainRest - Vector3.up * mountainHideOffsetY;
             SetMountainVisible(false);
+            ApplyBackdropScale(introCameraPosition);
 
             _startAngle = introRollAngle + 360f * extraRotations;
             if (spinner != null) spinner.SetAngle(_startAngle, force: true);
@@ -213,10 +231,10 @@ namespace KrumbleHut.Drummi.FlashCards
                 float tz = Mathf.Clamp01(time / introDuration);
                 float e = DOVirtual.EasedValue(0f, 1f, tz, zoomEase);
 
+                Vector3 camPos = Vector3.LerpUnclamped(introCameraPosition, _menuPos, e);
                 if (menuCamera != null)
-                    menuCamera.transform.SetPositionAndRotation(
-                        Vector3.LerpUnclamped(introCameraPosition, _menuPos, e),
-                        Quaternion.SlerpUnclamped(_introRot, _menuRot, e));
+                    menuCamera.transform.SetPositionAndRotation(camPos, Quaternion.SlerpUnclamped(_introRot, _menuRot, e));
+                ApplyBackdropScale(camPos);
 
                 // Last: the roll re-sorts rim children against the camera's new
                 // pose; Refresh covers frames where the eased angle hasn't moved.
@@ -258,6 +276,8 @@ namespace KrumbleHut.Drummi.FlashCards
 
             if (idleMotion != null && idleMotion.enabled) idleMotion.Deactivate();
             if (menuCamera != null) menuCamera.transform.SetPositionAndRotation(_menuPos, _menuRot);
+            for (int i = 0; i < constantSizeBackdrop.Count; i++)
+                if (constantSizeBackdrop[i] != null) constantSizeBackdrop[i].localScale = _backdropBaseScale[i];
             if (spinner != null)
             {
                 spinner.SetAngle(0f, force: true);
@@ -282,6 +302,18 @@ namespace KrumbleHut.Drummi.FlashCards
             {
                 mountainMid.localPosition = _mountainRest;
                 SetMountainVisible(true);
+            }
+        }
+
+        /// <summary>Scale each sky sprite so it subtends the same angle from camPos as it does from the menu camera.</summary>
+        private void ApplyBackdropScale(Vector3 camPos)
+        {
+            for (int i = 0; i < constantSizeBackdrop.Count; i++)
+            {
+                Transform t = constantSizeBackdrop[i];
+                if (t == null) continue;
+                float k = Vector3.Distance(camPos, t.position) / _backdropRefDistance[i];
+                t.localScale = _backdropBaseScale[i] * k;
             }
         }
 
