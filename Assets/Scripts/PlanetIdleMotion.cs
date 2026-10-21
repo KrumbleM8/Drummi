@@ -28,11 +28,11 @@ namespace KrumbleHut.Drummi.FlashCards
 
         [Header("Wobble")]
         [Tooltip("Degrees of side tilt (Z).")]
-        [SerializeField, Min(0f)] private float tiltDegrees = 4f;
-        [SerializeField, Min(0.1f)] private float tiltPeriod = 5.2f;
+        [SerializeField, Min(0f)] private float tiltDegrees = 1.5f;
+        [SerializeField, Min(0.1f)] private float tiltPeriod = 6.5f;
         [Tooltip("Degrees of slow twist (Y).")]
-        [SerializeField, Min(0f)] private float twistDegrees = 3f;
-        [SerializeField, Min(0.1f)] private float twistPeriod = 7.1f;
+        [SerializeField, Min(0f)] private float twistDegrees = 1.2f;
+        [SerializeField, Min(0.1f)] private float twistPeriod = 9f;
 
         /// <summary>0..1 scale on both motions (1 = full idle, 0 = spinner pose only).</summary>
         public float Weight { get; set; } = 1f;
