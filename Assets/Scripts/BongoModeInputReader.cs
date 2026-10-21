@@ -69,8 +69,9 @@ public class BongoModeInputReader : MonoBehaviour
     public void TriggerInput(bool isRightBongo)
     {
         // Always play animation and sound (for player feedback)
-        // Inverted: this scene's bongo rig needs the opposite tilt direction
-        BongoAnimator.instance.PlayBongoAnimation(!isRightBongo);
+        // Bongos pivot at centre: a left hit must pass isLeftSide=false so the
+        // rig rotates +Z and the left drum dips down-left (right hit mirrors).
+        BongoAnimator.instance.PlayBongoAnimation(isRightBongo);
 
         if (isRightBongo)
             AudioManager.instance?.PlayBongoRight();
