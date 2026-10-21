@@ -95,6 +95,9 @@ namespace KrumbleHut.Drummi.FlashCards
         /// <summary>Current planet angle in degrees (0 = sign 0 focused).</summary>
         public float CurrentAngle => _currentAngle;
 
+        /// <summary>Globe surface radius (sphere centre = this transform's position).</summary>
+        public float Radius => radius;
+
         /// <summary>Index of the sign nearest the focus point.</summary>
         public int FocusedIndex => NearestIndex(_currentAngle);
 

@@ -21,11 +21,12 @@ namespace KrumbleHut.Drummi.FlashCards
     /// duplicated numbers) while the planet rolls BACKWARDS through its extra
     /// turn(s) and eases onto angle 0 (sign 0 on top); the parallax layers are
     /// frozen at identity so the spin doesn't swing the sky. When the camera
-    /// arrives the menu unlocks (ArriveMenu). Phase 2 (mountainRiseDelay +
-    /// mountainRiseDuration): MountainMid's renderer comes on below the horizon
-    /// and it slides straight up into its rest position. The rise waits for
-    /// the camera because from far away the globe is too small to occlude the
-    /// 25 u wide sprite — its corners would poke out beside the planet.
+    /// arrives the menu unlocks (ArriveMenu). Phase 2: MountainMid's renderer
+    /// comes on below the horizon and it slides straight up into its rest
+    /// position, starting the moment the globe fully occludes the hidden
+    /// sprite from the camera (mountainRiseWhenCovered; from far away the
+    /// globe is too small and the 25 u wide sprite's corners would poke out
+    /// beside the planet), or after arrival + mountainRiseDelay as a fallback.
     ///
     /// Skips (lands directly on the signs) when HomeFlowController.SkipIntro
     /// (pause-menu Home / Restart) or FlashCardsMenuController.PendingFocusIndex
@@ -84,11 +85,16 @@ namespace KrumbleHut.Drummi.FlashCards
         [Tooltip("Ease of the whole roll (extra turns + settle) — an in/out ease spins fast through the turn and eases into the signs.")]
         [SerializeField] private Ease rollEase = Ease.InOutSine;
 
-        [Header("Mountain Rise (after the camera arrives)")]
+        [Header("Mountain Rise")]
         [Tooltip("World units MountainMid starts below its rest position (top below the menu camera's horizon).")]
         [SerializeField, Min(0f)] private float mountainHideOffsetY = 14f;
+
+        [Tooltip("Start the rise as soon as the globe fully occludes the hidden sprite from the current camera position (checked every frame of the zoom). Off = wait for the camera to arrive.")]
+        [SerializeField] private bool mountainRiseWhenCovered = true;
+
+        [Tooltip("Fallback: seconds after the camera arrives to start the rise if it hasn't started yet.")]
         [SerializeField, Min(0f)] private float mountainRiseDelay = 0f;
-        [SerializeField, Min(0.05f)] private float mountainRiseDuration = 0.9f;
+        [SerializeField, Min(0.05f)] private float mountainRiseDuration = 1.2f;
         [SerializeField] private Ease mountainEase = Ease.OutSine;
 
         [Header("Banner Exit")]
@@ -101,6 +107,8 @@ namespace KrumbleHut.Drummi.FlashCards
         private bool _playIntro;
         private bool _started;
         private bool _arrived;
+        private bool _riseStarted;
+        private float _riseStartTime;
         private float _progress;
         private float _startAngle;
         private float _totalDuration;
@@ -110,6 +118,7 @@ namespace KrumbleHut.Drummi.FlashCards
         private Quaternion _introRot;
         private Vector3    _mountainRest;
         private Renderer[] _mountainRenderers = System.Array.Empty<Renderer>();
+        private SpriteRenderer _mountainSprite;
         private Vector3[]  _backdropBaseScale = System.Array.Empty<Vector3>();
         private float[]    _backdropRefDistance = System.Array.Empty<float>();
 
@@ -129,6 +138,7 @@ namespace KrumbleHut.Drummi.FlashCards
             {
                 _mountainRest = mountainMid.localPosition;
                 _mountainRenderers = mountainMid.GetComponentsInChildren<Renderer>(true);
+                _mountainSprite = mountainMid.GetComponent<SpriteRenderer>();
             }
 
             // Apparent size ∝ scale / distance: remember each sky sprite's menu
@@ -224,6 +234,7 @@ namespace KrumbleHut.Drummi.FlashCards
         {
             _progress = t;
             float time = t * _totalDuration;
+            Vector3 camPos = _menuPos;
 
             // ── Phase 1: camera zoom + planet roll ───────────────────────────
             if (!_arrived)
@@ -231,7 +242,7 @@ namespace KrumbleHut.Drummi.FlashCards
                 float tz = Mathf.Clamp01(time / introDuration);
                 float e = DOVirtual.EasedValue(0f, 1f, tz, zoomEase);
 
-                Vector3 camPos = Vector3.LerpUnclamped(introCameraPosition, _menuPos, e);
+                camPos = Vector3.LerpUnclamped(introCameraPosition, _menuPos, e);
                 if (menuCamera != null)
                     menuCamera.transform.SetPositionAndRotation(camPos, Quaternion.SlerpUnclamped(_introRot, _menuRot, e));
                 ApplyBackdropScale(camPos);
@@ -259,13 +270,60 @@ namespace KrumbleHut.Drummi.FlashCards
             }
 
             // ── Phase 2: MountainMid slides up over the horizon ──────────────
-            float riseStart = introDuration + mountainRiseDelay;
-            if (time >= riseStart && mountainMid != null)
+            // Starts the moment the globe hides the whole sprite from the
+            // camera (so no corner pokes out beside the planet), or after
+            // arrival + delay as a fallback.
+            if (mountainMid == null) return;
+            if (!_riseStarted)
             {
-                SetMountainVisible(true);
-                float m = DOVirtual.EasedValue(0f, 1f, Mathf.Clamp01((time - riseStart) / mountainRiseDuration), mountainEase);
+                bool covered  = mountainRiseWhenCovered && IsMountainCoveredBySphere(camPos);
+                bool fallback = time >= introDuration + mountainRiseDelay;
+                if (covered || fallback)
+                {
+                    _riseStarted = true;
+                    _riseStartTime = time;
+                    SetMountainVisible(true);
+                    Debug.Log($"[HomeIntro] MountainMid rise started at {time:F2}s of {introDuration:F2}s zoom (covered={covered}, fallback={fallback}).");
+                }
+            }
+            if (_riseStarted)
+            {
+                float m = DOVirtual.EasedValue(0f, 1f, Mathf.Clamp01((time - _riseStartTime) / mountainRiseDuration), mountainEase);
                 mountainMid.localPosition = _mountainRest - Vector3.up * (mountainHideOffsetY * (1f - m));
             }
+        }
+
+        /// <summary>
+        /// True when every corner of MountainMid's sprite rect (at its current,
+        /// hidden position) is occluded by the globe from camPos. The occluded
+        /// region on the sprite's plane is convex, so four corners suffice.
+        /// </summary>
+        private bool IsMountainCoveredBySphere(Vector3 camPos)
+        {
+            if (_mountainSprite == null || _mountainSprite.sprite == null || spinner == null) return false;
+
+            Vector3 centre = spinner.transform.position;
+            float radius = spinner.Radius;
+            Bounds b = _mountainSprite.sprite.bounds; // local, z = 0
+            Transform tr = _mountainSprite.transform;
+
+            return RayHitsSphere(camPos, tr.TransformPoint(new Vector3(b.min.x, b.min.y, 0f)), centre, radius)
+                && RayHitsSphere(camPos, tr.TransformPoint(new Vector3(b.max.x, b.min.y, 0f)), centre, radius)
+                && RayHitsSphere(camPos, tr.TransformPoint(new Vector3(b.min.x, b.max.y, 0f)), centre, radius)
+                && RayHitsSphere(camPos, tr.TransformPoint(new Vector3(b.max.x, b.max.y, 0f)), centre, radius);
+        }
+
+        /// <summary>Does the segment from → to pass through the sphere (so the sphere hides 'to')?</summary>
+        private static bool RayHitsSphere(Vector3 from, Vector3 to, Vector3 centre, float radius)
+        {
+            Vector3 d = to - from;
+            float len = d.magnitude;
+            if (len < 1e-4f) return false;
+            d /= len;
+            float t = Vector3.Dot(centre - from, d);          // closest approach along the segment
+            if (t < 0f || t > len) return false;              // sphere behind the camera or beyond the point
+            Vector3 closest = from + d * t;
+            return (closest - centre).sqrMagnitude < radius * radius;
         }
 
         /// <summary>Camera has landed: snap the menu pose exactly and hand the menu back to the player.</summary>

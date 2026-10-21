@@ -2007,8 +2007,9 @@ MonoBehaviour:
   zoomEase: 4
   rollEase: 4
   mountainHideOffsetY: 14
+  mountainRiseWhenCovered: 1
   mountainRiseDelay: 0
-  mountainRiseDuration: 0.9
+  mountainRiseDuration: 1.2
   mountainEase: 3
   bannerFadeDuration: 0.4
   bannerRisePixels: 300
@@ -6759,7 +6760,7 @@ MonoBehaviour:
   m_faceColor:
     serializedVersion: 2
     rgba: 4294967295
-  m_fontSize: 44
+  m_fontSize: 64
   m_fontSizeBase: 36
   m_fontWeight: 400
   m_enableAutoSizing: 1
