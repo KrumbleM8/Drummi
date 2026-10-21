@@ -18,6 +18,10 @@ public class PlayerInputVisualHandler : MonoBehaviour
     private Color rightBongoColor = Color.red;
     public GameObject perfectInputStarPrefab;
 
+    [Header("Flash Mode")]
+    [Tooltip("Optional. When assigned and its Use Flash is on, player hits show as small rising/sinking flashes above the bongos instead of dots on the slider.")]
+    public BongoBeatFlash beatFlash;
+
     [Header("Metronome Reference")]
     public Metronome metronome;
 
@@ -39,6 +43,13 @@ public class PlayerInputVisualHandler : MonoBehaviour
     private Vector2 parkedPos;
 
     private bool isFrozen = false;
+
+    private void Awake()
+    {
+        // Scene wiring is preferred; fall back to a lookup so the flash still works if the reference is lost.
+        if (beatFlash == null)
+            beatFlash = FindFirstObjectByType<BongoBeatFlash>(FindObjectsInactive.Include);
+    }
 
     private void OnEnable()
     {
@@ -171,6 +182,15 @@ public class PlayerInputVisualHandler : MonoBehaviour
             return;
         }
 
+        // Flash mode: small rising flash above the hit-side bongo instead of a slider dot.
+        if (beatFlash != null && beatFlash.useFlash)
+        {
+            beatFlash.FlashPlayer(inputIndicatorPrefab, isRightBongo,
+                                  isRightBongo ? rightBongoColor : leftBongoColor,
+                                  InputMatch.MatchQuality.Good);
+            return;
+        }
+
         GameObject indicator = Instantiate(inputIndicatorPrefab, indicatorParent);
         if (indicator.TryGetComponent(out Image img))
             img.color = isRightBongo ? rightBongoColor : leftBongoColor;
@@ -184,6 +204,15 @@ public class PlayerInputVisualHandler : MonoBehaviour
         if (!inputIndicatorPrefab || !indicatorParent || !inputSlider)
         {
             Debug.LogWarning("PlayerInputVisualHandler: Missing required references.");
+            return;
+        }
+
+        // Flash mode: grey, tilted, sinking flash above the hit-side bongo.
+        if (beatFlash != null && beatFlash.useFlash)
+        {
+            beatFlash.FlashPlayer(inputIndicatorPrefab, isRightBongo,
+                                  isRightBongo ? rightBongoColor : leftBongoColor,
+                                  timing);
             return;
         }
 
@@ -221,6 +250,13 @@ public class PlayerInputVisualHandler : MonoBehaviour
 
     public void SpawnPerfectInputStar()
     {
+        // Flash mode: star spins up over the most recent player flash.
+        if (beatFlash != null && beatFlash.useFlash)
+        {
+            beatFlash.FlashPerfectStar(perfectInputStarPrefab);
+            return;
+        }
+
         if (!perfectInputStarPrefab || !indicatorParent)
         {
             Debug.LogWarning("PlayerInputVisualHandler: Missing perfectInputStarPrefab or indicatorParent.");
@@ -343,6 +379,8 @@ public class PlayerInputVisualHandler : MonoBehaviour
             handleRect.anchoredPosition = parkedPos;
         }
 
+        if (beatFlash != null) beatFlash.Clear();
+
         enabled = false;
 
         Debug.Log("[PlayerInputVisualHandler] Cleanup complete");
@@ -364,6 +402,8 @@ public class PlayerInputVisualHandler : MonoBehaviour
         {
             handleRect.anchoredPosition = parkedPos;
         }
+
+        if (beatFlash != null) beatFlash.Clear();
 
         isFrozen = false;
 
