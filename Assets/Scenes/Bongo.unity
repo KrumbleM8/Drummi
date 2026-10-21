@@ -13903,9 +13903,9 @@ MonoBehaviour:
   m_Name:
   m_EditorClassIdentifier:
   useFlash: 1
-  callSize: 240
-  callOffsetX: 120
-  callOffsetY: 40
+  callSize: 270
+  callOffsetX: 135
+  callOffsetY: -60
   callTiltDegrees: 8
   callPopScale: 1.25
   callPopDuration: 0.08

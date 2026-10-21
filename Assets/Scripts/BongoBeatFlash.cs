@@ -30,11 +30,11 @@ public class BongoBeatFlash : MonoBehaviour
 
     [Header("Custard call flash (big, centre)")]
     [Tooltip("Icon size in canvas units (canvas reference width is 800).")]
-    public float callSize = 240f;
+    public float callSize = 270f;
     [Tooltip("Horizontal nudge from centre; left bongo flashes at -X, right at +X.")]
-    public float callOffsetX = 120f;
+    public float callOffsetX = 135f;
     [Tooltip("Vertical offset from the layer centre.")]
-    public float callOffsetY = 40f;
+    public float callOffsetY = -60f;
     [Tooltip("Lean toward the bongo side, in degrees (left leans +, right leans -).")]
     public float callTiltDegrees = 8f;
     [Tooltip("Scale the icon pops in at before settling to 1.")]
