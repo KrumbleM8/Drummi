@@ -39,8 +39,8 @@ namespace KrumbleHut.Drummi.FlashCards
     /// each update (centre = camera's ring direction, half-width =
     /// acos(R/ρ)), so it stays correct while HomeIntroDirector flies the
     /// camera in from far away and for decor on the lower half of the globe;
-    /// for the menu camera (0,13.5,−8) it is (−81°, +19.8°) — the same ridge
-    /// as the fixed horizonFlipAngle fallback. Caches renderers in Awake — no
+    /// for the menu camera (0,15,−8; pitch 19°) it is (−82°, +26°) — the fixed
+    /// horizonFlipAngle fallback is only used when no camera is assigned. Caches renderers in Awake — no
     /// per-spin allocations.
     ///
     /// INSPECTOR SETUP: signMounts — one child mount per sign, in index order
@@ -74,7 +74,7 @@ namespace KrumbleHut.Drummi.FlashCards
         [SerializeField, Min(1f)] private float dragThreshold = 10f;
 
         [Header("Horizon Sorting (2D renderer)")]
-        [Tooltip("Ring angle (deg from the focus point) past which a pivot child sorts behind the globe. Set to the angle where a sign BASE crosses the visible horizon silhouette (≈20° for camera at (0,13.5,-8), R=10) — flipping exactly there makes the front/behind swap pixel-identical. Too high and far-side signs float over the planet face.")]
+        [Tooltip("Ring angle (deg from the focus point) past which a pivot child sorts behind the globe. Set to the angle where a sign BASE crosses the visible horizon silhouette (≈26° for the menu camera at (0,15,-8), R=10; ≈20° for the old (0,13.5,-8)) — flipping exactly there makes the front/behind swap pixel-identical. Too high and far-side signs float over the planet face.")]
         [SerializeField, Range(10f, 90f)] private float horizonFlipAngle = 20f;
 
         [Tooltip("Optional. When set, the visible horizon arc is derived from this camera's position every update (needed while the intro camera flies in). Null = fixed horizonFlipAngle.")]
