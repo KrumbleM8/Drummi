@@ -4,82 +4,103 @@ using UnityEngine.UI;
 namespace KrumbleHut.Drummi.FlashCards
 {
     /// <summary>
-    /// Play / Snake (column stream) how-to-play loop, 3.2 s = 8 steps × 0.4 s:
-    /// a column of cards slides down one slot per step into a gold hit zone;
-    /// the card in the zone is tapped (ring + bump) and shrinks away, a rest
-    /// just fades, and a new card pops in at the top. The 8-step rhythm
-    /// pattern is the loop length, so the seam is invisible. Five squares
-    /// form a ring buffer — each frame assigns pattern index p to square
-    /// p mod 5 and sets its glyph sprite, so no square owns a glyph.
-    /// Wired by CoplayScripts/AddSignPreviews.cs.
+    /// Play (column stream, FlashCardLayout.ColumnScroll) how-to-play loop: a
+    /// miniature of the real stream screen (CoplayScripts/AddSignPreviews.cs
+    /// builds it in canvas units). The stream never stops: every beat at
+    /// 105 BPM the column slides down one 150 px pitch (0.12 s OutCubic), the
+    /// arriving block grows from the 119 px trail size to the 175 px hit-zone
+    /// size (OutBack), everything wobbles ±6°, a note in the hit zone is tapped
+    /// (gold/green flash, punch, 5 shards) and a rest dissolves grey as its
+    /// beat ends. Eight squares form a ring buffer over an 8-step pattern, so
+    /// the 8-beat loop (4.57 s) is seamless. Upcoming faces are dimmed ×0.95
+    /// with glyph alpha 0.85 like the on-deck stack.
     /// </summary>
-    public class SnakePreviewAnimation : SignPreviewAnimation
+    public class SnakePreviewAnimation : FlashCardsPreviewAnimation
     {
-        [SerializeField] private RectTransform[] squares     = new RectTransform[5];
-        [SerializeField] private Image[]         backImages  = new Image[5];
-        [SerializeField] private Image[]         glyphImages = new Image[5];
-        [SerializeField] private RectTransform   ring;
-        [SerializeField] private Image           ringImage;
-
+        [Header("Column")]
+        [SerializeField] private RectTransform[] squares = new RectTransform[8];
+        [SerializeField] private Image[] backs  = new Image[8];
+        [SerializeField] private Image[] glyphs = new Image[8];
         [Tooltip("Glyph per pattern step (8). Rests are detected by sprite name.")]
         [SerializeField] private Sprite[] pattern = new Sprite[8];
 
-        [Tooltip("Slot y positions, bottom (hit zone) first; the last entry is the spawn slot.")]
-        [SerializeField] private float[] slotY = { -75f, -25f, 25f, 75f, 125f };
+        [Tooltip("Hit-zone square centre y (canvas units, origin centre).")]
+        [SerializeField] private float hitZoneY = -91.5f;
+        [SerializeField] private float pitch = 150f;
+        [SerializeField] private float trailSize = 119f;
+        [SerializeField] private float hitSize = 175f;
 
-        private const float StepDur = 0.4f;
-        private const int   Steps   = 8;
+        private const int   Steps     = 8;
+        private const float StepDur   = 0.12f;
+        private const float TapOffset = 0.25f;
 
-        protected override float LoopLength => StepDur * Steps;
+        protected override float LoopLength => Steps * Beat;
+
+        private bool IsRest(int p) => pattern.Length > 0 && pattern[p % pattern.Length] != null
+                                      && pattern[p % pattern.Length].name.Contains("Rest");
 
         protected override void Evaluate(float t)
         {
-            int   step = Mathf.Min(Mathf.FloorToInt(t / StepDur), Steps - 1);
-            float u    = t - step * StepDur;
-            int   live = slotY.Length; // cards alive this step: slots 0..live-1 (last = spawning)
+            EvaluateDrum(t);
+            int   step = Mathf.Min(Mathf.FloorToInt(t / Beat), Steps - 1);
+            float u    = t - step * Beat;
+            float wobble = Wobble(t);
+            float slide = OutCubic(Progress(u, 0f, StepDur));
 
-            for (int j = 0; j < live && j < squares.Length; j++)
+            int live = squares.Length;           // j = 0 hit zone … live-1 spawning above the top
+            for (int j = 0; j < live; j++)
             {
-                int    p      = step + j;                 // pattern index (unbounded)
-                int    sq     = p % squares.Length;       // ring-buffer square
-                Sprite glyph  = pattern.Length > 0 ? pattern[p % pattern.Length] : null;
-                bool   isRest = glyph != null && glyph.name.Contains("Rest");
-
+                int p = step + j;                 // pattern index (unbounded)
+                int sq = p % squares.Length;      // ring-buffer square
                 RectTransform rt = squares[sq];
                 if (rt == null) continue;
-                Image back = backImages.Length > sq ? backImages[sq] : null;
-                Image gl   = glyphImages.Length > sq ? glyphImages[sq] : null;
+                Sprite glyph = pattern.Length > 0 ? pattern[p % pattern.Length] : null;
+                bool rest = IsRest(p);
+                Image back = backs.Length > sq ? backs[sq] : null;
+                Image gl   = glyphs.Length > sq ? glyphs[sq] : null;
                 if (gl != null && gl.sprite != glyph) gl.sprite = glyph;
 
-                float y, scale = 1f, alpha = 1f;
+                // Slide from slot j+1 down to slot j during the first 0.12 s of the beat.
+                float y = Mathf.Lerp(hitZoneY + pitch * (j + 1), hitZoneY + pitch * j, slide);
+                float size = j == 0 ? Mathf.Lerp(trailSize, hitSize, OutBack(Progress(u, 0f, StepDur))) : trailSize;
+                float scale = 1f;
+                Color face = rest ? RestFace : NoteFace;
+                Color backCol = face;
+                Color glyphCol = rest ? RestGlyph : NoteGlyph;
+
                 if (j == 0)
                 {
-                    // In the hit zone: note → tap + bump then shrink; rest → fade.
-                    y = slotY[0];
-                    if (isRest)
-                        alpha = 1f - Progress(u, 0.05f, 0.2f);
-                    else
-                        scale = Punch(u, 0f, 0.18f) * (1f - InQuad(Progress(u, 0.2f, 0.15f)));
+                    // In the hit zone: note tapped at +0.25 s, rest dissolves at the beat's end.
+                    float eventTime = rest ? Beat - DestroyLen - 0.02f : TapOffset;
+                    Color hit = rest ? RestFace : (step % 2 == 0 ? HitGold : HitGreen);
+                    scale = DestroyScale(u - eventTime, face, hit, out backCol);
                 }
                 else
                 {
-                    float slide = OutCubic(Progress(u, 0f, 0.2f));
-                    y = Mathf.Lerp(slotY[j], slotY[j - 1], slide);
-                    if (j == live - 1) scale = OutBack(Progress(u, 0f, 0.25f)); // spawning
+                    backCol = face * 0.95f; backCol.a = 1f;           // on-deck dim
+                    if (!rest) glyphCol.a = 0.85f;
                 }
 
                 rt.anchoredPosition = new Vector2(0f, y);
+                rt.sizeDelta = new Vector2(size, size);
                 SetScale(rt, scale);
-                SetAlpha(back, alpha);
-                SetAlpha(gl, alpha);
+                rt.localRotation = Quaternion.Euler(0f, 0f, wobble);
+                if (back != null) back.color = backCol;
+                if (gl != null) gl.color = glyphCol;
             }
 
-            // Tap ring in the hit zone on note steps only.
-            bool noteNow = pattern.Length > 0 && pattern[step % pattern.Length] != null
-                           && !pattern[step % pattern.Length].name.Contains("Rest");
-            if (ring != null) ring.anchoredPosition = new Vector2(0f, slotY[0]);
-            if (noteNow) TapRing(ring, ringImage, u, 0f, 0.3f);
-            else SetAlpha(ringImage, 0f);
+            // Shard bursts for this step's hit-zone event (pool = step parity) and the previous step's tail.
+            BurstFor(step, u, step % 2);
+            BurstFor(step - 1, u + Beat, (step + 1) % 2);
+        }
+
+        private void BurstFor(int step, float u, int pool)
+        {
+            if (step < 0) { EvaluateShardBurst(pool, Vector2.zero, HitGold, hitSize, -1f); return; }
+            bool rest = IsRest(step);
+            float eventTime = rest ? Beat - DestroyLen - 0.02f : TapOffset;
+            Color col = rest ? RestFace : (step % 2 == 0 ? HitGold : HitGreen);
+            EvaluateShardBurst(pool, new Vector2(0f, hitZoneY), col, hitSize, u - eventTime);
         }
     }
 }

@@ -4,97 +4,94 @@ using UnityEngine.UI;
 namespace KrumbleHut.Drummi.FlashCards
 {
     /// <summary>
-    /// Classic (2x4 grid) how-to-play loop, 4.0 s: the two rows of cards pop
-    /// in with their rhythm glyphs, a gold cursor sweeps the eight slots while
-    /// a tap ring + bump marks every note slot (rests are skipped), then the
-    /// cards shrink away and the loop restarts. Double Time reuses this at
-    /// speed 2. Wired by CoplayScripts/AddSignPreviews.cs: squares[8] +
-    /// glyphs[8] row-major (rest glyphs detected by sprite name).
+    /// Classic (2×4 grid) how-to-play loop: a miniature of the real FlashCards
+    /// grid screen (CoplayScripts/AddSignPreviews.cs builds it in canvas
+    /// units). One card cycle at 105 BPM = 16 beats = 9.14 s:
+    ///   beats 0–7   reveal — one 140 px square pops in per beat, row-major
+    ///               (scale 0 → 1, 0.12 s OutBack), note faces cream with a
+    ///               black glyph, rest faces grey with a dim glyph
+    ///   beats 8–15  perform — every square wobbles ±6° (2-beat cycle), the
+    ///               white cursor overlay sits on the current square for one
+    ///               beat; a tapped note flashes gold/green, punches ×1.15 and
+    ///               collapses with 5 shards; a rest dissolves in its own grey
+    ///               at the end of its beat
+    /// The card ends empty, so the loop is seamless. Double Time reuses this at
+    /// speed 2. Pattern (row-major): Q R Q Q / R Q R R.
     /// </summary>
-    public class ClassicPreviewAnimation : SignPreviewAnimation
+    public class ClassicPreviewAnimation : FlashCardsPreviewAnimation
     {
+        [Header("Grid")]
         [SerializeField] private RectTransform[] squares = new RectTransform[8];
-        [SerializeField] private Image[]         glyphs  = new Image[8];
-        [SerializeField] private RectTransform   cursor;
-        [SerializeField] private Image           cursorImage;
-        [SerializeField] private RectTransform   ring;
-        [SerializeField] private Image           ringImage;
+        [SerializeField] private Image[] backs   = new Image[8];
+        [SerializeField] private Image[] glyphs  = new Image[8];
+        [SerializeField] private Image[] cursors = new Image[8];
+        [Tooltip("true = rest slot (dissolves instead of being tapped).")]
+        [SerializeField] private bool[] rests = new bool[8];
 
-        private const float Loop        = 4.0f;
-        private const float RowGap      = 0.8f;   // row 2 starts popping here
-        private const float PopStep     = 0.15f;
-        private const float PopDur      = 0.25f;
-        private const float CursorIn    = 1.7f;
-        private const float SweepStart  = 1.8f;
-        private const float SweepStep   = 0.2f;
-        private const float CursorOut   = 3.45f;
-        private const float ClearStart  = 3.5f;
-        private const float ClearStep   = 0.03f;
-        private const float ClearDur    = 0.2f;
+        private const float Loop        = 16f * Beat;
+        private const float PerformAt   = 8f * Beat;
+        private const float PopDur      = 0.12f;
+        private const float TapOffset   = 0.10f;   // tap lands just after the beat
+        private const float SquareSize  = 140f;
 
         protected override float LoopLength => Loop;
 
-        private bool[]    _isRest;
-        private Vector2[] _slotPos;
-        private float[]   _tapTimes;
+        private Vector2[] _origin;
 
         private void Awake()
         {
-            int n = squares.Length;
-            _isRest  = new bool[n];
-            _slotPos = new Vector2[n];
-            int notes = 0;
-            for (int i = 0; i < n; i++)
-            {
-                _isRest[i]  = glyphs.Length > i && glyphs[i] != null && glyphs[i].sprite != null
-                              && glyphs[i].sprite.name.Contains("Rest");
-                _slotPos[i] = squares[i] != null ? squares[i].anchoredPosition : Vector2.zero;
-                if (!_isRest[i]) notes++;
-            }
-            _tapTimes = new float[notes];
-            for (int i = 0, k = 0; i < n; i++)
-                if (!_isRest[i]) _tapTimes[k++] = SweepStart + i * SweepStep;
+            _origin = new Vector2[squares.Length];
+            for (int i = 0; i < squares.Length; i++)
+                _origin[i] = squares[i] != null ? squares[i].anchoredPosition : Vector2.zero;
         }
 
         protected override void Evaluate(float t)
         {
-            int n = squares.Length;
-            for (int i = 0; i < n; i++)
+            EvaluateDrum(t);
+            bool performing = t >= PerformAt;
+            float wobble = performing ? Wobble(t - PerformAt) : 0f;
+            int cursorSlot = performing ? Mathf.Min(Mathf.FloorToInt((t - PerformAt) / Beat), squares.Length - 1) : -1;
+
+            int lastEvent = -1; float lastAge = -1f; Color lastColor = HitGold; Vector2 lastOrigin = Vector2.zero;
+            int prevEvent = -1; float prevAge = -1f; Color prevColor = HitGold; Vector2 prevOrigin = Vector2.zero;
+
+            for (int k = 0; k < squares.Length; k++)
             {
-                if (squares[i] == null) continue;
-                float popStart = i < 4 ? i * PopStep : RowGap + (i - 4) * PopStep;
-                float scale = PopIn(t, popStart, PopDur);
-                scale *= 1f - InQuad(Progress(t, ClearStart + i * ClearStep, ClearDur));
-                if (!_isRest[i]) scale *= Punch(t, SweepStart + i * SweepStep, 0.18f);
-                SetScale(squares[i], scale);
+                RectTransform rt = squares[k];
+                if (rt == null) continue;
+                bool rest = rests.Length > k && rests[k];
+                Color face = rest ? RestFace : NoteFace;
 
-                if (glyphs.Length > i)
-                    SetAlpha(glyphs[i], Progress(t, popStart + 0.05f, 0.15f) * (1f - Progress(t, ClearStart, 0.15f)));
-            }
+                // Reveal pop.
+                float pop = PopIn(t, k * Beat, PopDur);
 
-            // Cursor: fades in, hops slot to slot (0.08 s OutCubic per hop), fades out.
-            if (cursor != null)
-            {
-                float alpha = Progress(t, CursorIn, 0.1f) * (1f - Progress(t, CursorOut, 0.1f));
-                SetAlpha(cursorImage, alpha * 0.9f);
+                // Destroy event: note tapped shortly after its perform beat, rest dissolves at the beat's end.
+                float eventTime = rest ? PerformAt + (k + 1) * Beat - 0.02f : PerformAt + k * Beat + TapOffset;
+                Color hit = rest ? RestFace : (k % 2 == 0 ? HitGold : HitGreen);
+                float age = t - eventTime;
+                float destroy = DestroyScale(age, face, hit, out Color back);
 
-                Vector2 pos = _slotPos[0];
-                if (t >= SweepStart)
+                // Events happen in slot order, so the most recent started event is the
+                // highest k with age ≥ 0; keep it and the one before for the two shard pools.
+                if (age >= 0f)
                 {
-                    int k = Mathf.Clamp(Mathf.FloorToInt((t - SweepStart) / SweepStep), 0, n - 1);
-                    float hop = OutCubic(Progress(t, SweepStart + k * SweepStep, 0.08f));
-                    pos = k == 0 ? _slotPos[0] : Vector2.Lerp(_slotPos[k - 1], _slotPos[k], hop);
+                    prevEvent = lastEvent; prevAge = lastAge; prevColor = lastColor; prevOrigin = lastOrigin;
+                    lastEvent = k; lastAge = age; lastColor = hit; lastOrigin = _origin[k];
                 }
-                cursor.anchoredPosition = pos;
+
+                SetScale(rt, pop * destroy);
+                rt.localRotation = Quaternion.Euler(0f, 0f, wobble);
+                if (backs.Length > k && backs[k] != null) backs[k].color = back;
+                if (glyphs.Length > k && glyphs[k] != null) glyphs[k].color = rest ? RestGlyph : NoteGlyph;
+                if (cursors.Length > k && cursors[k] != null)
+                    SetAlpha(cursors[k], cursorSlot == k ? CursorCol.a : 0f);
             }
 
-            // Tap ring follows the cursor's note slots.
-            if (ring != null && t >= SweepStart)
-            {
-                int k = Mathf.Clamp(Mathf.FloorToInt((t - SweepStart) / SweepStep), 0, n - 1);
-                ring.anchoredPosition = _slotPos[k];
-            }
-            TapRing(ring, ringImage, t, _tapTimes, 0.25f);
+            // Shard bursts: pool 0 for the most recent event, pool 1 for the one before.
+            if (lastEvent >= 0) EvaluateShardBurst(0, lastOrigin, lastColor, SquareSize, lastAge);
+            else EvaluateShardBurst(0, Vector2.zero, HitGold, SquareSize, -1f);
+            if (prevEvent >= 0) EvaluateShardBurst(1, prevOrigin, prevColor, SquareSize, prevAge);
+            else EvaluateShardBurst(1, Vector2.zero, HitGold, SquareSize, -1f);
         }
     }
 }
