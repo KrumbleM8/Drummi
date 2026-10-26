@@ -41,6 +41,7 @@ GameObject:
   m_Component:
   - component: {fileID: 3503262883843184387}
   - component: {fileID: 8769215976315606097}
+  - component: {fileID: 8761233499773089764}
   m_Layer: 0
   m_Name: MenuSign
   m_TagString: Untagged
@@ -79,10 +80,32 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 2dd06e72b89585e4d9407468e7d87791, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  cameraAnchor: {fileID: 5723067320519820916}
   definition: {fileID: 0}
   signButton: {fileID: 8780551316440371985}
   label: {fileID: 6223735022317707917}
+  focusScaleTarget: {fileID: 0}
+  focusedScale: 1.15
+  focusTweenDuration: 0.2
+  lockedByDefault: 0
+  lockedTint: {r: 0.45, g: 0.45, b: 0.45, a: 1}
+  preview: {fileID: 0}
+--- !u!114 &8761233499773089764
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3958006029565952366}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e2fb39338cfb976468ab2f9664e33da6, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  stretchY: 1.045
+  squashX: 0.3
+  smoothTime: 0.15
+  everyNBeats: 1
+  beatOffset: 0
 --- !u!1 &4150825587298474686
 GameObject:
   m_ObjectHideFlags: 0

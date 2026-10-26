@@ -198,6 +198,7 @@ namespace KrumbleHut.Drummi.FlashCards
         /// </summary>
         private IEnumerator LaunchRun(FlashCardsModeDefinition definition)
         {
+            FadeOutMenuMusic();
             if (screenTransitioner != null)
             {
                 screenTransitioner.StartCover();
@@ -270,6 +271,7 @@ namespace KrumbleHut.Drummi.FlashCards
             // menu music here so it never bleeds into the loaded scene. Explicit
             // != null: Unity's overloaded null check must run on the static.
             if (AudioManager.instance != null) AudioManager.instance.StopMusic();
+            FadeOutMenuMusic();
 
             if (screenTransitioner != null)
             {
@@ -279,6 +281,18 @@ namespace KrumbleHut.Drummi.FlashCards
                 yield return new WaitForSecondsRealtime(screenTransitioner.transitionDuration * 1.13f);
             }
             SceneManager.LoadScene(sceneName);
+        }
+
+        /// <summary>
+        /// Fade the menu music (MenuBeatClock on the MenuMusic menu object)
+        /// under the cover so it never cuts hard when the menu objects
+        /// deactivate or the scene unloads. Explicit != null: static access.
+        /// </summary>
+        private void FadeOutMenuMusic()
+        {
+            if (MenuBeatClock.Instance == null) return;
+            float seconds = screenTransitioner != null ? screenTransitioner.transitionDuration : 0.3f;
+            MenuBeatClock.Instance.FadeOut(seconds);
         }
     }
 }

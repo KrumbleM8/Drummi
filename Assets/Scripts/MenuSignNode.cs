@@ -55,6 +55,7 @@ namespace KrumbleHut.Drummi.FlashCards
         private Vector3    _baseScale;
         private Quaternion _baseRotation;
         private bool       _focused;
+        private MenuBeatBopper _bopper;
 
         private SpriteRenderer[] _sprites;
         private Color[]          _spriteBaseColors;
@@ -79,6 +80,10 @@ namespace KrumbleHut.Drummi.FlashCards
             _baseScale    = focusScaleTarget.localScale;
             _baseRotation = focusScaleTarget.localRotation;
 
+            // A beat bopper on the same transform owns localScale — the focus
+            // pop then goes through its ScaleMultiplier so the two compose.
+            _bopper = focusScaleTarget.GetComponent<MenuBeatBopper>();
+
             CacheBaseColors();
             if (IsLocked) ApplyLockVisuals(true);
         }
@@ -99,11 +104,14 @@ namespace KrumbleHut.Drummi.FlashCards
 
             focusScaleTarget.DOKill();
             focusScaleTarget.localRotation = _baseRotation; // clear any interrupted shake
-            focusScaleTarget
-                .DOScale(_baseScale * (focused ? focusedScale : 1f), focusTweenDuration)
-                .SetEase(Ease.OutBack)
-                .SetUpdate(true)
-                .SetLink(gameObject);
+            float target = focused ? focusedScale : 1f;
+            Tween pop = _bopper != null
+                ? (Tween)DOTween.To(() => _bopper.ScaleMultiplier, v => _bopper.ScaleMultiplier = v, target, focusTweenDuration)
+                                .SetTarget(focusScaleTarget) // so the DOKill above still catches it
+                : focusScaleTarget.DOScale(_baseScale * target, focusTweenDuration);
+            pop.SetEase(Ease.OutBack)
+               .SetUpdate(true)
+               .SetLink(gameObject);
         }
 
         /// <summary>
