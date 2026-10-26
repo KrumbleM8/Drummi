@@ -85,6 +85,9 @@ namespace KrumbleHut.Drummi.FlashCards
         [Tooltip("Fraction of the zoom over which the idle float/wobble fades out.")]
         [SerializeField, Range(0.05f, 1f)] private float idleBlendOutFraction = 0.35f;
 
+        [Tooltip("Fraction of the zoom over which the globe's beat bounce dies away (longer than the wobble so it fades slowly as the camera pans in).")]
+        [SerializeField, Range(0.05f, 1f)] private float beatBlendOutFraction = 0.8f;
+
         [Header("Zoom")]
         [SerializeField, Min(0.1f)] private float introDuration = 3.5f;
         [SerializeField] private Ease zoomEase = Ease.InOutSine;
@@ -190,6 +193,7 @@ namespace KrumbleHut.Drummi.FlashCards
             if (idleMotion != null)
             {
                 idleMotion.Weight = 1f;
+                idleMotion.BeatWeight = 1f;
                 idleMotion.enabled = true;
             }
 
@@ -267,12 +271,18 @@ namespace KrumbleHut.Drummi.FlashCards
 
                 // Idle float/wobble settles out as the roll takes over
                 // (PlanetIdleMotion.LateUpdate recomposes rotation from the
-                // spinner's angle, so the two never fight).
+                // spinner's angle, so the two never fight); the beat bounce
+                // fades on its own, longer, curve. Deactivate once both are out.
                 if (idleMotion != null && idleMotion.enabled)
                 {
-                    float fade = DOVirtual.EasedValue(0f, 1f, Mathf.Clamp01(tz / idleBlendOutFraction), Ease.InOutSine);
-                    if (fade >= 1f) idleMotion.Deactivate();
-                    else idleMotion.Weight = 1f - fade;
+                    float fade     = DOVirtual.EasedValue(0f, 1f, Mathf.Clamp01(tz / idleBlendOutFraction), Ease.InOutSine);
+                    float beatFade = DOVirtual.EasedValue(0f, 1f, Mathf.Clamp01(tz / beatBlendOutFraction), Ease.InOutSine);
+                    if (fade >= 1f && beatFade >= 1f) idleMotion.Deactivate();
+                    else
+                    {
+                        idleMotion.Weight     = 1f - fade;
+                        idleMotion.BeatWeight = 1f - beatFade;
+                    }
                 }
 
                 if (tz >= 1f) ArriveMenu();

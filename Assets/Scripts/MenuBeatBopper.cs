@@ -91,8 +91,17 @@ namespace KrumbleHut.Drummi.FlashCards
             transform.localScale = new Vector3(_baseScale.x * x, _baseScale.y * y, _baseScale.z) * ScaleMultiplier;
         }
 
-        /// <summary>0..1 position within this bopper's bounce period (0 = the peak beat).</summary>
-        private float PeriodPhase()
+        private float PeriodPhase() => PeriodPhase(everyNBeats, beatOffset, fallbackBpm);
+        private float Shape(float phase) => Envelope(phase, relaxPower, anticipation);
+
+        // ── Shared beat helpers (PlanetIdleMotion's globe hop uses them too) ──
+
+        /// <summary>
+        /// 0..1 position within a bounce period of everyNBeats beats (0 = the
+        /// peak beat), from MenuBeatClock.Instance or a free-running
+        /// fallbackBpm when no clock is active.
+        /// </summary>
+        public static float PeriodPhase(int everyNBeats, int beatOffset, float fallbackBpm)
         {
             int n = Mathf.Max(1, everyNBeats);
             MenuBeatClock clock = MenuBeatClock.Instance;
@@ -110,7 +119,7 @@ namespace KrumbleHut.Drummi.FlashCards
         /// of the period back up to the next peak. Continuous everywhere, so
         /// the object never sits still.
         /// </summary>
-        private float Shape(float phase)
+        public static float Envelope(float phase, float relaxPower, float anticipation)
         {
             float relaxSpan = 1f - anticipation;
             if (phase < relaxSpan || relaxSpan <= 0f)

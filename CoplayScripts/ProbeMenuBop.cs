@@ -18,6 +18,11 @@ public static class ProbeMenuBop
                           $"src.isPlaying={(src != null && src.isPlaying)} src.time={(src != null ? src.time : -1f):F2} clip={(src != null && src.clip != null ? src.clip.name : "null")}");
         }
 
+        var idle = Object.FindFirstObjectByType<PlanetIdleMotion>(FindObjectsInactive.Include);
+        if (idle != null)
+            sb.AppendLine($"PlanetIdleMotion enabled={idle.enabled} weight={idle.Weight:F2} beatWeight={idle.BeatWeight:F2} " +
+                          $"pos={idle.transform.localPosition} scale={idle.transform.localScale}");
+
         foreach (var b in Object.FindObjectsByType<MenuBeatBopper>(FindObjectsInactive.Include, FindObjectsSortMode.None))
         {
             var t = b.transform;

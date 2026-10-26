@@ -6404,6 +6404,7 @@ MonoBehaviour:
   introRollAngle: 115
   extraRotations: 0
   idleBlendOutFraction: 0.35
+  beatBlendOutFraction: 0.8
   introDuration: 3.5
   zoomEase: 4
   rollEase: 4
@@ -20902,6 +20903,12 @@ MonoBehaviour:
   tiltPeriod: 6.5
   twistDegrees: 1.2
   twistPeriod: 9
+  hopHeight: 0.6
+  pumpScale: 0.02
+  everyNBeats: 1
+  beatOffset: 0
+  pumpRelaxPower: 2.2
+  fallbackBpm: 110
 --- !u!1 &1709233637
 GameObject:
   m_ObjectHideFlags: 0
