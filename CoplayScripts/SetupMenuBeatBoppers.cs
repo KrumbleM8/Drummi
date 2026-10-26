@@ -17,8 +17,8 @@ using KrumbleHut.Drummi.FlashCards;
 /// </summary>
 public static class SetupMenuBeatBoppers
 {
-    private const string MusicPath  = "Assets/Audio/Songs/Boppy_110.wav";
-    private const double MusicBpm   = 110.0;
+    private const string MusicPath  = "Assets/Audio/Songs/ComputerBoy_Drummi_111.wav";
+    private const double MusicBpm   = 111.0;
     private const string PrefabPath = "Assets/Prefabs/MenuSign.prefab";
 
     // hierarchy path → (stretchY, squashX, everyN, offset)
@@ -70,7 +70,18 @@ public static class SetupMenuBeatBoppers
         cso.FindProperty("firstBeatOffset").floatValue  = 0f;
         cso.FindProperty("source").objectReferenceValue = src;
         cso.FindProperty("volume").floatValue           = 0.8f;
+        cso.FindProperty("scheduleLead").floatValue     = 0.5f;
+        cso.FindProperty("resyncTolerance").floatValue  = 0.06f;
         cso.ApplyModifiedPropertiesWithoutUndo();
+
+        // The planet's own hop (PlanetIdleMotion) must free-run at the same tempo.
+        foreach (var idle in Object.FindObjectsByType<PlanetIdleMotion>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+        {
+            var iso = new SerializedObject(idle);
+            iso.FindProperty("fallbackBpm").floatValue = (float)MusicBpm;
+            iso.ApplyModifiedPropertiesWithoutUndo();
+            EditorUtility.SetDirty(idle);
+        }
         sb.AppendLine($"MenuBeatClock: clip={(clip ? clip.name : "null")} bpm={MusicBpm}");
 
         var controller = Object.FindFirstObjectByType<FlashCardsMenuController>(FindObjectsInactive.Include);
@@ -143,7 +154,7 @@ public static class SetupMenuBeatBoppers
         so.FindProperty("stretchY").floatValue     = stretch;
         so.FindProperty("squashX").floatValue      = squash;
         so.FindProperty("relaxPower").floatValue   = 2.2f;
-        so.FindProperty("anticipation").floatValue = 0.12f;
+        so.FindProperty("anticipation").floatValue = 0f; // hard snap on the beat (gameplay-pad feel)
         so.FindProperty("everyNBeats").intValue    = everyN;
         so.FindProperty("beatOffset").intValue     = offset;
         so.FindProperty("fallbackBpm").floatValue  = (float)MusicBpm;

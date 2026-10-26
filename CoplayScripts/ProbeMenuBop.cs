@@ -13,6 +13,15 @@ public static class ProbeMenuBop
         else
         {
             var src = clock.GetComponent<AudioSource>();
+            if (src != null && src.clip != null)
+            {
+                // Where the AUDIO says the beat is vs where the grid says it is.
+                double audioBeats = (double)src.timeSamples / src.clip.frequency / clock.BeatInterval;
+                double gridBeats  = clock.BeatPosition;
+                double err = (gridBeats - audioBeats) - System.Math.Round(gridBeats - audioBeats);
+                sb.AppendLine($"grid-vs-audio: audioPhase={audioBeats - System.Math.Floor(audioBeats):F3} gridPhase={clock.BeatPhase:F3} " +
+                              $"err={err * clock.BeatInterval * 1000.0:+0;-0} ms  loop={src.loop} clipLen={src.clip.length:F2}s beatsPerLoop={src.clip.length / clock.BeatInterval:F3}");
+            }
             sb.AppendLine($"clock running={clock.IsRunning} beat={clock.BeatIndex} phase={clock.BeatPhase:F2} interval={clock.BeatInterval:F3} " +
                           $"volumeScale={clock.VolumeScale:F2} src.volume={(src != null ? src.volume : -1f):F2} " +
                           $"src.isPlaying={(src != null && src.isPlaying)} src.time={(src != null ? src.time : -1f):F2} clip={(src != null && src.clip != null ? src.clip.name : "null")}");

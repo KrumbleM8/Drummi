@@ -40,8 +40,8 @@ namespace KrumbleHut.Drummi.FlashCards
         [Tooltip("How fast the stretch relaxes after the beat: 1 = linear sag to the next beat, 2–3 = quick drop then a long gentle settle.")]
         [SerializeField, Range(0.5f, 6f)] private float relaxPower = 2.2f;
 
-        [Tooltip("Fraction of the period spent rising into the next peak (anticipation). 0 = hard snap on the beat.")]
-        [SerializeField, Range(0f, 0.5f)] private float anticipation = 0.12f;
+        [Tooltip("Fraction of the period spent rising into the next peak (anticipation). 0 = hard snap exactly on the beat, like the gameplay pads; any rise starts that much before the beat and reads early.")]
+        [SerializeField, Range(0f, 0.5f)] private float anticipation = 0f;
 
         [Header("Which Beats")]
         [Tooltip("One bounce every N beats (1 = every beat).")]

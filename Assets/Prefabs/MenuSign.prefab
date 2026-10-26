@@ -104,10 +104,10 @@ MonoBehaviour:
   stretchY: 1.06
   squashX: 0.3
   relaxPower: 2.2
-  anticipation: 0.12
+  anticipation: 0
   everyNBeats: 1
   beatOffset: 0
-  fallbackBpm: 110
+  fallbackBpm: 111
 --- !u!1 &4150825587298474686
 GameObject:
   m_ObjectHideFlags: 0

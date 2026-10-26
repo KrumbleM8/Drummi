@@ -47,8 +47,11 @@ namespace KrumbleHut.Drummi.FlashCards
 
         [SerializeField, Range(0f, 1f)] private float volume = 0.8f;
 
-        [Tooltip("Seconds of DSP lead time before the first sample so the scheduled start is never in the past.")]
-        [SerializeField, Min(0.02f)] private float scheduleLead = 0.1f;
+        [Tooltip("Seconds of DSP lead time before the first sample. Must outlast the scene-load frame hitch: a scheduled time that is already past when the audio thread sees it starts late, and the beat grid would then run ahead of the sound.")]
+        [SerializeField, Min(0.02f)] private float scheduleLead = 0.5f;
+
+        [Tooltip("If the AudioSource's real play position drifts from the DSP-derived grid by more than this (seconds), the grid is re-anchored to the audio. Covers a late scheduled start and any loop/seek. Keep above the DSP buffer length (~20–45 ms) so timeSamples jitter never triggers it.")]
+        [SerializeField, Min(0.03f)] private float resyncTolerance = 0.06f;
 
         /// <summary>Raised once per beat (index is the beat number since the clip start, loop-aware).</summary>
         public event Action<long> Beat;
@@ -151,10 +154,30 @@ namespace KrumbleHut.Drummi.FlashCards
             if (!_running) return;
 
             // Track loops from the DSP clock rather than AudioSource.time
-            // (which is quantised to audio buffers and jitters).
+            // (which is quantised to audio buffers and jitters)...
             double elapsed = AudioSettings.dspTime - _startDsp;
             if (elapsed >= 0.0 && _clipLength > 0.0)
                 _loopsCompleted = (long)Math.Floor(elapsed / _clipLength);
+
+            // ...but keep the grid honest against the audio that is actually
+            // playing: timeSamples is the truth for where the clip is. Only a
+            // gross mismatch (late start, seek, loop glitch) re-anchors, so
+            // buffer-sized jitter never moves the beat.
+            if (elapsed > 0.25 && _clipLength > 0.0 && source.isPlaying && source.clip != null)
+            {
+                double actual   = (double)source.timeSamples / source.clip.frequency;
+                double expected = elapsed - _loopsCompleted * _clipLength;
+                double diff     = actual - expected;
+                if (diff >  _clipLength * 0.5) diff -= _clipLength;
+                if (diff < -_clipLength * 0.5) diff += _clipLength;
+                if (Math.Abs(diff) > resyncTolerance)
+                {
+                    _startDsp -= diff;
+                    elapsed = AudioSettings.dspTime - _startDsp;
+                    _loopsCompleted = (long)Math.Floor(elapsed / _clipLength);
+                    Debug.Log($"[MenuBeatClock] Re-anchored beat grid to the audio position (audio was {diff * 1000.0:+0;-0} ms from the DSP grid).");
+                }
+            }
 
             long index = BeatIndex;
             if (index > _lastBeatIndex)

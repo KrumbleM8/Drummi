@@ -807,12 +807,13 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 79f7b7cafd7d7274d9a3349d7281f3be, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  music: {fileID: 8300000, guid: f8c1351ddc3921148a17a8e5274f2635, type: 3}
-  bpm: 110
+  music: {fileID: 8300000, guid: 18417d6443a7fb04bb4105ec5eff712b, type: 3}
+  bpm: 111
   firstBeatOffset: 0
   source: {fileID: 94453194}
   volume: 0.8
-  scheduleLead: 0.1
+  scheduleLead: 0.5
+  resyncTolerance: 0.06
 --- !u!82 &94453194
 AudioSource:
   m_ObjectHideFlags: 0
@@ -823,8 +824,8 @@ AudioSource:
   m_Enabled: 1
   serializedVersion: 4
   OutputAudioMixerGroup: {fileID: 0}
-  m_audioClip: {fileID: 8300000, guid: f8c1351ddc3921148a17a8e5274f2635, type: 3}
-  m_Resource: {fileID: 8300000, guid: f8c1351ddc3921148a17a8e5274f2635, type: 3}
+  m_audioClip: {fileID: 8300000, guid: 18417d6443a7fb04bb4105ec5eff712b, type: 3}
+  m_Resource: {fileID: 8300000, guid: 18417d6443a7fb04bb4105ec5eff712b, type: 3}
   m_PlayOnAwake: 0
   m_Volume: 1
   m_Pitch: 1
@@ -1557,10 +1558,10 @@ MonoBehaviour:
   stretchY: 1.03
   squashX: 0.2
   relaxPower: 2.2
-  anticipation: 0.12
+  anticipation: 0
   everyNBeats: 2
   beatOffset: 0
-  fallbackBpm: 110
+  fallbackBpm: 111
 --- !u!1 &165663947
 GameObject:
   m_ObjectHideFlags: 0
@@ -3923,10 +3924,10 @@ MonoBehaviour:
   stretchY: 1.1
   squashX: 0.4
   relaxPower: 2.2
-  anticipation: 0.12
+  anticipation: 0
   everyNBeats: 1
   beatOffset: 0
-  fallbackBpm: 110
+  fallbackBpm: 111
 --- !u!1001 &337750980
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -7596,10 +7597,10 @@ MonoBehaviour:
   stretchY: 1.12
   squashX: 0.4
   relaxPower: 2.2
-  anticipation: 0.12
+  anticipation: 0
   everyNBeats: 1
   beatOffset: 0
-  fallbackBpm: 110
+  fallbackBpm: 111
 --- !u!1 &627800785
 GameObject:
   m_ObjectHideFlags: 0
@@ -7996,10 +7997,10 @@ MonoBehaviour:
   stretchY: 1.1
   squashX: 0.4
   relaxPower: 2.2
-  anticipation: 0.12
+  anticipation: 0
   everyNBeats: 1
   beatOffset: 0
-  fallbackBpm: 110
+  fallbackBpm: 111
 --- !u!1 &655158732
 GameObject:
   m_ObjectHideFlags: 0
@@ -11396,10 +11397,10 @@ MonoBehaviour:
   stretchY: 1.1
   squashX: 0.4
   relaxPower: 2.2
-  anticipation: 0.12
+  anticipation: 0
   everyNBeats: 1
   beatOffset: 0
-  fallbackBpm: 110
+  fallbackBpm: 111
 --- !u!1 &896904295
 GameObject:
   m_ObjectHideFlags: 0
@@ -16537,10 +16538,10 @@ MonoBehaviour:
   stretchY: 1.12
   squashX: 0.4
   relaxPower: 2.2
-  anticipation: 0.12
+  anticipation: 0
   everyNBeats: 1
   beatOffset: 0
-  fallbackBpm: 110
+  fallbackBpm: 111
 --- !u!1 &1346623473
 GameObject:
   m_ObjectHideFlags: 0
@@ -17371,10 +17372,10 @@ MonoBehaviour:
   stretchY: 1.1
   squashX: 0.4
   relaxPower: 2.2
-  anticipation: 0.12
+  anticipation: 0
   everyNBeats: 1
   beatOffset: 0
-  fallbackBpm: 110
+  fallbackBpm: 111
 --- !u!1 &1415205947
 GameObject:
   m_ObjectHideFlags: 0
@@ -18134,10 +18135,10 @@ MonoBehaviour:
   stretchY: 1.12
   squashX: 0.4
   relaxPower: 2.2
-  anticipation: 0.12
+  anticipation: 0
   everyNBeats: 1
   beatOffset: 0
-  fallbackBpm: 110
+  fallbackBpm: 111
 --- !u!1 &1470127136
 GameObject:
   m_ObjectHideFlags: 0
@@ -20307,10 +20308,10 @@ MonoBehaviour:
   stretchY: 1.12
   squashX: 0.4
   relaxPower: 2.2
-  anticipation: 0.12
+  anticipation: 0
   everyNBeats: 1
   beatOffset: 0
-  fallbackBpm: 110
+  fallbackBpm: 111
 --- !u!1 &1666432403
 GameObject:
   m_ObjectHideFlags: 0
@@ -20908,7 +20909,7 @@ MonoBehaviour:
   everyNBeats: 1
   beatOffset: 0
   pumpRelaxPower: 2.2
-  fallbackBpm: 110
+  fallbackBpm: 111
 --- !u!1 &1709233637
 GameObject:
   m_ObjectHideFlags: 0
@@ -22361,10 +22362,10 @@ MonoBehaviour:
   stretchY: 1.015
   squashX: 0
   relaxPower: 2.2
-  anticipation: 0.12
+  anticipation: 0
   everyNBeats: 2
   beatOffset: 0
-  fallbackBpm: 110
+  fallbackBpm: 111
 --- !u!1 &1788323808
 GameObject:
   m_ObjectHideFlags: 0
