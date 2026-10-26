@@ -26,6 +26,12 @@ namespace KrumbleHut.Drummi.FlashCards
     ///   menu panel would stay covered forever).
     ///   modeController — the scene's FlashCardsModeController.
     ///   menuObjects / gameplayObjects — roots toggled by the menu↔gameplay swap.
+    ///
+    /// SIGN PREVIEWS: each sign may carry a MenuSignPreview (how-to-play
+    /// panel). This controller alone decides visibility — RefreshPreviews
+    /// shows exactly the focused sign's panel when the globe IsSettled and
+    /// the menu is interactive (not leaving, not in the intro) and hides
+    /// every panel otherwise; MenuSignNode adds the locked gate.
     /// </summary>
     public class FlashCardsMenuController : MonoBehaviour
     {
@@ -72,7 +78,11 @@ namespace KrumbleHut.Drummi.FlashCards
                 if (node != null) node.Selected += HandleNodeSelected;
 
             if (backButton != null) backButton.onClick.AddListener(BackToHome);
-            if (spinner != null) spinner.FocusedIndexChanged += HandleFocusedIndexChanged;
+            if (spinner != null)
+            {
+                spinner.FocusedIndexChanged += HandleFocusedIndexChanged;
+                spinner.SettledChanged      += HandleSettledChanged; // before SnapToCurrent — catches the first settle
+            }
 
             _index = PendingFocusIndex >= 0 && nodes.Count > 0
                 ? Mathf.Clamp(PendingFocusIndex, 0, nodes.Count - 1)
@@ -88,7 +98,11 @@ namespace KrumbleHut.Drummi.FlashCards
                 if (node != null) node.Selected -= HandleNodeSelected;
 
             if (backButton != null) backButton.onClick.RemoveListener(BackToHome);
-            if (spinner != null) spinner.FocusedIndexChanged -= HandleFocusedIndexChanged;
+            if (spinner != null)
+            {
+                spinner.FocusedIndexChanged -= HandleFocusedIndexChanged;
+                spinner.SettledChanged      -= HandleSettledChanged;
+            }
         }
 
         // ── Navigation ────────────────────────────────────────────────────────
@@ -109,6 +123,22 @@ namespace KrumbleHut.Drummi.FlashCards
         {
             for (int i = 0; i < nodes.Count; i++)
                 if (nodes[i] != null) nodes[i].SetFocused(i == _index);
+            RefreshPreviews();
+        }
+
+        /// <summary>Globe came to rest on a sign, or started moving again.</summary>
+        private void HandleSettledChanged(bool settled) => RefreshPreviews();
+
+        /// <summary>
+        /// Single decision point for the how-to-play panels: only the focused
+        /// sign's, only while the globe rests on it and the menu is live.
+        /// Safe to call at any time (nodes forward to an optional preview).
+        /// </summary>
+        private void RefreshPreviews()
+        {
+            bool show = !_leaving && spinner != null && spinner.IsSettled;
+            for (int i = 0; i < nodes.Count; i++)
+                if (nodes[i] != null) nodes[i].SetPreviewShown(show && i == _index);
         }
 
         // ── Launch / Exit ─────────────────────────────────────────────────────
@@ -137,6 +167,7 @@ namespace KrumbleHut.Drummi.FlashCards
 
             _leaving = true;
             if (spinner != null) spinner.SetInputEnabled(false);
+            RefreshPreviews(); // hide before the cover starts
 
             switch (node.Definition)
             {
@@ -155,6 +186,7 @@ namespace KrumbleHut.Drummi.FlashCards
                                    $"({node.Definition.GetType().Name}) — nothing launched.");
                     _leaving = false;
                     if (spinner != null) spinner.SetInputEnabled(true);
+                    RefreshPreviews();
                     break;
             }
         }
@@ -195,6 +227,7 @@ namespace KrumbleHut.Drummi.FlashCards
             UpdateFocusVisuals();
             if (spinner != null) spinner.SetInputEnabled(true);
             _leaving = false;
+            RefreshPreviews(); // preview fades in under the reveal
 
             if (screenTransitioner != null) screenTransitioner.StartReveal();
         }
@@ -208,6 +241,7 @@ namespace KrumbleHut.Drummi.FlashCards
         {
             _leaving = !interactive;
             if (spinner != null) spinner.SetInputEnabled(interactive);
+            RefreshPreviews();
         }
 
         private void SetMenuShown(bool menuShown)
@@ -225,6 +259,7 @@ namespace KrumbleHut.Drummi.FlashCards
             _leaving = true;
 
             if (spinner != null) spinner.SetInputEnabled(false);
+            RefreshPreviews();
             HomeFlowController.SkipIntro = true;
             StartCoroutine(TransitionToScene("New_Home"));
         }

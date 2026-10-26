@@ -40,6 +40,10 @@ namespace KrumbleHut.Drummi.FlashCards
         [Tooltip("Multiplied into every sprite/label color while locked.")]
         [SerializeField] private Color lockedTint = new Color(0.45f, 0.45f, 0.45f, 1f);
 
+        [Header("Preview (optional)")]
+        [Tooltip("How-to-play panel shown while this sign is focused and the globe is settled. Never shown while locked.")]
+        [SerializeField] private MenuSignPreview preview;
+
         /// <summary>Raised when the sign's button is pressed.</summary>
         public event Action<MenuSignNode> Selected;
 
@@ -100,6 +104,16 @@ namespace KrumbleHut.Drummi.FlashCards
                 .SetEase(Ease.OutBack)
                 .SetUpdate(true)
                 .SetLink(gameObject);
+        }
+
+        /// <summary>
+        /// Show/hide this sign's how-to-play preview (FlashCardsMenuController
+        /// decides when: focused + globe settled + menu interactive). Locked
+        /// signs never show theirs — the panel is built so Unlock() just works.
+        /// </summary>
+        public void SetPreviewShown(bool shown)
+        {
+            if (preview != null) preview.SetShown(shown && !IsLocked);
         }
 
         // ── Lock ──────────────────────────────────────────────────────────────

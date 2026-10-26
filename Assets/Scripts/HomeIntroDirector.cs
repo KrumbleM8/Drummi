@@ -338,7 +338,9 @@ namespace KrumbleHut.Drummi.FlashCards
                 if (constantSizeBackdrop[i] != null) constantSizeBackdrop[i].localScale = _backdropBaseScale[i];
             if (spinner != null)
             {
-                spinner.SetAngle(0f, force: true);
+                // SnapTo (not SetAngle): same force-applied angle 0, but it also
+                // marks the globe settled so the focused sign's preview can show.
+                spinner.SnapTo(0);
                 spinner.RefreshRimSorting();
             }
 

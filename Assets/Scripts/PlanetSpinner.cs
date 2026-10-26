@@ -43,6 +43,16 @@ namespace KrumbleHut.Drummi.FlashCards
     /// horizonFlipAngle fallback is only used when no camera is assigned. Caches renderers in Awake — no
     /// per-spin allocations.
     ///
+    /// SETTLE STATE: IsSettled / SettledChanged tell listeners (the sign
+    /// previews via FlashCardsMenuController) whether the globe is at rest on
+    /// a sign. It goes false the moment a gesture is promoted to a drag, when
+    /// a snap/focus tween starts or is interrupted, and while SetAngle drives
+    /// the intro roll; it goes true when a snap tween completes or SnapTo
+    /// lands. Unlike FocusedIndexChanged (which fires mid-motion as the
+    /// nearest sign changes), a true SettledChanged means the globe is still
+    /// and FocusedIndex is the resting sign. Sub-threshold pointer wiggles
+    /// never unsettle it.
+    ///
     /// INSPECTOR SETUP: signMounts — one child mount per sign, in index order
     /// (index 0 = start focus). Use the ArrangeSigns context menu to lay the
     /// mounts out along the rim at anglePerSign spacing. The sphere child must
@@ -101,9 +111,24 @@ namespace KrumbleHut.Drummi.FlashCards
         /// <summary>Index of the sign nearest the focus point.</summary>
         public int FocusedIndex => NearestIndex(_currentAngle);
 
+        /// <summary>
+        /// True while the globe rests on a sign: no promoted drag, no snap /
+        /// focus tween in flight, not being driven by SetAngle (intro).
+        /// </summary>
+        public bool IsSettled => _settled;
+
+        /// <summary>
+        /// Raised when IsSettled changes. On true, FocusedIndex is the sign the
+        /// globe rests on (FocusedIndexChanged has already fired for it).
+        /// </summary>
+        public event Action<bool> SettledChanged;
+
         private float _currentAngle;
         private int   _focusedIndex;
         private float _maxAngle;
+        private bool  _settled;
+
+        private TweenCallback _onSnapComplete; // cached — no per-tween closure
 
         // Gesture state
         private bool    _isDragging;
@@ -145,6 +170,8 @@ namespace KrumbleHut.Drummi.FlashCards
             _pressAction.canceled += OnPointerUp;
             _deltaAction.performed += OnDragPerformed;
 
+            _onSnapComplete = HandleSnapComplete;
+
             BuildRimCache();
         }
 
@@ -180,6 +207,9 @@ namespace KrumbleHut.Drummi.FlashCards
             _pressAction.Disable();
             _deltaAction.Disable();
             _positionAction.Disable();
+            // A pivot deactivated mid-tween must not complete later and report
+            // "settled" on a hidden globe.
+            KillSnapTween();
             _isDragging = false;
             _promotedToDrag = false;
             _angularVelocity = 0f;
@@ -199,7 +229,7 @@ namespace KrumbleHut.Drummi.FlashCards
         public void FocusOn(int index)
         {
             KillSnapTween();
-            TweenToAngle(Mathf.Clamp(index, 0, signMounts.Count - 1) * anglePerSign);
+            TweenToAngle(Mathf.Clamp(index, 0, signMounts.Count - 1) * anglePerSign); // owns the settled state
         }
 
         /// <summary>Instantly set the planet so the sign at index is focused (menu restore).</summary>
@@ -208,6 +238,9 @@ namespace KrumbleHut.Drummi.FlashCards
             KillSnapTween();
             _angularVelocity = 0f;
             ApplyAngle(Mathf.Clamp(index, 0, signMounts.Count - 1) * anglePerSign, forceEvents: true);
+            // After ApplyAngle so FocusedIndexChanged listeners are current
+            // when they hear "settled".
+            SetSettled(true);
         }
 
         /// <summary>
@@ -220,6 +253,7 @@ namespace KrumbleHut.Drummi.FlashCards
         {
             KillSnapTween();
             _angularVelocity = 0f;
+            SetSettled(false); // intro drives this per frame; early-out keeps it quiet
             ApplyAngle(angle, force);
         }
 
@@ -245,6 +279,7 @@ namespace KrumbleHut.Drummi.FlashCards
             else
             {
                 KillSnapTween();
+                if (_promotedToDrag) SetSettled(false); // stopped mid-drag: between signs
                 _pressAction.Disable();
                 _deltaAction.Disable();
                 _positionAction.Disable();
@@ -303,7 +338,10 @@ namespace KrumbleHut.Drummi.FlashCards
             {
                 Vector2 posNow = _positionAction.ReadValue<Vector2>();
                 if ((posNow - _pointerDownPos).sqrMagnitude >= dragThreshold * dragThreshold)
+                {
                     _promotedToDrag = true;
+                    SetSettled(false); // a real drag — sub-threshold wiggles stay settled
+                }
             }
         }
 
@@ -312,16 +350,44 @@ namespace KrumbleHut.Drummi.FlashCards
         private void TweenToAngle(float target)
         {
             target = Mathf.Clamp(target, 0f, _maxAngle);
+
+            // Already there (zero-move tap / sub-threshold release): no tween,
+            // so the settled state never blinks off and on.
+            if (Mathf.Abs(target - _currentAngle) < 0.01f)
+            {
+                ApplyAngle(target);
+                SetSettled(true);
+                return;
+            }
+
+            SetSettled(false);
             _snapTween = DOTween.To(() => _currentAngle, a => ApplyAngle(a), target, snapDuration)
                 .SetEase(Ease.OutCubic)
                 .SetUpdate(true)
-                .SetLink(gameObject);
+                .SetLink(gameObject)
+                .OnComplete(_onSnapComplete);
         }
 
+        private void HandleSnapComplete()
+        {
+            _snapTween = null;
+            SetSettled(true);
+        }
+
+        /// <summary>Stops an in-flight snap; a killed tween leaves the globe between signs → unsettled.</summary>
         private void KillSnapTween()
         {
-            _snapTween?.Kill();
+            if (_snapTween == null) return;
+            _snapTween.Kill();
             _snapTween = null;
+            SetSettled(false);
+        }
+
+        private void SetSettled(bool settled)
+        {
+            if (settled == _settled) return;
+            _settled = settled;
+            SettledChanged?.Invoke(settled);
         }
 
         /// <summary>
