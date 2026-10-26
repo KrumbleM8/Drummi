@@ -10,6 +10,9 @@ using KrumbleHut.Drummi.FlashCards;
 /// </summary>
 public static class CenterTitleGlobe
 {
+    /// <summary>Degrees the camera looks ABOVE the globe centre, so the planet sits that much lower in frame (0 = dead centre).</summary>
+    private const float PitchUpOffset = 2.2f;
+
     public static string Execute()
     {
         if (EditorApplication.isPlaying) return "In play mode - abort.";
@@ -27,6 +30,7 @@ public static class CenterTitleGlobe
         Vector3 euler = look.eulerAngles;
         if (euler.x > 180f) euler.x -= 360f;
         if (euler.y > 180f) euler.y -= 360f;
+        euler.x -= PitchUpOffset; // smaller pitch = camera looks higher = globe lower in frame
         euler.z = 0f;
 
         Vector3 old = so.FindProperty("introCameraEuler").vector3Value;

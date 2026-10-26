@@ -6401,7 +6401,7 @@ MonoBehaviour:
   hudHiddenDuringTitle:
   - {fileID: 217196927}
   introCameraPosition: {x: 0, y: 18, z: -64}
-  introCameraEuler: {x: 15.708638, y: 0, z: 0}
+  introCameraEuler: {x: 13.508638, y: 0, z: 0}
   introRollAngle: 115
   extraRotations: 0
   idleBlendOutFraction: 0.35
