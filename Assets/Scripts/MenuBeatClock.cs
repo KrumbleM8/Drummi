@@ -80,11 +80,28 @@ namespace KrumbleHut.Drummi.FlashCards
         {
             get
             {
-                if (!_running) return 0f;
-                double pos = ClipPosition();
-                if (pos < 0.0) return 0f;
-                double beats = pos / BeatInterval;
+                double beats = BeatPosition;
                 return (float)(beats - Math.Floor(beats));
+            }
+        }
+
+        /// <summary>
+        /// Continuous beat position (beats + fraction) for phase-driven
+        /// animation. Defined at ALL times: before the music's first beat the
+        /// grid is extrapolated backwards (negative values), and with no music
+        /// scheduled at all it free-runs on the DSP clock at bpm, so decor
+        /// bounces from the first frame of the scene (title screen included)
+        /// and keeps bouncing if the clip is missing.
+        /// </summary>
+        public double BeatPosition
+        {
+            get
+            {
+                if (!_running) return AudioSettings.dspTime / BeatInterval;
+                double elapsed = AudioSettings.dspTime - _startDsp;
+                if (elapsed < 0.0 || _clipLength <= 0.0)
+                    return (elapsed - firstBeatOffset) / BeatInterval;
+                return _loopsCompleted * _beatsPerLoop + ClipPosition() / BeatInterval;
             }
         }
 

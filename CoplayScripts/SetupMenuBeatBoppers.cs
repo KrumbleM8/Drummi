@@ -21,18 +21,20 @@ public static class SetupMenuBeatBoppers
     private const double MusicBpm   = 110.0;
     private const string PrefabPath = "Assets/Prefabs/MenuSign.prefab";
 
-    // name → (stretchY, squashX, everyN, offset)
-    private static readonly (string name, float stretch, float squash, int everyN, int offset)[] Decor =
+    // hierarchy path → (stretchY, squashX, everyN, offset)
+    private static readonly (string path, float stretch, float squash, int everyN, int offset)[] Decor =
     {
-        ("BushA", 1.09f, 0.4f, 1, 0),
-        ("BushB", 1.08f, 0.4f, 1, 0),
-        ("BushC", 1.09f, 0.4f, 1, 0),
-        ("BushD", 1.08f, 0.4f, 1, 0),
-        ("BushE", 1.09f, 0.4f, 1, 0),
-        ("BushF", 1.08f, 0.4f, 1, 0),
-        ("BushG", 1.09f, 0.4f, 1, 0),
-        ("BushH", 1.08f, 0.4f, 1, 0),
-        ("MountainOnGlobe", 1.02f, 0.2f, 2, 0),
+        ("PlanetPivot/BushA", 1.12f, 0.4f, 1, 0),
+        ("PlanetPivot/BushB", 1.10f, 0.4f, 1, 0),
+        ("PlanetPivot/BushC", 1.12f, 0.4f, 1, 0),
+        ("PlanetPivot/BushD", 1.10f, 0.4f, 1, 0),
+        ("PlanetPivot/BushE", 1.12f, 0.4f, 1, 0),
+        ("PlanetPivot/BushF", 1.10f, 0.4f, 1, 0),
+        ("PlanetPivot/BushG", 1.12f, 0.4f, 1, 0),
+        ("PlanetPivot/BushH", 1.10f, 0.4f, 1, 0),
+        ("PlanetPivot/MountainOnGlobe", 1.03f, 0.2f, 2, 0),
+        // Big parallax mountain: pure slight vertical bounce, one per two beats.
+        ("ParallaxMid/MountainMid", 1.015f, 0f, 2, 0),
     };
 
     public static string Execute()
@@ -99,27 +101,22 @@ public static class SetupMenuBeatBoppers
         {
             var bop = prefabRoot.GetComponent<MenuBeatBopper>();
             if (bop == null) bop = prefabRoot.AddComponent<MenuBeatBopper>();
-            Tune(bop, 1.045f, 0.3f, 1, 0);
+            Tune(bop, 1.06f, 0.3f, 1, 0);
             PrefabUtility.SaveAsPrefabAsset(prefabRoot, PrefabPath);
             PrefabUtility.UnloadPrefabContents(prefabRoot);
-            sb.AppendLine("MenuSign prefab: MenuBeatBopper stretch 1.045");
+            sb.AppendLine("MenuSign prefab: MenuBeatBopper stretch 1.06");
         }
 
         // ── 3. Globe decor ──────────────────────────────────────────────────
-        var pivot = GameObject.Find("PlanetPivot");
-        if (pivot == null) sb.AppendLine("WARN: PlanetPivot not found");
-        else
+        foreach (var d in Decor)
         {
-            foreach (var d in Decor)
-            {
-                var t = pivot.transform.Find(d.name);
-                if (t == null) { sb.AppendLine(d.name + ": NOT FOUND"); continue; }
-                var bop = t.GetComponent<MenuBeatBopper>();
-                if (bop == null) bop = t.gameObject.AddComponent<MenuBeatBopper>();
-                Tune(bop, d.stretch, d.squash, d.everyN, d.offset);
-                EditorUtility.SetDirty(t.gameObject);
-                sb.AppendLine($"{d.name}: stretch {d.stretch} every {d.everyN}");
-            }
+            var go = GameObject.Find(d.path);
+            if (go == null) { sb.AppendLine(d.path + ": NOT FOUND"); continue; }
+            var bop = go.GetComponent<MenuBeatBopper>();
+            if (bop == null) bop = go.AddComponent<MenuBeatBopper>();
+            Tune(bop, d.stretch, d.squash, d.everyN, d.offset);
+            EditorUtility.SetDirty(go);
+            sb.AppendLine($"{d.path}: stretch {d.stretch} every {d.everyN}");
         }
 
         // Sign instances are prefab instances: make sure the new prefab
@@ -143,11 +140,13 @@ public static class SetupMenuBeatBoppers
     private static void Tune(MenuBeatBopper bop, float stretch, float squash, int everyN, int offset)
     {
         var so = new SerializedObject(bop);
-        so.FindProperty("stretchY").floatValue   = stretch;
-        so.FindProperty("squashX").floatValue    = squash;
-        so.FindProperty("smoothTime").floatValue = 0.15f;
-        so.FindProperty("everyNBeats").intValue  = everyN;
-        so.FindProperty("beatOffset").intValue   = offset;
+        so.FindProperty("stretchY").floatValue     = stretch;
+        so.FindProperty("squashX").floatValue      = squash;
+        so.FindProperty("relaxPower").floatValue   = 2.2f;
+        so.FindProperty("anticipation").floatValue = 0.12f;
+        so.FindProperty("everyNBeats").intValue    = everyN;
+        so.FindProperty("beatOffset").intValue     = offset;
+        so.FindProperty("fallbackBpm").floatValue  = (float)MusicBpm;
         so.ApplyModifiedPropertiesWithoutUndo();
     }
 }

@@ -20,7 +20,7 @@ public static class ProbeMenuBop
         foreach (var b in Object.FindObjectsByType<MenuBeatBopper>(FindObjectsInactive.Include, FindObjectsSortMode.None))
         {
             var t = b.transform;
-            sb.AppendLine($"{t.parent?.name}/{t.name}: active={b.isActiveAndEnabled} base={b.BaseScale} scale={t.localScale} mult={b.ScaleMultiplier:F3}");
+            sb.AppendLine($"{t.parent?.name}/{t.name}: active={b.isActiveAndEnabled} base={b.BaseScale} scale={t.localScale} pulse={b.Pulse:F2} mult={b.ScaleMultiplier:F3}");
         }
 
         string s = sb.ToString();

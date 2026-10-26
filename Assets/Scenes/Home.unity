@@ -1554,11 +1554,13 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e2fb39338cfb976468ab2f9664e33da6, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  stretchY: 1.02
+  stretchY: 1.03
   squashX: 0.2
-  smoothTime: 0.15
+  relaxPower: 2.2
+  anticipation: 0.12
   everyNBeats: 2
   beatOffset: 0
+  fallbackBpm: 110
 --- !u!1 &165663947
 GameObject:
   m_ObjectHideFlags: 0
@@ -3918,11 +3920,13 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e2fb39338cfb976468ab2f9664e33da6, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  stretchY: 1.08
+  stretchY: 1.1
   squashX: 0.4
-  smoothTime: 0.15
+  relaxPower: 2.2
+  anticipation: 0.12
   everyNBeats: 1
   beatOffset: 0
+  fallbackBpm: 110
 --- !u!1001 &337750980
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -7586,11 +7590,13 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e2fb39338cfb976468ab2f9664e33da6, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  stretchY: 1.09
+  stretchY: 1.12
   squashX: 0.4
-  smoothTime: 0.15
+  relaxPower: 2.2
+  anticipation: 0.12
   everyNBeats: 1
   beatOffset: 0
+  fallbackBpm: 110
 --- !u!1 &627800785
 GameObject:
   m_ObjectHideFlags: 0
@@ -7984,11 +7990,13 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e2fb39338cfb976468ab2f9664e33da6, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  stretchY: 1.08
+  stretchY: 1.1
   squashX: 0.4
-  smoothTime: 0.15
+  relaxPower: 2.2
+  anticipation: 0.12
   everyNBeats: 1
   beatOffset: 0
+  fallbackBpm: 110
 --- !u!1 &655158732
 GameObject:
   m_ObjectHideFlags: 0
@@ -11382,11 +11390,13 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e2fb39338cfb976468ab2f9664e33da6, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  stretchY: 1.08
+  stretchY: 1.1
   squashX: 0.4
-  smoothTime: 0.15
+  relaxPower: 2.2
+  anticipation: 0.12
   everyNBeats: 1
   beatOffset: 0
+  fallbackBpm: 110
 --- !u!1 &896904295
 GameObject:
   m_ObjectHideFlags: 0
@@ -16521,11 +16531,13 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e2fb39338cfb976468ab2f9664e33da6, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  stretchY: 1.09
+  stretchY: 1.12
   squashX: 0.4
-  smoothTime: 0.15
+  relaxPower: 2.2
+  anticipation: 0.12
   everyNBeats: 1
   beatOffset: 0
+  fallbackBpm: 110
 --- !u!1 &1346623473
 GameObject:
   m_ObjectHideFlags: 0
@@ -17353,11 +17365,13 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e2fb39338cfb976468ab2f9664e33da6, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  stretchY: 1.08
+  stretchY: 1.1
   squashX: 0.4
-  smoothTime: 0.15
+  relaxPower: 2.2
+  anticipation: 0.12
   everyNBeats: 1
   beatOffset: 0
+  fallbackBpm: 110
 --- !u!1 &1415205947
 GameObject:
   m_ObjectHideFlags: 0
@@ -18114,11 +18128,13 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e2fb39338cfb976468ab2f9664e33da6, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  stretchY: 1.09
+  stretchY: 1.12
   squashX: 0.4
-  smoothTime: 0.15
+  relaxPower: 2.2
+  anticipation: 0.12
   everyNBeats: 1
   beatOffset: 0
+  fallbackBpm: 110
 --- !u!1 &1470127136
 GameObject:
   m_ObjectHideFlags: 0
@@ -20285,11 +20301,13 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e2fb39338cfb976468ab2f9664e33da6, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  stretchY: 1.09
+  stretchY: 1.12
   squashX: 0.4
-  smoothTime: 0.15
+  relaxPower: 2.2
+  anticipation: 0.12
   everyNBeats: 1
   beatOffset: 0
+  fallbackBpm: 110
 --- !u!1 &1666432403
 GameObject:
   m_ObjectHideFlags: 0
@@ -22241,6 +22259,7 @@ GameObject:
   m_Component:
   - component: {fileID: 1785354724}
   - component: {fileID: 1785354725}
+  - component: {fileID: 1785354726}
   m_Layer: 0
   m_Name: MountainMid
   m_TagString: Untagged
@@ -22318,6 +22337,25 @@ SpriteRenderer:
   m_WasSpriteAssigned: 1
   m_MaskInteraction: 0
   m_SpriteSortPoint: 0
+--- !u!114 &1785354726
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1785354723}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e2fb39338cfb976468ab2f9664e33da6, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  stretchY: 1.015
+  squashX: 0
+  relaxPower: 2.2
+  anticipation: 0.12
+  everyNBeats: 2
+  beatOffset: 0
+  fallbackBpm: 110
 --- !u!1 &1788323808
 GameObject:
   m_ObjectHideFlags: 0

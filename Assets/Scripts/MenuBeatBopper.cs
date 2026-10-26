@@ -3,43 +3,56 @@ using UnityEngine;
 namespace KrumbleHut.Drummi.FlashCards
 {
     /// <summary>
-    /// Drop-in "bop to the menu music" for anything in the Home globe scene:
-    /// signs, bushes, the on-globe mountain, future decor. Menu twin of the
-    /// gameplay BounceOnBeat with the same feel — on every beat the Y scale
-    /// snaps up to stretchY and SmoothDamps back to rest (smoothTime), with an
-    /// optional sideways squash so the stretch reads as a bounce rather than a
-    /// grow. Driven by MenuBeatClock.Instance (polled, no wiring); idles at the
-    /// rest scale when no clock is active.
+    /// Drop-in "bop to the menu music" for anything in the Home scene: signs,
+    /// bushes, the on-globe mountain, the big parallax mountain, future decor.
     ///
-    /// Scale is the ONLY thing written (localScale, every frame while enabled),
-    /// so it coexists with TreeAnimationEffect (position/rotation shake) on the
-    /// bushes. Anything else that wants to scale the same transform must go
-    /// through ScaleMultiplier instead of writing localScale — MenuSignNode
-    /// routes its focus pop through it (same pattern as DrumPadStateVisual →
+    /// Continuous, phase-driven: every frame the scale is a pure function of
+    /// the beat position (MenuBeatClock.Instance.BeatPosition), so the object
+    /// is always in motion — peak stretch on the beat, relaxing through the
+    /// beat, a short anticipation rise into the next one. Nothing to trigger,
+    /// nothing to catch up: it moves from the first frame of the scene,
+    /// including the title screen, and before the music's first beat the
+    /// clock extrapolates the grid backwards. With no clock at all (component
+    /// missing / disabled) it free-runs at fallbackBpm so the menu never
+    /// looks dead.
+    ///
+    /// Scale is the ONLY thing written (localScale, every frame while
+    /// enabled), so it coexists with TreeAnimationEffect (position/rotation
+    /// shake) on the bushes and with HomeIntroDirector moving MountainMid.
+    /// Anything else that wants to scale the same transform must go through
+    /// ScaleMultiplier instead of writing localScale — MenuSignNode routes its
+    /// focus pop through it (same pattern as DrumPadStateVisual →
     /// BounceOnBeat.ScaleMultiplier).
     ///
-    /// Beat selection: everyNBeats / beatOffset pick which beats bop (e.g.
-    /// 2 / 1 = the off-beats), so a scene can be layered rather than having
-    /// everything jump at once.
+    /// Beat selection: everyNBeats / beatOffset pick the bounce period (e.g.
+    /// 2 / 0 = one slow bounce per two beats from the downbeat), so a scene
+    /// can be layered rather than having everything jump in unison.
     /// </summary>
     public class MenuBeatBopper : MonoBehaviour
     {
         [Header("Bounce")]
-        [Tooltip("Y scale (relative to rest) the object snaps to on the beat. BounceOnBeat pads use 1.3; decor wants 1.03–1.1.")]
-        [SerializeField, Min(0f)] private float stretchY = 1.06f;
+        [Tooltip("Y scale (relative to rest) at the peak of each bounce. Decor wants 1.04–1.12.")]
+        [SerializeField, Min(0f)] private float stretchY = 1.08f;
 
-        [Tooltip("Fraction of the Y growth taken off X on the beat (0 = pure stretch, 0.5 = cartoon squash-and-stretch).")]
+        [Tooltip("Fraction of the Y growth taken off X at the peak (0 = pure stretch, 0.5 = cartoon squash-and-stretch).")]
         [SerializeField, Range(0f, 1f)] private float squashX = 0.35f;
 
-        [Tooltip("SmoothDamp time back to rest — BounceOnBeat uses 0.15.")]
-        [SerializeField, Min(0.01f)] private float smoothTime = 0.15f;
+        [Tooltip("How fast the stretch relaxes after the beat: 1 = linear sag to the next beat, 2–3 = quick drop then a long gentle settle.")]
+        [SerializeField, Range(0.5f, 6f)] private float relaxPower = 2.2f;
+
+        [Tooltip("Fraction of the period spent rising into the next peak (anticipation). 0 = hard snap on the beat.")]
+        [SerializeField, Range(0f, 0.5f)] private float anticipation = 0.12f;
 
         [Header("Which Beats")]
-        [Tooltip("Bop every N beats (1 = every beat).")]
+        [Tooltip("One bounce every N beats (1 = every beat).")]
         [SerializeField, Min(1)] private int everyNBeats = 1;
 
-        [Tooltip("Which beat within the group (0 = the downbeat of each group).")]
+        [Tooltip("Which beat within the group carries the peak (0 = the group's downbeat).")]
         [SerializeField, Min(0)] private int beatOffset = 0;
+
+        [Header("Fallback")]
+        [Tooltip("Tempo used when no MenuBeatClock is active, so the bounce still runs.")]
+        [SerializeField, Min(1f)] private float fallbackBpm = 110f;
 
         /// <summary>
         /// Runtime-only uniform multiplier for other systems that need to scale
@@ -51,74 +64,62 @@ namespace KrumbleHut.Drummi.FlashCards
         /// <summary>Rest scale captured in Awake (before anything animates it).</summary>
         public Vector3 BaseScale => _baseScale;
 
+        /// <summary>Current bounce amount, 1 at the peak, 0 fully relaxed (read-only, for debugging).</summary>
+        public float Pulse { get; private set; }
+
         private Vector3 _baseScale;
-        private float   _pulse;          // 1 on the beat, SmoothDamps to 0
-        private float   _pulseVelocity;
-        private long    _lastBeatIndex = -1;
 
         private void Awake()
         {
             _baseScale = transform.localScale;
         }
 
-        private void OnEnable()
-        {
-            // Fresh start: the clock is re-anchored whenever the menu comes back.
-            _lastBeatIndex = -1;
-            _pulse = 0f;
-            _pulseVelocity = 0f;
-        }
-
         private void OnDisable()
         {
-            // Leave the transform exactly at rest so a disabled object never
-            // keeps a half-bounce (and the sign focus pop still shows).
+            // Leave the transform exactly at rest so a hidden object never
+            // keeps a half-bounce (the sign focus pop is preserved).
             transform.localScale = _baseScale * ScaleMultiplier;
         }
 
         private void Update()
         {
-            DetectBeat();
+            Pulse = Shape(PeriodPhase());
 
-            // SmoothDamp divides by deltaTime — skip the frame when time is frozen.
-            if (Time.deltaTime > 0f)
-                _pulse = Mathf.SmoothDamp(_pulse, 0f, ref _pulseVelocity, smoothTime);
-
-            float growY = (stretchY - 1f) * _pulse;
+            float growY = (stretchY - 1f) * Pulse;
             float x = 1f - growY * squashX;
             float y = 1f + growY;
             transform.localScale = new Vector3(_baseScale.x * x, _baseScale.y * y, _baseScale.z) * ScaleMultiplier;
         }
 
-        private void DetectBeat()
+        /// <summary>0..1 position within this bopper's bounce period (0 = the peak beat).</summary>
+        private float PeriodPhase()
         {
-            MenuBeatClock clock = MenuBeatClock.Instance;
-            if (clock == null) return;
-
-            long index = clock.BeatIndex;
-            if (index < 0 || index <= _lastBeatIndex)
-            {
-                // Clock restarted (new loop anchor) — resync without a spurious bop.
-                if (index < _lastBeatIndex) _lastBeatIndex = index;
-                return;
-            }
-
-            // First poll after enabling mid-track: adopt the current beat
-            // instead of firing for one that already passed while we were off
-            // (index 0 is a real first beat — bop it).
-            bool missedStart = _lastBeatIndex < 0 && index > 0;
-            _lastBeatIndex = index;
-            if (missedStart) return;
-
             int n = Mathf.Max(1, everyNBeats);
-            if (index % n == beatOffset % n) Bop();
+            MenuBeatClock clock = MenuBeatClock.Instance;
+            double beats = clock != null
+                ? clock.BeatPosition
+                : Time.time * fallbackBpm / 60.0;
+            double p = (beats - beatOffset) / n;
+            p -= System.Math.Floor(p);
+            return (float)p;
         }
 
-        /// <summary>Trigger the bounce now (also handy for tap feedback).</summary>
-        public void Bop()
+        /// <summary>
+        /// Bounce envelope over one period: 1 on the beat, relaxing toward 0
+        /// with relaxPower, then an eased rise over the last `anticipation`
+        /// of the period back up to the next peak. Continuous everywhere, so
+        /// the object never sits still.
+        /// </summary>
+        private float Shape(float phase)
         {
-            _pulse = 1f;
-            _pulseVelocity = 0f;
+            float relaxSpan = 1f - anticipation;
+            if (phase < relaxSpan || relaxSpan <= 0f)
+            {
+                float t = relaxSpan > 0f ? phase / relaxSpan : 1f;
+                return Mathf.Pow(1f - t, relaxPower);
+            }
+            float u = (phase - relaxSpan) / anticipation;
+            return u * u; // ease-in to the hit
         }
     }
 }

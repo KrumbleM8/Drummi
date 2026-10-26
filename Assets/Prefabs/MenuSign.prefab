@@ -101,11 +101,13 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e2fb39338cfb976468ab2f9664e33da6, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  stretchY: 1.045
+  stretchY: 1.06
   squashX: 0.3
-  smoothTime: 0.15
+  relaxPower: 2.2
+  anticipation: 0.12
   everyNBeats: 1
   beatOffset: 0
+  fallbackBpm: 110
 --- !u!1 &4150825587298474686
 GameObject:
   m_ObjectHideFlags: 0
