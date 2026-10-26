@@ -13,8 +13,9 @@ namespace KrumbleHut.Drummi.FlashCards
     ///                tilted ±8°, then fades 0.25 s (BongoBeatFlash.FlashCall)
     ///   beat 3.33    Custard listens; the dimmed drums grow + brighten 0.3 s
     ///   beats 4,5,6  player taps L,R,L — drums kick ±11° / ×1.13 for 0.08 s
-    ///                (BongoAnimator), a 96-unit disc rises 70 above that drum
-    ///                (FlashPlayer), a gold star spins on the last (Perfect)
+    ///                (BongoAnimator) and the SAME 270-unit disc as the call pops
+    ///                near centre (FlashPlayer = call style), a gold star spins
+    ///                140 above the disc on the last tap (Perfect)
     ///   beat 7.5     drums dim again, Custard goes Happy until the next bar
     /// Every beat also pulses the hills / Custard / drums (BounceOnBeat) and
     /// the clouds scroll. Pure visuals from the game's own sprites.
@@ -51,6 +52,7 @@ namespace KrumbleHut.Drummi.FlashCards
         [SerializeField] private Image[] callOverlayImages = new Image[3];
         [SerializeField] private RectTransform[] playerFlashes = new RectTransform[3];
         [SerializeField] private Image[] playerFlashImages = new Image[3];
+        [SerializeField] private Image[] playerOverlayImages = new Image[3];
         [SerializeField] private RectTransform star;
         [SerializeField] private Image starImage;
 
@@ -69,7 +71,7 @@ namespace KrumbleHut.Drummi.FlashCards
         private static readonly bool[] TapLeft  = { true, false, true };
 
         private static readonly float CallFlashX = 135f, CallFlashY = -93f;   // (±135, −60) in a layer 33 below centre
-        private static readonly float PlayerFlashX = 200f, PlayerFlashY = -283f;
+        private const float StarAbovePlayer = 140f;                            // BongoBeatFlash.starOffsetY
 
         protected override float LoopLength => Loop;
 
@@ -83,7 +85,7 @@ namespace KrumbleHut.Drummi.FlashCards
                 _hillBaseScale[i] = hills[i] != null ? hills[i].localScale : Vector3.one;
             _playerBase = new Vector2[playerFlashes.Length];
             for (int i = 0; i < playerFlashes.Length; i++)
-                _playerBase[i] = new Vector2(TapLeft[i % TapLeft.Length] ? -PlayerFlashX : PlayerFlashX, PlayerFlashY);
+                _playerBase[i] = new Vector2(TapLeft[i % TapLeft.Length] ? -CallFlashX : CallFlashX, CallFlashY);
         }
 
         protected override void Evaluate(float t)
@@ -176,61 +178,23 @@ namespace KrumbleHut.Drummi.FlashCards
         {
             for (int k = 0; k < callFlashes.Length; k++)
             {
-                RectTransform rt = callFlashes[k];
-                if (rt == null) continue;
-                float age = t - k * Beat;
                 bool left = CallLeft[k % CallLeft.Length];
-                Color tint = left ? leftColor : rightColor;
-
-                if (age < 0f || age >= 0.37f)
-                {
-                    SetFlash(rt, callFlashImages, callOverlayImages, k, 0f, 1f, tint);
-                    continue;
-                }
-                float scale, alpha;
-                if (age < 0.08f)       { scale = Mathf.Lerp(1.25f, 1f, OutCubic(age / 0.08f)); alpha = 1f; }
-                else if (age < 0.12f)  { scale = 1f; alpha = 1f; }
-                else
-                {
-                    float fp = (age - 0.12f) / 0.25f;
-                    alpha = 1f - fp * fp;
-                    scale = 1f + 0.08f * fp;
-                }
-                rt.anchoredPosition = new Vector2(left ? -CallFlashX : CallFlashX, CallFlashY);
-                rt.localRotation = Quaternion.Euler(0f, 0f, left ? 8f : -8f);
-                SetFlash(rt, callFlashImages, callOverlayImages, k, alpha, scale, tint);
+                EvaluateBeatFlash(callFlashes[k], callFlashImages, callOverlayImages, k,
+                                  t - k * Beat, left, left ? leftColor : rightColor);
             }
         }
 
         private void EvaluatePlayerFlashes(float t)
         {
+            // Player taps use the exact same flash as the call (BongoBeatFlash.FlashPlayer → AnimateCall).
             for (int k = 0; k < playerFlashes.Length; k++)
             {
-                RectTransform rt = playerFlashes[k];
-                if (rt == null) continue;
-                float age = t - (4f * Beat + k * Beat);
                 bool left = TapLeft[k % TapLeft.Length];
-                Image img = playerFlashImages.Length > k ? playerFlashImages[k] : null;
-                Color tint = left ? leftColor : rightColor;
-
-                if (age < 0f || age >= 0.36f)
-                {
-                    tint.a = 0f; if (img != null) img.color = tint;
-                    continue;
-                }
-                float scale, alpha, rise;
-                if (age < 0.06f) { scale = Mathf.Lerp(0.75f, 1f, OutBack(age / 0.06f)); alpha = 1f; rise = 0f; }
-                else
-                {
-                    float fp = (age - 0.06f) / 0.3f;
-                    scale = 1f; alpha = 1f - fp; rise = 70f * fp;
-                }
-                rt.anchoredPosition = _playerBase[k] + new Vector2(0f, rise);
-                SetScale(rt, scale);
-                tint.a = alpha; if (img != null) img.color = tint;
+                EvaluateBeatFlash(playerFlashes[k], playerFlashImages, playerOverlayImages, k,
+                                  t - (4f * Beat + k * Beat), left, left ? leftColor : rightColor);
             }
 
-            // Perfect star on the last tap: 60 above the flash; spin+grow 0.17 s → settle 0.12 s → fade 0.45 s.
+            // Perfect star on the last tap: 140 above the flash centre (just over the disc's rim); spin+grow 0.17 s → settle 0.12 s → fade 0.45 s.
             if (star != null && starImage != null)
             {
                 int last = TapLeft.Length - 1;
@@ -242,12 +206,36 @@ namespace KrumbleHut.Drummi.FlashCards
                     if (age < 0.17f)      { float p = age / 0.17f; scale = 1.2f * OutBack(p); rot = 360f * p; }
                     else if (age < 0.29f) { scale = Mathf.Lerp(1.2f, 0.8f, (age - 0.17f) / 0.12f); }
                     else                  { scale = 0.8f; alpha = 1f - (age - 0.29f) / 0.45f; }
-                    star.anchoredPosition = _playerBase[last] + new Vector2(0f, 60f);
+                    star.anchoredPosition = _playerBase[last] + new Vector2(0f, StarAbovePlayer);
                     star.localRotation = Quaternion.Euler(0f, 0f, rot);
                     SetScale(star, scale);
                     SetAlpha(starImage, alpha);
                 }
             }
+        }
+
+        /// <summary>One BongoBeatFlash.AnimateCall flash: pop 1.25→1 over 0.08 s, hold 0.04 s, fade 0.25 s drifting to ×1.08.</summary>
+        private static void EvaluateBeatFlash(RectTransform rt, Image[] images, Image[] overlays, int k, float age, bool left, Color tint)
+        {
+            if (rt == null) return;
+
+            if (age < 0f || age >= 0.37f)
+            {
+                SetFlash(rt, images, overlays, k, 0f, 1f, tint);
+                return;
+            }
+            float scale, alpha;
+            if (age < 0.08f)       { scale = Mathf.Lerp(1.25f, 1f, OutCubic(age / 0.08f)); alpha = 1f; }
+            else if (age < 0.12f)  { scale = 1f; alpha = 1f; }
+            else
+            {
+                float fp = (age - 0.12f) / 0.25f;
+                alpha = 1f - fp * fp;
+                scale = 1f + 0.08f * fp;
+            }
+            rt.anchoredPosition = new Vector2(left ? -CallFlashX : CallFlashX, CallFlashY);
+            rt.localRotation = Quaternion.Euler(0f, 0f, left ? 8f : -8f);
+            SetFlash(rt, images, overlays, k, alpha, scale, tint);
         }
 
         private static void SetFlash(RectTransform rt, Image[] images, Image[] overlays, int k, float alpha, float scale, Color tint)

@@ -13912,15 +13912,10 @@ MonoBehaviour:
   callHoldDuration: 0.04
   callFadeDuration: 0.25
   callFadeEndScale: 1.08
-  playerSize: 96
-  playerOffsetX: 200
-  playerOffsetY: -250
-  playerRise: 70
-  playerPopDuration: 0.06
-  playerFadeDuration: 0.3
-  playerMissDrop: 40
   missColor: {r: 0.5, g: 0.5, b: 0.5, a: 1}
-  starOffsetY: 60
+  playerOffTimingTilt: 45
+  playerMissTilt: 90
+  starOffsetY: 140
   starGrowDuration: 0.17
   starShrinkDuration: 0.12
   starPeakScale: 1.2

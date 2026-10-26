@@ -19,7 +19,7 @@ public class PlayerInputVisualHandler : MonoBehaviour
     public GameObject perfectInputStarPrefab;
 
     [Header("Flash Mode")]
-    [Tooltip("Optional. When assigned and its Use Flash is on, player hits show as small rising/sinking flashes above the bongos instead of dots on the slider.")]
+    [Tooltip("Optional. When assigned and its Use Flash is on, player hits flash big near centre in the same style as Custard's call beats instead of dots on the slider.")]
     public BongoBeatFlash beatFlash;
 
     [Header("Metronome Reference")]
@@ -182,7 +182,7 @@ public class PlayerInputVisualHandler : MonoBehaviour
             return;
         }
 
-        // Flash mode: small rising flash above the hit-side bongo instead of a slider dot.
+        // Flash mode: big centre flash in the call's style instead of a slider dot.
         if (beatFlash != null && beatFlash.useFlash)
         {
             beatFlash.FlashPlayer(inputIndicatorPrefab, isRightBongo,
@@ -207,7 +207,7 @@ public class PlayerInputVisualHandler : MonoBehaviour
             return;
         }
 
-        // Flash mode: grey, tilted, sinking flash above the hit-side bongo.
+        // Flash mode: the same big centre flash, grey and leaning for the timing.
         if (beatFlash != null && beatFlash.useFlash)
         {
             beatFlash.FlashPlayer(inputIndicatorPrefab, isRightBongo,

@@ -8,11 +8,12 @@ using UnityEngine.UI;
 ///
 ///   • Custard's call beat  → the Indicator icon pops up LARGE near screen
 ///     centre, nudged left/right for the bongo side, then soft-fades out.
-///   • Player hit           → a SMALL icon rises from just above the hit-side
-///     bongo and fades (grey + tilted + dropping on a miss), so player feedback
-///     reads differently from Custard's call.
-///   • Perfect hit          → the PerfectStar prefab spins up over the player
-///     flash and fades.
+///   • Player hit           → the SAME big centre flash as the call (same size,
+///     placement, lean, pop and fade), tinted for the bongo side; a bad hit
+///     shows the same flash in grey, leaning early/late or keeled over on a
+///     full miss.
+///   • Perfect hit          → the PerfectStar prefab spins up over the top of
+///     the player flash and fades.
 ///
 /// Lives on its own stretched RectTransform under GameplayElements so it
 /// inherits the gameplay show/hide lifecycle. Never blocks raycasts.
@@ -47,23 +48,17 @@ public class BongoBeatFlash : MonoBehaviour
     [Tooltip("Scale drifted to while fading, for a gentle release.")]
     public float callFadeEndScale = 1.08f;
 
-    [Header("Player hit feedback (small, above the bongos)")]
-    public float playerSize = 96f;
-    [Tooltip("Horizontal position; left hits at -X, right hits at +X.")]
-    public float playerOffsetX = 200f;
-    [Tooltip("Vertical offset from the layer centre (negative = toward the bongos).")]
-    public float playerOffsetY = -250f;
-    [Tooltip("How far a good/perfect hit floats upward while fading.")]
-    public float playerRise = 70f;
-    public float playerPopDuration = 0.06f;
-    public float playerFadeDuration = 0.3f;
-    [Tooltip("How far a miss sinks while fading.")]
-    public float playerMissDrop = 40f;
-    [Tooltip("Tint used for missed / wrong-side / off-timing hits.")]
+    [Header("Player hit feedback (same style as the call flash)")]
+    [Tooltip("Player hits reuse the call flash's size, position, lean, pop and fade so both read the same. Bad hits use this tint instead of the side colour.")]
     public Color missColor = Color.gray;
+    [Tooltip("Extra lean for an early (+) / late (-) hit, in degrees, on top of the side lean.")]
+    public float playerOffTimingTilt = 45f;
+    [Tooltip("Lean for a full miss / wrong-side hit, in degrees (keeled over).")]
+    public float playerMissTilt = 90f;
 
     [Header("Perfect star")]
-    public float starOffsetY = 60f;
+    [Tooltip("Height of the star above the player flash's centre; the flash is callSize tall, so ~callSize/2 sits it on the rim.")]
+    public float starOffsetY = 140f;
     public float starGrowDuration = 0.17f;
     public float starShrinkDuration = 0.12f;
     public float starPeakScale = 1.2f;
@@ -125,7 +120,11 @@ public class BongoBeatFlash : MonoBehaviour
 
     // ----------------------------------------------------------------- Player
 
-    /// <summary>Small feedback flash for a player hit. Good/Perfect rise, everything else sinks grey and tilted.</summary>
+    /// <summary>
+    /// Player hit flash: identical to <see cref="FlashCall"/> (size, placement, lean, pop, hold, fade)
+    /// so the response reads like the call. Good/Perfect use the side tint; everything else goes
+    /// grey and leans early/late, or keels over on a full miss / wrong side.
+    /// </summary>
     public void FlashPlayer(GameObject iconPrefab, bool isRightBongo, Color tint, InputMatch.MatchQuality quality)
     {
         if (!CanSpawn(iconPrefab)) return;
@@ -133,58 +132,25 @@ public class BongoBeatFlash : MonoBehaviour
         bool isGood = quality == InputMatch.MatchQuality.Perfect || quality == InputMatch.MatchQuality.Good;
 
         RectTransform rt = SpawnIcon(iconPrefab, isGood ? tint : missColor, out CanvasGroup group);
-        rt.sizeDelta = new Vector2(playerSize, playerSize);
+        rt.sizeDelta = new Vector2(callSize, callSize);
 
-        Vector2 start = new Vector2(isRightBongo ? playerOffsetX : -playerOffsetX, playerOffsetY);
-        rt.anchoredPosition = start;
-        lastPlayerPos = start;
+        Vector2 pos = new Vector2(isRightBongo ? callOffsetX : -callOffsetX, callOffsetY);
+        rt.anchoredPosition = pos;
+        lastPlayerPos = pos;
         hasPlayerPos = true;
 
-        float tilt = 0f;
+        float tilt = isRightBongo ? -callTiltDegrees : callTiltDegrees;
         if (!isGood)
         {
             // Same language as the old slider dots: early leans one way, late the other, a full miss keels over.
-            tilt = quality == InputMatch.MatchQuality.TooEarly ? 45f : -45f;
             if (quality == InputMatch.MatchQuality.Miss || quality == InputMatch.MatchQuality.WrongSide)
-                tilt = 90f;
+                tilt = playerMissTilt;
+            else
+                tilt += quality == InputMatch.MatchQuality.TooEarly ? playerOffTimingTilt : -playerOffTimingTilt;
         }
         rt.localRotation = Quaternion.Euler(0f, 0f, tilt);
 
-        StartCoroutine(AnimatePlayer(rt, group, start, isGood));
-    }
-
-    private IEnumerator AnimatePlayer(RectTransform rt, CanvasGroup group, Vector2 start, bool isGood)
-    {
-        group.alpha = 1f;
-
-        if (isGood)
-        {
-            // Quick pop: small → normal
-            yield return Tween(playerPopDuration, t =>
-            {
-                rt.localScale = Vector3.one * Mathf.Lerp(0.75f, 1f, EaseOutBack(t));
-            });
-
-            Vector2 end = start + Vector2.up * playerRise;
-            yield return Tween(playerFadeDuration, t =>
-            {
-                rt.anchoredPosition = Vector2.Lerp(start, end, EaseOutCubic(t));
-                group.alpha = 1f - EaseInQuad(t);
-            });
-        }
-        else
-        {
-            rt.localScale = Vector3.one;
-            Vector2 end = start + Vector2.down * playerMissDrop;
-            yield return Tween(playerFadeDuration, t =>
-            {
-                rt.anchoredPosition = Vector2.Lerp(start, end, EaseInQuad(t));
-                rt.localScale = Vector3.one * Mathf.Lerp(1f, 0.85f, t);
-                group.alpha = 1f - EaseInQuad(t);
-            });
-        }
-
-        if (rt != null) Destroy(rt.gameObject);
+        StartCoroutine(AnimateCall(rt, group));
     }
 
     /// <summary>Spin-up star over the most recent player flash, then fade.</summary>
@@ -197,7 +163,7 @@ public class BongoBeatFlash : MonoBehaviour
         CanvasGroup group = star.GetComponent<CanvasGroup>();
         if (group == null) group = star.AddComponent<CanvasGroup>();
 
-        Vector2 basePos = hasPlayerPos ? lastPlayerPos : new Vector2(0f, playerOffsetY);
+        Vector2 basePos = hasPlayerPos ? lastPlayerPos : new Vector2(0f, callOffsetY);
         if (star.TryGetComponent(out RectTransform rt))
         {
             rt.anchoredPosition = basePos + Vector2.up * starOffsetY;
