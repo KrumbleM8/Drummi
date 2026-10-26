@@ -12,9 +12,9 @@ using UnityEngine.UI;
 ///     placement, lean, pop and fade), tinted for the bongo side; a bad hit
 ///     shows the same flash in grey, leaning early/late or keeled over on a
 ///     full miss.
-///   • Perfect hit          → the PerfectStar prefab spins up BEHIND the player
+///   • Perfect hit          → the PerfectStar prefab pops in BEHIND the player
 ///     flash, centred on it and larger than the disc, like a background stamp,
-///     then fades.
+///     with a gentle eased turn, and fades out before the disc does.
 ///
 /// Lives on its own stretched RectTransform under GameplayElements so it
 /// inherits the gameplay show/hide lifecycle. Never blocks raycasts.
@@ -62,11 +62,16 @@ public class BongoBeatFlash : MonoBehaviour
     public float starSizeFactor = 1.6f;
     [Tooltip("Vertical offset from the player flash's centre (0 = perfectly centred behind it).")]
     public float starOffsetY = 0f;
-    public float starGrowDuration = 0.17f;
-    public float starShrinkDuration = 0.12f;
-    public float starPeakScale = 1.2f;
-    public float starRestingScale = 0.8f;
-    public float starFadeDuration = 0.45f;
+    [Tooltip("Total gentle turn over the star's whole life, in degrees (eased out, so most of it happens early).")]
+    public float starSpinDegrees = 60f;
+    [Tooltip("Scale the star pops in from before settling to 1.")]
+    public float starStartScale = 0.7f;
+    [Tooltip("Pop-in length; keep it close to callPopDuration so star and disc arrive together.")]
+    public float starGrowDuration = 0.08f;
+    [Tooltip("Fade length. Grow + fade should be shorter than the disc's pop + hold + fade (0.37 s) so the star is gone first.")]
+    public float starFadeDuration = 0.2f;
+    [Tooltip("Scale drifted to while fading, for a gentle release.")]
+    public float starFadeEndScale = 1.05f;
 
     private RectTransform layer;
     private Vector2 lastPlayerPos;
@@ -190,27 +195,25 @@ public class BongoBeatFlash : MonoBehaviour
     private IEnumerator AnimateStar(RectTransform rt, CanvasGroup group)
     {
         group.alpha = 1f;
-        float totalSpin = 360f;
-        float popTotal = starGrowDuration + starShrinkDuration;
+        float total = Mathf.Max(0.0001f, starGrowDuration + starFadeDuration);
 
-        yield return Tween(popTotal, t =>
+        // Gentle eased turn across the whole life: fast at first, settling as it fades.
+        void Turn(float lifeSeconds) =>
+            rt.localRotation = Quaternion.Euler(0f, 0f, starSpinDegrees * EaseOutCubic(Mathf.Clamp01(lifeSeconds / total)));
+
+        // Pop in: small → normal, alongside the disc's pop.
+        yield return Tween(starGrowDuration, t =>
         {
-            float elapsed = t * popTotal;
-            rt.localRotation = Quaternion.Euler(0f, 0f, Mathf.Lerp(0f, totalSpin, t));
-
-            float scale;
-            if (elapsed < starGrowDuration)
-                scale = Mathf.Lerp(0f, starPeakScale, EaseOutBack(elapsed / starGrowDuration));
-            else
-                scale = Mathf.Lerp(starPeakScale, starRestingScale, EaseInQuad((elapsed - starGrowDuration) / starShrinkDuration));
-            rt.localScale = Vector3.one * scale;
+            rt.localScale = Vector3.one * Mathf.Lerp(starStartScale, 1f, EaseOutCubic(t));
+            Turn(t * starGrowDuration);
         });
 
-        rt.localScale = Vector3.one * starRestingScale;
-
+        // Fade straight away (no hold) so the star is gone before the disc finishes.
         yield return Tween(starFadeDuration, t =>
         {
+            Turn(starGrowDuration + t * starFadeDuration);
             group.alpha = 1f - EaseInQuad(t);
+            rt.localScale = Vector3.one * Mathf.Lerp(1f, starFadeEndScale, t);
         });
 
         if (rt != null) Destroy(rt.gameObject);

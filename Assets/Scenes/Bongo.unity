@@ -13917,8 +13917,8 @@ MonoBehaviour:
   playerMissTilt: 90
   starSizeFactor: 1.6
   starOffsetY: 0
-  starGrowDuration: 0.17
-  starShrinkDuration: 0.12
-  starPeakScale: 1.2
-  starRestingScale: 0.8
-  starFadeDuration: 0.45
+  starSpinDegrees: 60
+  starStartScale: 0.7
+  starGrowDuration: 0.08
+  starFadeDuration: 0.2
+  starFadeEndScale: 1.05

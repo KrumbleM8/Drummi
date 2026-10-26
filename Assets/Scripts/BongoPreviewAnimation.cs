@@ -15,8 +15,8 @@ namespace KrumbleHut.Drummi.FlashCards
     ///   beats 4,5,6  player taps L,R,L — drums kick ±11° / ×1.13 for 0.08 s
     ///                (BongoAnimator) and the SAME 270-unit disc as the call pops
     ///                near centre (FlashPlayer = call style); on the last tap
-    ///                (Perfect) a big gold star spins up BEHIND the disc, centred
-    ///                on it (1.6× the disc = background stamp)
+    ///                (Perfect) a big gold star pops in BEHIND the disc, centred
+    ///                on it (1.6× = background stamp), turns 60° and fades first
     ///   beat 7.5     drums dim again, Custard goes Happy until the next bar
     /// Every beat also pulses the hills / Custard / drums (BounceOnBeat) and
     /// the clouds scroll. Pure visuals from the game's own sprites.
@@ -195,20 +195,27 @@ namespace KrumbleHut.Drummi.FlashCards
                                   t - (4f * Beat + k * Beat), left, left ? leftColor : rightColor);
             }
 
-            // Perfect star on the last tap: centred behind the flash (drawn earlier in the hierarchy); spin+grow 0.17 s → settle 0.12 s → fade 0.45 s.
+            // Perfect star on the last tap: centred behind the flash (drawn earlier in the hierarchy).
+            // BongoBeatFlash.AnimateStar: pop 0.7→1 over 0.08 s, fade 0.2 s drifting to ×1.05, 60° eased turn over
+            // the whole 0.28 s life — so it is gone before the disc's 0.37 s.
             if (star != null && starImage != null)
             {
                 int last = TapLeft.Length - 1;
                 float age = t - (4f * Beat + last * Beat);
-                if (age < 0f || age >= 0.74f) { SetAlpha(starImage, 0f); }
+                const float grow = 0.08f, fade = 0.2f, life = grow + fade;
+                if (age < 0f || age >= life) { SetAlpha(starImage, 0f); }
                 else
                 {
-                    float scale, alpha = 1f, rot = 0f;
-                    if (age < 0.17f)      { float p = age / 0.17f; scale = 1.2f * OutBack(p); rot = 360f * p; }
-                    else if (age < 0.29f) { scale = Mathf.Lerp(1.2f, 0.8f, (age - 0.17f) / 0.12f); }
-                    else                  { scale = 0.8f; alpha = 1f - (age - 0.29f) / 0.45f; }
+                    float scale, alpha;
+                    if (age < grow) { scale = Mathf.Lerp(0.7f, 1f, OutCubic(age / grow)); alpha = 1f; }
+                    else
+                    {
+                        float fp = (age - grow) / fade;
+                        alpha = 1f - fp * fp;
+                        scale = 1f + 0.05f * fp;
+                    }
                     star.anchoredPosition = _playerBase[last] + new Vector2(0f, StarOffsetY);
-                    star.localRotation = Quaternion.Euler(0f, 0f, rot);
+                    star.localRotation = Quaternion.Euler(0f, 0f, 60f * OutCubic(age / life));
                     SetScale(star, scale);
                     SetAlpha(starImage, alpha);
                 }
