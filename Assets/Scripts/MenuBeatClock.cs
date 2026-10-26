@@ -53,6 +53,23 @@ namespace KrumbleHut.Drummi.FlashCards
         /// <summary>Raised once per beat (index is the beat number since the clip start, loop-aware).</summary>
         public event Action<long> Beat;
 
+        /// <summary>
+        /// 0..1 multiplier on the inspector volume, for the title-screen swell:
+        /// HomeIntroDirector holds it low while the globe is far away and
+        /// raises it as the camera flies in. Applied immediately unless a
+        /// FadeOut is in progress (the fade owns the volume then).
+        /// </summary>
+        public float VolumeScale
+        {
+            get => _volumeScale;
+            set
+            {
+                _volumeScale = Mathf.Clamp01(value);
+                if (source != null && _fadeRoutine == null) source.volume = volume * _volumeScale;
+            }
+        }
+        private float _volumeScale = 1f;
+
         /// <summary>Seconds per beat.</summary>
         public double BeatInterval => 60.0 / bpm;
 
@@ -167,7 +184,7 @@ namespace KrumbleHut.Drummi.FlashCards
             source.clip        = music;
             source.loop        = true;
             source.playOnAwake = false;
-            source.volume      = volume;
+            source.volume      = volume * _volumeScale;
 
             _clipLength     = music.length;
             _beatsPerLoop   = Math.Max(1, (long)Math.Round(_clipLength / BeatInterval));

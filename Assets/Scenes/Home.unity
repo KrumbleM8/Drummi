@@ -6392,6 +6392,8 @@ MonoBehaviour:
   constantSizeBackdrop:
   - {fileID: 482219098}
   - {fileID: 2103954179}
+  menuMusic: {fileID: 94453193}
+  musicTitleVolume: 0.35
   titleBanner: {fileID: 293313414}
   titleArt: {fileID: 841111179}
   playButton: {fileID: 1539308702}

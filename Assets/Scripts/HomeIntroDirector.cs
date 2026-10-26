@@ -55,6 +55,13 @@ namespace KrumbleHut.Drummi.FlashCards
         [Tooltip("Sky sprites (Clouds, Sun) scaled by camera-distance ratio during the intro so they keep the apparent size they have from the menu camera instead of shrinking with the far view. Restored exactly on arrival.")]
         [SerializeField] private List<Transform> constantSizeBackdrop = new();
 
+        [Header("Menu Music Swell")]
+        [Tooltip("MenuMusic's beat clock. Its VolumeScale is held at musicTitleVolume while the title shows and rises to 1 as the globe comes closer. Falls back to MenuBeatClock.Instance.")]
+        [SerializeField] private MenuBeatClock menuMusic;
+
+        [Tooltip("Fraction of the music volume heard from the far title view (1 = no swell).")]
+        [SerializeField, Range(0f, 1f)] private float musicTitleVolume = 0.35f;
+
         [Header("Title Banner (OverlayCanvas)")]
         [SerializeField] private CanvasGroup titleBanner;
         [SerializeField] private RectTransform titleArt;
@@ -164,6 +171,7 @@ namespace KrumbleHut.Drummi.FlashCards
 
             if (menuController != null) menuController.SetInteractive(false);
             if (menuCamera != null) menuCamera.transform.SetPositionAndRotation(introCameraPosition, _introRot);
+            SetMusicSwell(0f);
 
             // Freeze the backdrop first so the start angle below doesn't roll it.
             foreach (ParallaxRotationLayer layer in parallaxFrozenDuringIntro)
@@ -246,6 +254,7 @@ namespace KrumbleHut.Drummi.FlashCards
                 if (menuCamera != null)
                     menuCamera.transform.SetPositionAndRotation(camPos, Quaternion.SlerpUnclamped(_introRot, _menuRot, e));
                 ApplyBackdropScale(camPos);
+                SetMusicSwell(GlobeApproach(camPos));
 
                 // Last: the roll re-sorts rim children against the camera's new
                 // pose; Refresh covers frames where the eased angle hasn't moved.
@@ -334,6 +343,7 @@ namespace KrumbleHut.Drummi.FlashCards
 
             if (idleMotion != null && idleMotion.enabled) idleMotion.Deactivate();
             if (menuCamera != null) menuCamera.transform.SetPositionAndRotation(_menuPos, _menuRot);
+            SetMusicSwell(1f);
             for (int i = 0; i < constantSizeBackdrop.Count; i++)
                 if (constantSizeBackdrop[i] != null) constantSizeBackdrop[i].localScale = _backdropBaseScale[i];
             if (spinner != null)
@@ -363,6 +373,28 @@ namespace KrumbleHut.Drummi.FlashCards
                 mountainMid.localPosition = _mountainRest;
                 SetMountainVisible(true);
             }
+        }
+
+        /// <summary>
+        /// 0 at the far title camera, 1 at the menu pose, by the camera's
+        /// distance to the globe centre — so the music gets louder exactly as
+        /// the globe gets closer, whatever the zoom ease does.
+        /// </summary>
+        private float GlobeApproach(Vector3 camPos)
+        {
+            Vector3 centre = spinner != null ? spinner.transform.position : Vector3.zero;
+            float far  = Vector3.Distance(introCameraPosition, centre);
+            float near = Vector3.Distance(_menuPos, centre);
+            if (Mathf.Approximately(far, near)) return 1f;
+            return Mathf.Clamp01(Mathf.InverseLerp(far, near, Vector3.Distance(camPos, centre)));
+        }
+
+        /// <summary>Music volume scale between musicTitleVolume (approach 0) and full (approach 1).</summary>
+        private void SetMusicSwell(float approach)
+        {
+            MenuBeatClock clock = menuMusic != null ? menuMusic : MenuBeatClock.Instance;
+            if (clock == null) return;
+            clock.VolumeScale = Mathf.Lerp(musicTitleVolume, 1f, Mathf.Clamp01(approach));
         }
 
         /// <summary>Scale each sky sprite so it subtends the same angle from camPos as it does from the menu camera.</summary>

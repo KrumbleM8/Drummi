@@ -14,6 +14,7 @@ public static class ProbeMenuBop
         {
             var src = clock.GetComponent<AudioSource>();
             sb.AppendLine($"clock running={clock.IsRunning} beat={clock.BeatIndex} phase={clock.BeatPhase:F2} interval={clock.BeatInterval:F3} " +
+                          $"volumeScale={clock.VolumeScale:F2} src.volume={(src != null ? src.volume : -1f):F2} " +
                           $"src.isPlaying={(src != null && src.isPlaying)} src.time={(src != null ? src.time : -1f):F2} clip={(src != null && src.clip != null ? src.clip.name : "null")}");
         }
 
