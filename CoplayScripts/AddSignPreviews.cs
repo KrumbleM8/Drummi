@@ -488,7 +488,10 @@ public static class AddSignPreviews
         Image bongoShadow = MakeImage(bongoVisual, "BongoBackShadow", s.BongoPair, new Color(0f, 0f, 0f, 0.5f), Vector2.zero, new Vector2(719f, 404f));
         Image bongoImage  = MakeImage(bongoVisual, "BongoImage",      s.BongoPair, new Color(1f, 1f, 1f, 0.5f), Vector2.zero, new Vector2(719f, 404f));
 
-        // Player flashes: same 270 px disc + overlay at the call positions (FlashPlayer = call style) + perfect star 140 above.
+        // Perfect star FIRST so it draws behind the player flashes: 1.6× the disc (432), centred on the last tap's flash.
+        Image star = MakeImage(screen, "PerfectStar", s.Star, new Color(1f, 0.784f, 0f, 0f), new Vector2(-135f, -93f), new Vector2(432f, 432f));
+
+        // Player flashes: same 270 px disc + overlay at the call positions (FlashPlayer = call style).
         var playRts = new Object[3]; var playImgs = new Object[3]; var playOvls = new Object[3];
         for (int i = 0; i < 3; i++)
         {
@@ -496,7 +499,6 @@ public static class AddSignPreviews
             Image o = MakeImage(f.transform, "Overlay", s.IndicatorOverlay, new Color(1f, 1f, 1f, 0f), Vector2.zero, new Vector2(270f, 270f));
             playRts[i] = f.rectTransform; playImgs[i] = f; playOvls[i] = o;
         }
-        Image star = MakeImage(screen, "PerfectStar", s.Star, new Color(1f, 0.784f, 0f, 0f), new Vector2(-135f, 47f), new Vector2(100f, 100f));
 
         // Settings X stays visible top-right during play.
         Image x = MakeImage(screen, "SettingsIcon", s.XButton, Color.white, new Vector2(329f, 719f), new Vector2(110f, 110f));

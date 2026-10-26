@@ -12,8 +12,9 @@ using UnityEngine.UI;
 ///     placement, lean, pop and fade), tinted for the bongo side; a bad hit
 ///     shows the same flash in grey, leaning early/late or keeled over on a
 ///     full miss.
-///   • Perfect hit          → the PerfectStar prefab spins up over the top of
-///     the player flash and fades.
+///   • Perfect hit          → the PerfectStar prefab spins up BEHIND the player
+///     flash, centred on it and larger than the disc, like a background stamp,
+///     then fades.
 ///
 /// Lives on its own stretched RectTransform under GameplayElements so it
 /// inherits the gameplay show/hide lifecycle. Never blocks raycasts.
@@ -56,9 +57,11 @@ public class BongoBeatFlash : MonoBehaviour
     [Tooltip("Lean for a full miss / wrong-side hit, in degrees (keeled over).")]
     public float playerMissTilt = 90f;
 
-    [Header("Perfect star")]
-    [Tooltip("Height of the star above the player flash's centre; the flash is callSize tall, so ~callSize/2 sits it on the rim.")]
-    public float starOffsetY = 140f;
+    [Header("Perfect star (background stamp behind the player flash)")]
+    [Tooltip("Star width/height as a multiple of callSize; >1 so the points peek out around the disc.")]
+    public float starSizeFactor = 1.6f;
+    [Tooltip("Vertical offset from the player flash's centre (0 = perfectly centred behind it).")]
+    public float starOffsetY = 0f;
     public float starGrowDuration = 0.17f;
     public float starShrinkDuration = 0.12f;
     public float starPeakScale = 1.2f;
@@ -68,6 +71,7 @@ public class BongoBeatFlash : MonoBehaviour
     private RectTransform layer;
     private Vector2 lastPlayerPos;
     private bool hasPlayerPos;
+    private RectTransform lastPlayerRt;
 
     private void Awake()
     {
@@ -137,6 +141,7 @@ public class BongoBeatFlash : MonoBehaviour
         Vector2 pos = new Vector2(isRightBongo ? callOffsetX : -callOffsetX, callOffsetY);
         rt.anchoredPosition = pos;
         lastPlayerPos = pos;
+        lastPlayerRt = rt;
         hasPlayerPos = true;
 
         float tilt = isRightBongo ? -callTiltDegrees : callTiltDegrees;
@@ -153,7 +158,7 @@ public class BongoBeatFlash : MonoBehaviour
         StartCoroutine(AnimateCall(rt, group));
     }
 
-    /// <summary>Spin-up star over the most recent player flash, then fade.</summary>
+    /// <summary>Spin-up star centred BEHIND the most recent player flash (a big background stamp), then fade.</summary>
     public void FlashPerfectStar(GameObject starPrefab)
     {
         if (!CanSpawn(starPrefab)) return;
@@ -167,7 +172,17 @@ public class BongoBeatFlash : MonoBehaviour
         if (star.TryGetComponent(out RectTransform rt))
         {
             rt.anchoredPosition = basePos + Vector2.up * starOffsetY;
+            float size = callSize * starSizeFactor;
+            rt.sizeDelta = new Vector2(size, size);
             rt.localScale = Vector3.zero;
+
+            // Render behind the player's disc: slot the star just below the flash in sibling order
+            // (UI draws later siblings on top). Falls back to the very back if the flash is gone.
+            if (lastPlayerRt != null && lastPlayerRt.parent == layer)
+                rt.SetSiblingIndex(lastPlayerRt.GetSiblingIndex());
+            else
+                rt.SetAsFirstSibling();
+
             StartCoroutine(AnimateStar(rt, group));
         }
     }
@@ -208,6 +223,7 @@ public class BongoBeatFlash : MonoBehaviour
     {
         StopAllCoroutines();
         hasPlayerPos = false;
+        lastPlayerRt = null;
         if (layer == null) layer = (RectTransform)transform;
         for (int i = layer.childCount - 1; i >= 0; i--)
             Destroy(layer.GetChild(i).gameObject);

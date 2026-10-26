@@ -13915,7 +13915,8 @@ MonoBehaviour:
   missColor: {r: 0.5, g: 0.5, b: 0.5, a: 1}
   playerOffTimingTilt: 45
   playerMissTilt: 90
-  starOffsetY: 140
+  starSizeFactor: 1.6
+  starOffsetY: 0
   starGrowDuration: 0.17
   starShrinkDuration: 0.12
   starPeakScale: 1.2

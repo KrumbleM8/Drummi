@@ -14,8 +14,9 @@ namespace KrumbleHut.Drummi.FlashCards
     ///   beat 3.33    Custard listens; the dimmed drums grow + brighten 0.3 s
     ///   beats 4,5,6  player taps L,R,L — drums kick ±11° / ×1.13 for 0.08 s
     ///                (BongoAnimator) and the SAME 270-unit disc as the call pops
-    ///                near centre (FlashPlayer = call style), a gold star spins
-    ///                140 above the disc on the last tap (Perfect)
+    ///                near centre (FlashPlayer = call style); on the last tap
+    ///                (Perfect) a big gold star spins up BEHIND the disc, centred
+    ///                on it (1.6× the disc = background stamp)
     ///   beat 7.5     drums dim again, Custard goes Happy until the next bar
     /// Every beat also pulses the hills / Custard / drums (BounceOnBeat) and
     /// the clouds scroll. Pure visuals from the game's own sprites.
@@ -71,7 +72,7 @@ namespace KrumbleHut.Drummi.FlashCards
         private static readonly bool[] TapLeft  = { true, false, true };
 
         private static readonly float CallFlashX = 135f, CallFlashY = -93f;   // (±135, −60) in a layer 33 below centre
-        private const float StarAbovePlayer = 140f;                            // BongoBeatFlash.starOffsetY
+        private const float StarOffsetY = 0f;                                  // BongoBeatFlash.starOffsetY (centred behind the disc)
 
         protected override float LoopLength => Loop;
 
@@ -194,7 +195,7 @@ namespace KrumbleHut.Drummi.FlashCards
                                   t - (4f * Beat + k * Beat), left, left ? leftColor : rightColor);
             }
 
-            // Perfect star on the last tap: 140 above the flash centre (just over the disc's rim); spin+grow 0.17 s → settle 0.12 s → fade 0.45 s.
+            // Perfect star on the last tap: centred behind the flash (drawn earlier in the hierarchy); spin+grow 0.17 s → settle 0.12 s → fade 0.45 s.
             if (star != null && starImage != null)
             {
                 int last = TapLeft.Length - 1;
@@ -206,7 +207,7 @@ namespace KrumbleHut.Drummi.FlashCards
                     if (age < 0.17f)      { float p = age / 0.17f; scale = 1.2f * OutBack(p); rot = 360f * p; }
                     else if (age < 0.29f) { scale = Mathf.Lerp(1.2f, 0.8f, (age - 0.17f) / 0.12f); }
                     else                  { scale = 0.8f; alpha = 1f - (age - 0.29f) / 0.45f; }
-                    star.anchoredPosition = _playerBase[last] + new Vector2(0f, StarAbovePlayer);
+                    star.anchoredPosition = _playerBase[last] + new Vector2(0f, StarOffsetY);
                     star.localRotation = Quaternion.Euler(0f, 0f, rot);
                     SetScale(star, scale);
                     SetAlpha(starImage, alpha);
