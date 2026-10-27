@@ -101,6 +101,11 @@ public class BongoModeInputReader : MonoBehaviour
                 break;
         }
 
+        // Last note of a clean phrase (every beat hit, no bad taps so far — at
+        // least AllGood, so never a mere Passable): fire the phrase-clear burst.
+        if (beatEvaluator.LastInputClearedBar)
+            playerInputVisualScheduler?.SpawnPhraseClearBurst(isRightBongo);
+
         // Note: Evaluation happens later in BeatGenerator.EvaluateBar()
     }
 

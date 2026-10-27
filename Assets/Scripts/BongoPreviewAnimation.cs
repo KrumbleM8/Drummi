@@ -16,7 +16,11 @@ namespace KrumbleHut.Drummi.FlashCards
     ///                (BongoAnimator) and the SAME 270-unit disc as the call pops
     ///                near centre (FlashPlayer = call style); on the last tap
     ///                (Perfect) a big gold star pops in BEHIND the disc, centred
-    ///                on it (1.6× = background stamp), turns 60° and fades first
+    ///                on it (1.6× = background stamp), turns 60° and fades first;
+    ///                the bar is clean, so the same tap also fires the phrase-
+    ///                clear burst: a white pulse swells out from behind the disc
+    ///                and a fan of small discs + stars arcs up and fades
+    ///                (BongoBeatFlash.FlashPhraseClear, pieces built in Awake)
     ///   beat 7.5     drums dim again, Custard goes Happy until the next bar
     /// Every beat also pulses the hills / Custard / drums (BounceOnBeat) and
     /// the clouds scroll. Pure visuals from the game's own sprites.
@@ -74,6 +78,31 @@ namespace KrumbleHut.Drummi.FlashCards
         private static readonly float CallFlashX = 135f, CallFlashY = -93f;   // (±135, −60) in a layer 33 below centre
         private const float StarOffsetY = 0f;                                  // BongoBeatFlash.starOffsetY (centred behind the disc)
 
+        // Phrase-clear burst — mirrors BongoBeatFlash's clear* defaults exactly.
+        private const float ClearPulseAlpha    = 0.55f;
+        private const float ClearPulseEndScale = 2.6f;
+        private const float ClearPulseDuration = 0.4f;
+        private const int   ClearPieceCount    = 14;
+        private const float ClearPieceSize     = 54f;
+        private const float ClearStarFactor    = 1.3f;
+        private const float ClearSpeedMin      = 650f, ClearSpeedMax = 1150f;
+        private const float ClearSpread        = 150f;
+        private const float ClearGravity       = 2400f;
+        private const float ClearSpin          = 540f;
+        private const float ClearLife          = 0.75f;
+        private const float ClearFadeFraction  = 0.45f;
+        private const float ClearPopScale      = 0.4f;
+        private const float ClearPopDuration   = 0.07f;
+        private const float CallSize           = 270f;
+
+        private RectTransform _clearPulse;
+        private Image _clearPulseImage;
+        private RectTransform[] _clearPieces = new RectTransform[0];
+        private Image[] _clearPieceImages = new Image[0];
+        private Vector2[] _clearVelocity = new Vector2[0];
+        private float[] _clearSpin = new float[0];
+        private float[] _clearAngle = new float[0];
+
         protected override float LoopLength => Loop;
 
         private Vector3[] _hillBaseScale;
@@ -87,6 +116,77 @@ namespace KrumbleHut.Drummi.FlashCards
             _playerBase = new Vector2[playerFlashes.Length];
             for (int i = 0; i < playerFlashes.Length; i++)
                 _playerBase[i] = new Vector2(TapLeft[i % TapLeft.Length] ? -CallFlashX : CallFlashX, CallFlashY);
+
+            BuildClearBurst();
+        }
+
+        /// <summary>
+        /// Builds the phrase-clear burst objects at runtime (no scene rebuild needed): a pulse disc just
+        /// behind the star and a fixed, seeded fan of small discs/stars on top of everything. The real
+        /// burst randomises per phrase; the loop uses one seeded pattern so it is deterministic.
+        /// </summary>
+        private void BuildClearBurst()
+        {
+            if (star == null || starImage == null) return;
+            Sprite disc = playerFlashImages.Length > 0 && playerFlashImages[0] != null ? playerFlashImages[0].sprite : null;
+            if (disc == null) return;
+
+            RectTransform parent = star.parent as RectTransform;
+            if (parent == null) return;
+
+            _clearPulse = MakePiece("ClearPulse", parent, disc, CallSize, Color.white, out _clearPulseImage);
+            _clearPulse.SetSiblingIndex(star.GetSiblingIndex());   // behind the star (and so behind the disc)
+
+            var rng = new System.Random(2026);
+            float halfSpread = ClearSpread * 0.5f;
+            const float sideBias = -8f;                              // last tap is left (TapLeft[2])
+
+            _clearPieces      = new RectTransform[ClearPieceCount];
+            _clearPieceImages = new Image[ClearPieceCount];
+            _clearVelocity    = new Vector2[ClearPieceCount];
+            _clearSpin        = new float[ClearPieceCount];
+            _clearAngle       = new float[ClearPieceCount];
+
+            for (int i = 0; i < ClearPieceCount; i++)
+            {
+                bool isStar = i % 3 == 2;
+                Sprite sprite = isStar ? starImage.sprite : disc;
+                Color tint = isStar ? Color.white : (i % 2 == 0 ? leftColor : rightColor);
+                float size = ClearPieceSize * (isStar ? ClearStarFactor : 1f);
+
+                _clearPieces[i] = MakePiece("ClearPiece" + i, parent, sprite, size, tint, out _clearPieceImages[i]);
+                _clearPieces[i].SetAsLastSibling();
+
+                float slot = (float)i / (ClearPieceCount - 1);
+                float angle = 90f + sideBias + Mathf.Lerp(-halfSpread, halfSpread, slot) + Range(rng, -6f, 6f);
+                float speed = Range(rng, ClearSpeedMin, ClearSpeedMax);
+                _clearVelocity[i] = new Vector2(Mathf.Cos(angle * Mathf.Deg2Rad), Mathf.Sin(angle * Mathf.Deg2Rad)) * speed;
+                _clearSpin[i]  = Range(rng, 0.35f, 1f) * ClearSpin * (rng.NextDouble() < 0.5 ? -1f : 1f);
+                _clearAngle[i] = Range(rng, 0f, 360f);
+            }
+        }
+
+        private static float Range(System.Random rng, float min, float max) => min + (float)rng.NextDouble() * (max - min);
+
+        private RectTransform MakePiece(string name, RectTransform parent, Sprite sprite, float size, Color tint, out Image image)
+        {
+            var go = new GameObject(name, typeof(RectTransform), typeof(Image));
+            var rt = (RectTransform)go.transform;
+            rt.SetParent(parent, false);
+            rt.anchorMin = star.anchorMin;
+            rt.anchorMax = star.anchorMax;
+            rt.pivot = star.pivot;
+            rt.sizeDelta = new Vector2(size, size);
+            rt.anchoredPosition = _playerBase.Length > 0 ? _playerBase[_playerBase.Length - 1] : Vector2.zero;
+            rt.localScale = Vector3.one;
+
+            image = go.GetComponent<Image>();
+            image.sprite = sprite;
+            image.preserveAspect = true;
+            image.raycastTarget = false;
+            tint.a = 0f;
+            image.color = tint;
+            return rt;
         }
 
         protected override void Evaluate(float t)
@@ -100,6 +200,45 @@ namespace KrumbleHut.Drummi.FlashCards
             EvaluateDrums(t, pulse);
             EvaluateCallFlashes(t);
             EvaluatePlayerFlashes(t);
+            EvaluateClearBurst(t);
+        }
+
+        /// <summary>
+        /// Phrase-clear burst on the last tap (BongoBeatFlash.FlashPhraseClear): pulse 1→2.6× over 0.4 s
+        /// (OutCubic) fading from 0.55 (InQuad); pieces pop 0.4→1 over 0.07 s, fly a closed-form ballistic
+        /// arc, spin, and fade over the last 45 % of a 0.75 s life.
+        /// </summary>
+        private void EvaluateClearBurst(float t)
+        {
+            if (_clearPulse == null) return;
+
+            int last = TapLeft.Length - 1;
+            float age = t - (4f * Beat + last * Beat);
+            Vector2 origin = _playerBase[last];
+
+            if (age < 0f || age >= ClearPulseDuration) SetAlpha(_clearPulseImage, 0f);
+            else
+            {
+                float p = age / ClearPulseDuration;
+                _clearPulse.anchoredPosition = origin;
+                SetScale(_clearPulse, Mathf.Lerp(1f, ClearPulseEndScale, OutCubic(p)));
+                SetAlpha(_clearPulseImage, ClearPulseAlpha * (1f - InQuad(p)));
+            }
+
+            bool live = age >= 0f && age < ClearLife;
+            float fadeStart = ClearLife * (1f - ClearFadeFraction);
+            float scale = live ? Mathf.Lerp(ClearPopScale, 1f, OutCubic(Mathf.Clamp01(age / ClearPopDuration))) : 0f;
+            float alpha = !live ? 0f : (age < fadeStart ? 1f : 1f - InQuad((age - fadeStart) / (ClearLife - fadeStart)));
+
+            for (int i = 0; i < _clearPieces.Length; i++)
+            {
+                if (_clearPieces[i] == null) continue;
+                SetAlpha(_clearPieceImages[i], alpha);
+                if (!live) continue;
+                _clearPieces[i].anchoredPosition = origin + _clearVelocity[i] * age + Vector2.down * (0.5f * ClearGravity * age * age);
+                _clearPieces[i].localRotation = Quaternion.Euler(0f, 0f, _clearAngle[i] + _clearSpin[i] * age);
+                SetScale(_clearPieces[i], scale);
+            }
         }
 
         private void EvaluateScenery(float t, float pulse)

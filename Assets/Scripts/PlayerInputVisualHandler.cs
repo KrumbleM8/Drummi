@@ -272,6 +272,21 @@ public class PlayerInputVisualHandler : MonoBehaviour
         activeStarCoroutines.Add(c);
     }
 
+    /// <summary>
+    /// Phrase-clear burst: fired on the LAST note of a bar the player has
+    /// played clean so far (every beat hit Good/Perfect, no bad taps — a full
+    /// pass, never a mere Passable). Flash mode only: the slider-bar HUD has
+    /// no room for it, so it is simply skipped there.
+    /// </summary>
+    public void SpawnPhraseClearBurst(bool isRightBongo)
+    {
+        if (beatFlash != null && beatFlash.useFlash)
+        {
+            beatFlash.FlashPhraseClear(inputIndicatorPrefab, perfectInputStarPrefab,
+                                       leftBongoColor, rightBongoColor, isRightBongo);
+        }
+    }
+
     private IEnumerator AnimatePerfectStar(GameObject star)
     {
         if (!star.TryGetComponent(out RectTransform rt)) yield break;

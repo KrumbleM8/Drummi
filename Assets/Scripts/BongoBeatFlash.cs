@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -15,6 +16,12 @@ using UnityEngine.UI;
 ///   • Perfect hit          → the PerfectStar prefab pops in BEHIND the player
 ///     flash, centred on it and larger than the disc, like a background stamp,
 ///     with a gentle eased turn, and fades out before the disc does.
+///   • Phrase clear         → on the LAST note of a bar played clean (every
+///     beat hit, no bad taps: a full pass, not a one-mistake Passable) a soft
+///     white pulse ring swells out from behind the disc and a fan of small
+///     discs (both bongo colours) and gold stars bursts upward, spinning,
+///     arcing under gravity and fading. Both colours are used because the
+///     burst celebrates the whole phrase, not the last side hit.
 ///
 /// Lives on its own stretched RectTransform under GameplayElements so it
 /// inherits the gameplay show/hide lifecycle. Never blocks raycasts.
@@ -72,6 +79,35 @@ public class BongoBeatFlash : MonoBehaviour
     public float starFadeDuration = 0.2f;
     [Tooltip("Scale drifted to while fading, for a gentle release.")]
     public float starFadeEndScale = 1.05f;
+
+    [Header("Phrase clear (last note of a clean bar)")]
+    [Tooltip("Pulse ring: the Indicator disc tinted this colour, swelling out from behind the player flash. Alpha is its starting opacity.")]
+    public Color clearPulseColor = new Color(1f, 1f, 1f, 0.55f);
+    [Tooltip("Pulse scale at the end of its swell (x callSize).")]
+    public float clearPulseEndScale = 2.6f;
+    [Tooltip("Pulse swell + fade length.")]
+    public float clearPulseDuration = 0.4f;
+    [Tooltip("How many confetti pieces burst out. Every third piece is a PerfectStar, the rest are Indicator discs alternating left/right colour.")]
+    public int clearPieceCount = 14;
+    [Tooltip("Disc piece size in canvas units; stars are drawn a little larger.")]
+    public float clearPieceSize = 54f;
+    [Tooltip("Star pieces are this many times the disc piece size.")]
+    public float clearStarSizeFactor = 1.3f;
+    [Tooltip("Launch speed range in canvas units per second.")]
+    public float clearSpeedMin = 650f;
+    public float clearSpeedMax = 1150f;
+    [Tooltip("Pieces fan out over this arc, centred straight up (degrees).")]
+    public float clearSpreadDegrees = 150f;
+    [Tooltip("Downward pull in canvas units per second squared, so the pieces arc and fall.")]
+    public float clearGravity = 2400f;
+    [Tooltip("Max spin speed per piece, degrees per second (each piece picks a random speed and direction).")]
+    public float clearSpinSpeed = 540f;
+    [Tooltip("Piece lifetime; each fades over the last fraction of it.")]
+    public float clearPieceLife = 0.75f;
+    [Range(0.05f, 1f)] public float clearPieceFadeFraction = 0.45f;
+    [Tooltip("Pieces pop in from this scale over clearPiecePopDuration.")]
+    public float clearPiecePopScale = 0.4f;
+    public float clearPiecePopDuration = 0.07f;
 
     private RectTransform layer;
     private Vector2 lastPlayerPos;
@@ -217,6 +253,117 @@ public class BongoBeatFlash : MonoBehaviour
         });
 
         if (rt != null) Destroy(rt.gameObject);
+    }
+
+    // ----------------------------------------------------------- Phrase clear
+
+    /// <summary>
+    /// Celebration for the last note of a clean phrase: a soft pulse ring swells out from behind the
+    /// most recent player flash and a fan of small discs/stars bursts upward, arcs and fades.
+    /// <paramref name="lastHitRight"/> only biases the fan slightly toward the side that was hit.
+    /// </summary>
+    public void FlashPhraseClear(GameObject iconPrefab, GameObject starPrefab, Color leftTint, Color rightTint, bool lastHitRight)
+    {
+        if (!CanSpawn(iconPrefab)) return;
+
+        Vector2 origin = hasPlayerPos ? lastPlayerPos : new Vector2(0f, callOffsetY);
+
+        // Pulse ring: behind everything on the layer (disc and star included) so it reads as a glow.
+        RectTransform pulse = SpawnIcon(iconPrefab, clearPulseColor, out CanvasGroup pulseGroup);
+        pulse.sizeDelta = new Vector2(callSize, callSize);
+        pulse.anchoredPosition = origin;
+        pulse.SetAsFirstSibling();
+        StartCoroutine(AnimatePulse(pulse, pulseGroup));
+
+        // Confetti: spawned last so it draws over the disc.
+        int count = Mathf.Max(0, clearPieceCount);
+        var pieces = new List<BurstPiece>(count);
+        float halfSpread = clearSpreadDegrees * 0.5f;
+        float sideBias = lastHitRight ? 8f : -8f;
+
+        for (int i = 0; i < count; i++)
+        {
+            bool isStar = starPrefab != null && i % 3 == 2;
+            Color tint = isStar ? Color.white : (i % 2 == 0 ? leftTint : rightTint);
+            RectTransform rt = SpawnIcon(isStar ? starPrefab : iconPrefab, tint, out CanvasGroup group);
+
+            float size = clearPieceSize * (isStar ? clearStarSizeFactor : 1f);
+            rt.sizeDelta = new Vector2(size, size);
+            rt.anchoredPosition = origin;
+            rt.localScale = Vector3.one * clearPiecePopScale;
+
+            // Even fan with a little jitter; 90 degrees = straight up.
+            float slot = count > 1 ? (float)i / (count - 1) : 0.5f;
+            float angle = 90f + sideBias + Mathf.Lerp(-halfSpread, halfSpread, slot) + Random.Range(-6f, 6f);
+            float speed = Random.Range(clearSpeedMin, clearSpeedMax);
+            Vector2 velocity = new Vector2(Mathf.Cos(angle * Mathf.Deg2Rad), Mathf.Sin(angle * Mathf.Deg2Rad)) * speed;
+
+            pieces.Add(new BurstPiece
+            {
+                Rect = rt,
+                Group = group,
+                Velocity = velocity,
+                Spin = Random.Range(0.35f, 1f) * clearSpinSpeed * (Random.value < 0.5f ? -1f : 1f),
+                Angle = Random.Range(0f, 360f),
+            });
+        }
+
+        if (pieces.Count > 0) StartCoroutine(AnimateBurst(pieces, origin));
+    }
+
+    private IEnumerator AnimatePulse(RectTransform rt, CanvasGroup group)
+    {
+        float startAlpha = clearPulseColor.a;
+        if (rt.TryGetComponent(out Image img)) img.color = new Color(clearPulseColor.r, clearPulseColor.g, clearPulseColor.b, 1f);
+        group.alpha = startAlpha;
+
+        yield return Tween(clearPulseDuration, t =>
+        {
+            rt.localScale = Vector3.one * Mathf.Lerp(1f, clearPulseEndScale, EaseOutCubic(t));
+            group.alpha = startAlpha * (1f - EaseInQuad(t));
+        });
+
+        if (rt != null) Destroy(rt.gameObject);
+    }
+
+    private class BurstPiece
+    {
+        public RectTransform Rect;
+        public CanvasGroup Group;
+        public Vector2 Velocity;
+        public float Spin;
+        public float Angle;
+    }
+
+    private IEnumerator AnimateBurst(List<BurstPiece> pieces, Vector2 origin)
+    {
+        float life = Mathf.Max(0.0001f, clearPieceLife);
+        float fadeStart = life * (1f - clearPieceFadeFraction);
+        float pop = Mathf.Max(0.0001f, clearPiecePopDuration);
+        float elapsed = 0f;
+
+        while (elapsed < life)
+        {
+            elapsed += Time.deltaTime;
+            float age = Mathf.Min(elapsed, life);
+
+            float scale = Mathf.Lerp(clearPiecePopScale, 1f, EaseOutCubic(Mathf.Clamp01(age / pop)));
+            float alpha = age < fadeStart ? 1f : 1f - EaseInQuad((age - fadeStart) / (life - fadeStart));
+
+            foreach (var p in pieces)
+            {
+                if (p.Rect == null) continue;
+                // Closed-form ballistic arc from the launch point, so frame hitches never drift the pieces.
+                p.Rect.anchoredPosition = origin + p.Velocity * age + Vector2.down * (0.5f * clearGravity * age * age);
+                p.Rect.localRotation = Quaternion.Euler(0f, 0f, p.Angle + p.Spin * age);
+                p.Rect.localScale = Vector3.one * scale;
+                p.Group.alpha = alpha;
+            }
+            yield return null;
+        }
+
+        foreach (var p in pieces)
+            if (p.Rect != null) Destroy(p.Rect.gameObject);
     }
 
     // ---------------------------------------------------------------- Shared

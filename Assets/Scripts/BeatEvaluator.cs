@@ -73,6 +73,20 @@ public class BeatEvaluator : MonoBehaviour
     // stale references can never collide; cleared each EvaluateBar anyway.
     private readonly HashSet<ScheduledBeat> _claimedBeats = new HashSet<ScheduledBeat>();
 
+    // Live "clean phrase" tracking for the phrase-clear burst. Counts every
+    // input this bar that EvaluateSingleInput did NOT grade Perfect/Good
+    // (early, late, wrong side, spare tap). Reset with the claimed beats.
+    private int _barBadInputs;
+
+    /// <summary>
+    /// True right after an EvaluateSingleInput call that claimed the LAST
+    /// unclaimed beat of the bar with no bad input so far — i.e. the player
+    /// has just played the whole phrase clean (at least AllGood). This is the
+    /// "last note of a full pass" moment the phrase-clear burst fires on; a
+    /// spare tap afterwards can still downgrade the final grade to Passable.
+    /// </summary>
+    public bool LastInputClearedBar { get; private set; }
+
     #region Lifecycle
     private void Start()
     {
@@ -103,6 +117,8 @@ public class BeatEvaluator : MonoBehaviour
 
         // Bar is over — release claimed beats for the next pattern.
         _claimedBeats.Clear();
+        _barBadInputs = 0;
+        LastInputClearedBar = false;
 
         // Perform matching
         var matches = MatchInputsToBeats(playerInputs, scheduledBeats);
@@ -380,6 +396,8 @@ public class BeatEvaluator : MonoBehaviour
     /// </summary>
     public InputMatch.MatchQuality EvaluateSingleInput(BongoInput input)
     {
+        LastInputClearedBar = false;
+
         var scheduledBeats = beatGenerator.ScheduledBeats;
         if (scheduledBeats == null || scheduledBeats.Count == 0)
         {
@@ -413,24 +431,39 @@ public class BeatEvaluator : MonoBehaviour
         // Every beat this bar has already been claimed — the extra input can't
         // be a success.
         if (closestBeat == null)
+        {
+            _barBadInputs++;
             return InputMatch.MatchQuality.Miss;
+        }
 
         // Evaluate against the closest beat
         double adjustedClosestBeatTime = closestBeat.scheduledTime + timeOffset;
         double timingError = input.inputTime - adjustedClosestBeatTime;
 
         if (timingError < -GoodThreshold)
+        {
+            _barBadInputs++;
             return InputMatch.MatchQuality.TooEarly;
+        }
 
         if (timingError > GoodThreshold)
+        {
+            _barBadInputs++;
             return InputMatch.MatchQuality.TooLate;
+        }
 
         // Within timing window — check side
         if (closestBeat.isRightBongo != input.isRightBongo)
+        {
+            _barBadInputs++;
             return InputMatch.MatchQuality.WrongSide;
+        }
 
         // Success — claim the beat so no further input can match it this bar.
         _claimedBeats.Add(closestBeat);
+
+        // Last beat claimed with a clean sheet: the phrase is a full pass so far.
+        LastInputClearedBar = _barBadInputs == 0 && _claimedBeats.Count == scheduledBeats.Count;
 
         if (Mathf.Abs((float)timingError) <= PerfectThreshold)
             return InputMatch.MatchQuality.Perfect;
@@ -463,6 +496,8 @@ public class BeatEvaluator : MonoBehaviour
     {
         _previousHighScore = PlayerPrefs.GetInt(_highScoreKey, 0);
         _claimedBeats.Clear();
+        _barBadInputs = 0;
+        LastInputClearedBar = false;
         Score = 0;
         PerfectHits = 0;
         TotalPerfectHits = 0;
