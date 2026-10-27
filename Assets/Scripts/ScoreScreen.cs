@@ -27,6 +27,11 @@ public class ScoreScreen : MonoBehaviour
     public bool animateScore = true;
     public float scoreAnimationDuration = 1.5f;
 
+    [Header("Bongo Report")]
+    [Tooltip("Optional. The crumpled-paper run report shown after a Bongo run. Leave empty and one is " +
+             "built under this page at runtime the first time a Bongo run ends (see BongoResultsReport).")]
+    public BongoResultsReport bongoReport;
+
     private int targetScore;
     private int displayedScore;
     private bool isAnimating;
@@ -88,6 +93,35 @@ public class ScoreScreen : MonoBehaviour
         UpdateGradeDisplay(score);
 
         Debug.Log($"[ScoreScreen] Displaying - Score: {score}, Perfect Hits: {perfectHits}, Rooms Cleared: {roomsCleared}, New High Score: {isNewHighScore}");
+    }
+
+    /// <summary>
+    /// Shows the Bongo paper report filled from <paramref name="stats"/>, or hides it
+    /// when <paramref name="stats"/> is null (every non-Bongo mode). Called by
+    /// GameManager right after <see cref="DisplayScore"/>. If no report is wired in
+    /// the inspector, one is created under this page the first time it is needed.
+    /// </summary>
+    public void ShowBongoReport(BongoRunStats stats)
+    {
+        if (stats == null)
+        {
+            if (bongoReport != null) bongoReport.Hide();
+            return;
+        }
+
+        if (bongoReport == null)
+        {
+            bongoReport = GetComponentInChildren<BongoResultsReport>(true);
+            if (bongoReport == null)
+            {
+                var go = new GameObject(BongoResultsReport.DefaultObjectName, typeof(RectTransform));
+                go.transform.SetParent(transform, false);
+                bongoReport = go.AddComponent<BongoResultsReport>();
+                Debug.Log("[ScoreScreen] No BongoResultsReport wired — built one under the Score page at runtime.");
+            }
+        }
+
+        bongoReport.Show(stats);
     }
 
     /// <summary>

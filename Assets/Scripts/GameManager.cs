@@ -400,6 +400,8 @@ public class GameManager : MonoBehaviour
         int  finalScore          = _activeMode != null ? _activeMode.Score          : 0;
         int  finalPerfectHits    = _activeMode != null ? _activeMode.TotalPerfectHits : 0;
         bool finalIsNewHighScore = _activeMode != null && _activeMode.IsNewHighScore;
+        // Bongo-only: snapshot the run tally for the paper report (null for other modes).
+        BongoRunStats finalBongoStats = (_activeMode as BongoModeController)?.RunStats?.Clone();
 
         if (screenTransition != null && !screenTransition.IsScreenCovered)
         {
@@ -410,7 +412,7 @@ public class GameManager : MonoBehaviour
         CleanupSharedSystems();
         _activeMode.Cleanup();
         dungeonRunner?.GetComponent<RoomController>()?.ResetToTitleBackground();
-        ShowResultsUI(finalScore, finalPerfectHits, finalIsNewHighScore);
+        ShowResultsUI(finalScore, finalPerfectHits, finalIsNewHighScore, finalBongoStats);
         screenTransition?.StartReveal();
 
         Debug.Log("=== RESULTS SEQUENCE COMPLETE ===");
@@ -438,7 +440,8 @@ public class GameManager : MonoBehaviour
         }
     }
 
-    private void ShowResultsUI(int score, int perfectHits, bool isNewHighScore)
+    /// <param name="bongoStats">Bongo run tally for the paper report; null hides the report (other modes).</param>
+    private void ShowResultsUI(int score, int perfectHits, bool isNewHighScore, BongoRunStats bongoStats = null)
     {
         if (menuManager == null) { Debug.LogError("[GameManager] UIMenuManager missing!"); return; }
 
@@ -450,6 +453,7 @@ public class GameManager : MonoBehaviour
             int roomsCleared = dungeonRunner != null ? dungeonRunner.RoomsCleared : 0;
             string highScoreKey = _activeMode != null ? _activeMode.HighScoreKey : null;
             scoreScreen.DisplayScore(score, perfectHits, isNewHighScore, roomsCleared, highScoreKey);
+            scoreScreen.ShowBongoReport(bongoStats);
             // Win presentation seam: placeholder title on the shared Score page.
             // Swap this for a dedicated victory screen when one exists.
             scoreScreen.SetResultTitle(_runWon ? "Run Complete!" : null);

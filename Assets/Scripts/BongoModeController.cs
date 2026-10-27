@@ -23,6 +23,9 @@ public class BongoModeController : ModeController
     public override int TotalPerfectHits => beatEvaluator != null ? beatEvaluator.TotalPerfectHits : 0;
     public override bool IsNewHighScore => beatEvaluator != null && beatEvaluator.IsNewHighScore;
     public override string HighScoreKey => beatEvaluator != null ? beatEvaluator.HighScoreKey : null;
+
+    /// <summary>Whole-run tally for the results-screen paper report. Null when no evaluator is wired.</summary>
+    public BongoRunStats RunStats => beatEvaluator != null ? beatEvaluator.RunStats : null;
     #endregion
 
     #region Song Setup

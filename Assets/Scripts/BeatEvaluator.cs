@@ -37,6 +37,13 @@ public class BeatEvaluator : MonoBehaviour
 
     /// <summary>True if the current Score exceeds the high score recorded at the start of this session.</summary>
     public bool IsNewHighScore => Score > _previousHighScore;
+
+    /// <summary>
+    /// Whole-run tally (bars passed, perfect phrases, hit breakdown, early/late lean)
+    /// for the results-screen report. Reset with the score; never cleared by a
+    /// double-fail, so the report always covers the full run.
+    /// </summary>
+    public BongoRunStats RunStats { get; } = new BongoRunStats();
     #endregion
 
     #region High Score Key
@@ -113,6 +120,10 @@ public class BeatEvaluator : MonoBehaviour
 
         // Create result
         var result = new EvaluationResult(grade, correctHits, perfectHits, scheduledBeats.Count, points);
+
+        // Fold into the whole-run report before the score/fail bookkeeping,
+        // so a double-fail score reset can never touch the tally.
+        RunStats.RecordBar(result, matches, 60.0 / beatGenerator.metronome.bpm, PerfectThreshold);
 
         // Apply result to game state
         ApplyEvaluationResult(result);
@@ -456,6 +467,7 @@ public class BeatEvaluator : MonoBehaviour
         PerfectHits = 0;
         TotalPerfectHits = 0;
         HasFailedOnce = false;
+        RunStats.Reset();
         UpdateScoreDisplay();
     }
     #endregion
