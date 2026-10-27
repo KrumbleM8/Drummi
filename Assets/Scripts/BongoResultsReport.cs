@@ -44,12 +44,33 @@ public class BongoResultsReport : MonoBehaviour
     [Tooltip("Drop the real crumpled-paper sprite here. Empty = a procedural placeholder is generated.")]
     [SerializeField] private Sprite paperSprite;
     [SerializeField] private Color paperTint = Color.white;
-    [Tooltip("Size of the sheet in page units (the page is 800 wide; height depends on the device aspect).")]
-    [SerializeField] private Vector2 paperSize = new Vector2(620f, 560f);
-    [Tooltip("Where the sheet rests. Slightly above centre so it clears the Back button below.")]
-    [SerializeField] private Vector2 restPosition = new Vector2(0f, 90f);
+    [Tooltip("Design size of the sheet in page units — A4 proportions (1 : 1.414). The sheet is scaled " +
+             "uniformly at runtime to fit between the input bongos and the rat's bongo (see Placement).")]
+    [SerializeField] private Vector2 paperSize = new Vector2(480f, 680f);
     [Tooltip("Resting tilt, degrees. A few degrees off-square sells 'tossed on the table'.")]
     [SerializeField] private float tiltDegrees = -3f;
+
+    [Header("Placement")]
+    [Tooltip("Fit the sheet between the input bongos (bottom of the screen) and the rat's bongo. " +
+             "Off = rest at Fallback Rest Position at design size.")]
+    [SerializeField] private bool fitBetweenBongos = true;
+    [Tooltip("Top of the input-bongos panel, measured in canvas units up from the bottom screen edge " +
+             "(Bongos panel: anchored y 88 + half of 586).")]
+    [SerializeField] private float inputBongosTopFromBottom = 381f;
+    [Tooltip("Gap kept between the sheet's bottom edge and the input bongos.")]
+    [SerializeField] private float bottomGap = 10f;
+    [Tooltip("World-space y of the rat's bongo rim; the sheet's top edge stays at or below it so the " +
+             "rat's bongo is never fully covered. CustardTheRat sprite spans ~0.8 to 4.6 world units.")]
+    [SerializeField] private float ratBongoTopWorldY = 1.7f;
+    [SerializeField] private float minScale = 0.55f;
+    [SerializeField] private float maxScale = 1f;
+    [Tooltip("Horizontal rest position of the sheet's centre.")]
+    [SerializeField] private float restX = 0f;
+    [Tooltip("Used when Fit Between Bongos is off, or no Canvas can be found.")]
+    [SerializeField] private Vector2 fallbackRestPosition = new Vector2(0f, 40f);
+    [Tooltip("Text-free margin at the bottom of the sheet so the Back button can overlap the paper " +
+             "without covering any ink.")]
+    [SerializeField] private float bottomTextMargin = 140f;
 
     [Header("Ink")]
     [SerializeField] private Color inkColor = new Color(0.22f, 0.16f, 0.11f, 1f);
@@ -58,17 +79,17 @@ public class BongoResultsReport : MonoBehaviour
     [SerializeField] private Color highlightInkColor = new Color(0.72f, 0.18f, 0.12f, 1f);
     [Tooltip("Empty = copied from the page's other texts (ScoreScreen.perfectHitsText), else TMP default.")]
     [SerializeField] private TMP_FontAsset font;
-    [SerializeField] private float titleFontSize = 40f;
+    [SerializeField] private float titleFontSize = 36f;
     [SerializeField] private float scoreFontSize = 44f;
     [SerializeField] private float rowFontSize = 28f;
-    [SerializeField] private float verdictFontSize = 34f;
-    [SerializeField] private float detailFontSize = 21f;
+    [SerializeField] private float verdictFontSize = 30f;
+    [SerializeField] private float detailFontSize = 20f;
 
     [Header("Grade stamp")]
-    [SerializeField] private Vector2 stampOffsetFromTopRight = new Vector2(-92f, -82f);
-    [SerializeField] private float stampSize = 132f;
+    [SerializeField] private Vector2 stampOffsetFromTopRight = new Vector2(-78f, -70f);
+    [SerializeField] private float stampSize = 120f;
     [SerializeField] private float stampTiltDegrees = 14f;
-    [SerializeField] private float stampFontSize = 96f;
+    [SerializeField] private float stampFontSize = 88f;
     [Range(0f, 1f)] [SerializeField] private float stampInkAlpha = 0.8f;
 
     [Header("Entrance")]
@@ -104,6 +125,10 @@ public class BongoResultsReport : MonoBehaviour
     private Sprite _generatedPaper;
     private Sprite _generatedRing;
 
+    // Resolved by ComputePlacement() on every Show — where the sheet rests and how big it is.
+    private Vector2 _restPosition;
+    private float _restScale = 1f;
+
     #region Public API
     /// <summary>Fills the sheet, shows it and slides it in. <paramref name="headline"/> carries score / grade / high score.</summary>
     public void Show(BongoRunStats stats, Headline headline)
@@ -111,7 +136,11 @@ public class BongoResultsReport : MonoBehaviour
         if (stats == null) { Hide(); return; }
 
         EnsureBuilt();
+        // Draw beneath the page's other children (the Back button) so the button can
+        // sit on top of the paper and stay clickable.
+        transform.SetAsFirstSibling();
         gameObject.SetActive(true);
+        ComputePlacement();
         Fill(stats, headline);
         PlayEntrance(headline);
 
@@ -142,13 +171,16 @@ public class BongoResultsReport : MonoBehaviour
         {
             paper = NewRect("Paper", root);
             paper.sizeDelta = paperSize;
-            paper.anchoredPosition = restPosition;
+            paper.anchoredPosition = fallbackRestPosition;
             paper.localRotation = Quaternion.Euler(0f, 0f, tiltDegrees);
         }
-        if (paperGroup == null) paperGroup = paper.GetComponent<CanvasGroup>() ?? paper.gameObject.AddComponent<CanvasGroup>();
+        // NB: Unity's "fake null" for missing components defeats ??, so compare with == null.
+        if (paperGroup == null) paperGroup = paper.GetComponent<CanvasGroup>();
+        if (paperGroup == null) paperGroup = paper.gameObject.AddComponent<CanvasGroup>();
+        if (paperImage == null) paperImage = paper.GetComponent<Image>();
         if (paperImage == null)
         {
-            paperImage = paper.GetComponent<Image>() ?? paper.gameObject.AddComponent<Image>();
+            paperImage = paper.gameObject.AddComponent<Image>();
             paperImage.type = Image.Type.Simple;
             paperImage.preserveAspect = false;
             paperImage.raycastTarget = false;
@@ -164,8 +196,9 @@ public class BongoResultsReport : MonoBehaviour
             var content = NewRect("Content", paper);
             content.anchorMin = Vector2.zero;
             content.anchorMax = Vector2.one;
-            content.offsetMin = new Vector2(40f, 28f);
-            content.offsetMax = new Vector2(-40f, -34f);
+            // Bottom offset leaves a text-free strip for the Back button to overlap.
+            content.offsetMin = new Vector2(36f, bottomTextMargin);
+            content.offsetMax = new Vector2(-36f, -30f);
 
             var layout = content.gameObject.AddComponent<VerticalLayoutGroup>();
             layout.childAlignment = TextAnchor.UpperCenter;
@@ -287,10 +320,56 @@ public class BongoResultsReport : MonoBehaviour
         _routine = StartCoroutine(EntranceRoutine(h));
     }
 
+    /// <summary>
+    /// Works out where the sheet rests and how big it is: A4 proportions, scaled so it
+    /// fits between the top of the input bongos (bottom of the screen) and the rim of
+    /// the rat's bongo (a world-space sprite), using the live canvas height and camera.
+    /// </summary>
+    private void ComputePlacement()
+    {
+        _restPosition = fallbackRestPosition;
+        _restScale = 1f;
+
+        var canvas = GetComponentInParent<Canvas>();
+        if (!fitBetweenBongos || canvas == null) { ApplyPlacement(); return; }
+
+        var canvasRt = canvas.rootCanvas.GetComponent<RectTransform>();
+        float canvasHeight = canvasRt != null ? canvasRt.rect.height : 1422f;
+        float halfH = canvasHeight * 0.5f;
+
+        // World-y → canvas-y for an orthographic camera sitting at y = 0.
+        var cam = Camera.main;
+        float unitsPerWorld = (cam != null && cam.orthographic && cam.orthographicSize > 0f)
+            ? canvasHeight / (2f * cam.orthographicSize)
+            : canvasHeight / 10f;
+        float camY = cam != null ? cam.transform.position.y : 0f;
+
+        float bottomLimit = -halfH + inputBongosTopFromBottom + bottomGap;
+        float topLimit = (ratBongoTopWorldY - camY) * unitsPerWorld;
+
+        float available = topLimit - bottomLimit;
+        float scale = Mathf.Clamp(available / paperSize.y, minScale, maxScale);
+        float height = paperSize.y * scale;
+
+        _restScale = scale;
+        _restPosition = new Vector2(restX, bottomLimit + height * 0.5f);
+        ApplyPlacement();
+
+        Debug.Log($"[BongoResultsReport] placement: canvasH {canvasHeight:0}, bongos top {bottomLimit:0}, " +
+                  $"rat bongo rim {topLimit:0} → scale {scale:0.00}, rest y {_restPosition.y:0}");
+    }
+
+    private void ApplyPlacement()
+    {
+        paper.sizeDelta = paperSize;
+        paper.localScale = Vector3.one * _restScale;
+    }
+
     private void SnapToRest()
     {
-        paper.anchoredPosition = restPosition;
+        paper.anchoredPosition = _restPosition;
         paper.localRotation = Quaternion.Euler(0f, 0f, tiltDegrees);
+        paper.localScale = Vector3.one * _restScale;
         paperGroup.alpha = 1f;
     }
 
@@ -298,6 +377,7 @@ public class BongoResultsReport : MonoBehaviour
     {
         // Unscaled time: the pause handler may have left timeScale at 0 on a game over.
         paperGroup.alpha = 1f;
+        Vector2 restPosition = _restPosition;
         Vector2 from = restPosition + enterOffset;
         float fromTilt = tiltDegrees + enterExtraTilt;
 
