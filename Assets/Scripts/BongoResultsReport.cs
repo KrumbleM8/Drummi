@@ -4,16 +4,18 @@ using UnityEngine;
 using UnityEngine.UI;
 
 /// <summary>
-/// The Bongo results "report card": a slightly crumpled sheet of paper on the
-/// Score page listing bars played / passed, perfect hits, perfect phrases and an
-/// early-or-late timing verdict for the run just finished.
+/// The Bongo results "report card": a slightly crumpled sheet of paper that slides
+/// in from off-screen to the centre of the Score page and carries the whole result —
+/// score, grade stamp, bars played / passed, perfect hits, perfect phrases, high
+/// score and an early-or-late timing verdict. While it is up, ScoreScreen hides its
+/// older separate score / grade / icon / perfect-hits / high-score elements.
 ///
 /// Visuals are a PLACEHOLDER. The sheet is a procedurally generated paper texture
-/// (creases, grain, a wobbly torn edge) until real art is dropped into
-/// <see cref="paperSprite"/>. The whole hierarchy (paper image, title, rows) is
-/// built by <see cref="EnsureBuilt"/> — at runtime on first use when nothing is
-/// wired, or in the editor via the "Drummi/Bongo/Bake Results Report" menu so the
-/// pieces can be tuned in the inspector.
+/// (creases, grain, a wobbly torn edge) and the grade is a tilted inked letter in a
+/// ring, until real art is dropped into <see cref="paperSprite"/>. The hierarchy
+/// (paper image, stamp, title, rows) is built by <see cref="EnsureBuilt"/> — at
+/// runtime on first use when nothing is wired, or in the editor via
+/// "Drummi/Bongo/Bake Results Report Into Open Scene" for inspector tuning.
 ///
 /// Flow: BeatEvaluator tallies a <see cref="BongoRunStats"/> per bar →
 /// GameManager snapshots it at song end → ScoreScreen.ShowBongoReport → <see cref="Show"/>.
@@ -24,33 +26,57 @@ public class BongoResultsReport : MonoBehaviour
 {
     public const string DefaultObjectName = "BongoReport";
 
+    /// <summary>The score-screen values that moved onto the paper (filled by ScoreScreen).</summary>
+    public struct Headline
+    {
+        public int Score;
+        /// <summary>Seconds to count the score up from 0. 0 = show immediately.</summary>
+        public float ScoreCountDuration;
+        public string Grade;
+        public Color GradeColor;
+        /// <summary>Text for the high-score row, e.g. "1200" or "NEW! 1450".</summary>
+        public string HighScoreText;
+        public bool IsNewHighScore;
+    }
+
     #region Inspector — look
     [Header("Paper (placeholder until real art exists)")]
     [Tooltip("Drop the real crumpled-paper sprite here. Empty = a procedural placeholder is generated.")]
     [SerializeField] private Sprite paperSprite;
     [SerializeField] private Color paperTint = Color.white;
-    [Tooltip("Size of the sheet in page units (the Score page is 800 x 1422).")]
-    [SerializeField] private Vector2 paperSize = new Vector2(600f, 540f);
-    [Tooltip("Where the sheet rests on the page. Above the score block by default.")]
-    [SerializeField] private Vector2 restPosition = new Vector2(0f, 400f);
+    [Tooltip("Size of the sheet in page units (the page is 800 wide; height depends on the device aspect).")]
+    [SerializeField] private Vector2 paperSize = new Vector2(620f, 560f);
+    [Tooltip("Where the sheet rests. Slightly above centre so it clears the Back button below.")]
+    [SerializeField] private Vector2 restPosition = new Vector2(0f, 90f);
     [Tooltip("Resting tilt, degrees. A few degrees off-square sells 'tossed on the table'.")]
     [SerializeField] private float tiltDegrees = -3f;
 
     [Header("Ink")]
     [SerializeField] private Color inkColor = new Color(0.22f, 0.16f, 0.11f, 1f);
     [SerializeField] private Color faintInkColor = new Color(0.22f, 0.16f, 0.11f, 0.55f);
+    [Tooltip("Ink for the NEW! high-score row.")]
+    [SerializeField] private Color highlightInkColor = new Color(0.72f, 0.18f, 0.12f, 1f);
     [Tooltip("Empty = copied from the page's other texts (ScoreScreen.perfectHitsText), else TMP default.")]
     [SerializeField] private TMP_FontAsset font;
     [SerializeField] private float titleFontSize = 40f;
-    [SerializeField] private float rowFontSize = 30f;
+    [SerializeField] private float scoreFontSize = 44f;
+    [SerializeField] private float rowFontSize = 28f;
     [SerializeField] private float verdictFontSize = 34f;
-    [SerializeField] private float detailFontSize = 22f;
+    [SerializeField] private float detailFontSize = 21f;
+
+    [Header("Grade stamp")]
+    [SerializeField] private Vector2 stampOffsetFromTopRight = new Vector2(-92f, -82f);
+    [SerializeField] private float stampSize = 132f;
+    [SerializeField] private float stampTiltDegrees = 14f;
+    [SerializeField] private float stampFontSize = 96f;
+    [Range(0f, 1f)] [SerializeField] private float stampInkAlpha = 0.8f;
 
     [Header("Entrance")]
-    [Tooltip("Seconds for the sheet to drop onto the page. 0 = snap.")]
-    [SerializeField] private float dropDuration = 0.45f;
-    [SerializeField] private float dropHeight = 220f;
-    [SerializeField] private float dropExtraTilt = 7f;
+    [Tooltip("Where the sheet starts relative to its rest position. Default: well below the bottom of the screen.")]
+    [SerializeField] private Vector2 enterOffset = new Vector2(0f, -1500f);
+    [Tooltip("Seconds for the sheet to slide to the centre. 0 = snap.")]
+    [SerializeField] private float enterDuration = 0.6f;
+    [SerializeField] private float enterExtraTilt = 10f;
     #endregion
 
     #region Inspector — built parts
@@ -59,42 +85,48 @@ public class BongoResultsReport : MonoBehaviour
     [SerializeField] private CanvasGroup paperGroup;
     [SerializeField] private Image paperImage;
     [SerializeField] private TMP_Text titleText;
+    [SerializeField] private TMP_Text scoreValue;
     [SerializeField] private TMP_Text barsPlayedValue;
     [SerializeField] private TMP_Text barsPassedValue;
     [SerializeField] private TMP_Text perfectHitsValue;
     [SerializeField] private TMP_Text perfectPhrasesValue;
+    [SerializeField] private TMP_Text highScoreValue;
     [SerializeField] private TMP_Text timingVerdict;
     [SerializeField] private TMP_Text timingDetail;
+    [SerializeField] private RectTransform stamp;
+    [SerializeField] private Image stampRing;
+    [SerializeField] private TMP_Text stampLetter;
     #endregion
 
-    public bool IsBuilt => paper != null && paperImage != null && barsPlayedValue != null;
+    public bool IsBuilt => paper != null && paperImage != null && barsPlayedValue != null && scoreValue != null;
 
-    private Coroutine _entrance;
+    private Coroutine _routine;
     private Sprite _generatedPaper;
+    private Sprite _generatedRing;
 
     #region Public API
-    /// <summary>Fills the sheet from <paramref name="stats"/>, shows it and plays the drop-in.</summary>
-    public void Show(BongoRunStats stats)
+    /// <summary>Fills the sheet, shows it and slides it in. <paramref name="headline"/> carries score / grade / high score.</summary>
+    public void Show(BongoRunStats stats, Headline headline)
     {
         if (stats == null) { Hide(); return; }
 
         EnsureBuilt();
         gameObject.SetActive(true);
-        Fill(stats);
-        PlayEntrance();
+        Fill(stats, headline);
+        PlayEntrance(headline);
 
-        Debug.Log($"[BongoResultsReport] {stats}");
+        Debug.Log($"[BongoResultsReport] score {headline.Score} grade {headline.Grade} | {stats}");
     }
 
     public void Hide()
     {
-        if (_entrance != null) { StopCoroutine(_entrance); _entrance = null; }
+        if (_routine != null) { StopCoroutine(_routine); _routine = null; }
         gameObject.SetActive(false);
     }
 
     /// <summary>
-    /// Builds the paper + text hierarchy under this object if it isn't there yet.
-    /// Safe to call repeatedly. Used at runtime (first Show) and by the editor baker.
+    /// Builds the paper + stamp + text hierarchy under this object if it isn't there
+    /// yet. Safe to call repeatedly. Used at runtime (first Show) and by the editor baker.
     /// </summary>
     public void EnsureBuilt()
     {
@@ -132,8 +164,8 @@ public class BongoResultsReport : MonoBehaviour
             var content = NewRect("Content", paper);
             content.anchorMin = Vector2.zero;
             content.anchorMax = Vector2.one;
-            content.offsetMin = new Vector2(48f, 40f);
-            content.offsetMax = new Vector2(-48f, -36f);
+            content.offsetMin = new Vector2(40f, 28f);
+            content.offsetMax = new Vector2(-40f, -34f);
 
             var layout = content.gameObject.AddComponent<VerticalLayoutGroup>();
             layout.childAlignment = TextAnchor.UpperCenter;
@@ -141,44 +173,77 @@ public class BongoResultsReport : MonoBehaviour
             layout.childControlHeight = true;
             layout.childForceExpandWidth = true;
             layout.childForceExpandHeight = false;
-            layout.spacing = 6f;
+            layout.spacing = 5f;
 
-            titleText = NewText("Title", content, fontAsset, titleFontSize, inkColor, TextAlignmentOptions.Center, 56f);
+            titleText = NewText("Title", content, fontAsset, titleFontSize, inkColor, TextAlignmentOptions.Center, 46f);
             titleText.text = "BONGO REPORT";
             titleText.fontStyle = FontStyles.Bold;
 
-            NewText("Rule", content, fontAsset, rowFontSize * 0.6f, faintInkColor, TextAlignmentOptions.Center, 20f).text =
-                "- - - - - - - - - - - - - - - - - -";
+            scoreValue = NewRow("Score", content, fontAsset, "Score", rowFontSize, scoreFontSize, 56f);
 
-            barsPlayedValue     = NewRow("BarsPlayed",     content, fontAsset, "Bars played");
-            barsPassedValue     = NewRow("BarsPassed",     content, fontAsset, "Bars passed");
-            perfectHitsValue    = NewRow("PerfectHits",    content, fontAsset, "Perfect hits");
-            perfectPhrasesValue = NewRow("PerfectPhrases", content, fontAsset, "Perfect phrases");
+            NewText("Rule", content, fontAsset, rowFontSize * 0.55f, faintInkColor, TextAlignmentOptions.Center, 14f).text =
+                "- - - - - - - - - - - - - - - - - - - -";
 
-            NewText("Spacer", content, fontAsset, 10f, Color.clear, TextAlignmentOptions.Center, 14f);
+            barsPlayedValue     = NewRow("BarsPlayed",     content, fontAsset, "Bars played",     rowFontSize, rowFontSize, 38f);
+            barsPassedValue     = NewRow("BarsPassed",     content, fontAsset, "Bars passed",     rowFontSize, rowFontSize, 38f);
+            perfectHitsValue    = NewRow("PerfectHits",    content, fontAsset, "Perfect hits",    rowFontSize, rowFontSize, 38f);
+            perfectPhrasesValue = NewRow("PerfectPhrases", content, fontAsset, "Perfect phrases", rowFontSize, rowFontSize, 38f);
+            highScoreValue      = NewRow("HighScore",      content, fontAsset, "High score",      rowFontSize, rowFontSize, 38f);
 
-            var timingLabel = NewText("TimingLabel", content, fontAsset, detailFontSize, faintInkColor, TextAlignmentOptions.Center, 28f);
+            NewText("Spacer", content, fontAsset, 8f, Color.clear, TextAlignmentOptions.Center, 6f);
+
+            var timingLabel = NewText("TimingLabel", content, fontAsset, detailFontSize * 0.95f, faintInkColor, TextAlignmentOptions.Center, 22f);
             timingLabel.text = "TIMING";
             timingLabel.characterSpacing = 8f;
 
-            timingVerdict = NewText("TimingVerdict", content, fontAsset, verdictFontSize, inkColor, TextAlignmentOptions.Center, 46f);
+            timingVerdict = NewText("TimingVerdict", content, fontAsset, verdictFontSize, inkColor, TextAlignmentOptions.Center, 40f);
             timingVerdict.fontStyle = FontStyles.Bold;
 
-            timingDetail = NewText("TimingDetail", content, fontAsset, detailFontSize, faintInkColor, TextAlignmentOptions.Center, 30f);
+            timingDetail = NewText("TimingDetail", content, fontAsset, detailFontSize, faintInkColor, TextAlignmentOptions.Center, 24f);
+        }
+
+        if (stamp == null)
+        {
+            // Grade stamp: an inked letter inside a ring, tilted, in the top-right corner of the sheet.
+            stamp = NewRect("GradeStamp", paper);
+            stamp.anchorMin = stamp.anchorMax = new Vector2(1f, 1f);
+            stamp.anchoredPosition = stampOffsetFromTopRight;
+            stamp.sizeDelta = new Vector2(stampSize, stampSize);
+            stamp.localRotation = Quaternion.Euler(0f, 0f, stampTiltDegrees);
+
+            var ringRt = NewRect("Ring", stamp);
+            ringRt.anchorMin = Vector2.zero;
+            ringRt.anchorMax = Vector2.one;
+            ringRt.offsetMin = ringRt.offsetMax = Vector2.zero;
+            stampRing = ringRt.gameObject.AddComponent<Image>();
+            stampRing.raycastTarget = false;
+            stampRing.type = Image.Type.Simple;
+            stampRing.preserveAspect = true;
+
+            stampLetter = NewStretchText("Letter", stamp, fontAsset, stampFontSize, inkColor, TextAlignmentOptions.Center);
+            stampLetter.fontStyle = FontStyles.Bold;
+        }
+        if (stampRing != null && stampRing.sprite == null)
+        {
+            if (_generatedRing == null) _generatedRing = GenerateRingSprite();
+            stampRing.sprite = _generatedRing;
         }
     }
     #endregion
 
     #region Fill
-    private void Fill(BongoRunStats s)
+    private void Fill(BongoRunStats s, Headline h)
     {
+        scoreValue.text          = h.ScoreCountDuration > 0f ? "0" : h.Score.ToString();
         barsPlayedValue.text     = s.BarsPlayed.ToString();
         barsPassedValue.text     = $"{s.BarsPassed} / {s.BarsPlayed}";
         perfectHitsValue.text    = $"{s.PerfectHits} / {s.TotalBeats}";
         perfectPhrasesValue.text = s.PerfectPhrases.ToString();
 
-        timingVerdict.text = s.LeanText;
+        highScoreValue.text  = string.IsNullOrEmpty(h.HighScoreText) ? "-" : h.HighScoreText;
+        highScoreValue.color = h.IsNewHighScore ? highlightInkColor : inkColor;
 
+        timingVerdict.text = s.LeanText;
         if (s.Lean == BongoRunStats.TimingLean.NotEnoughData)
         {
             timingDetail.text = "";
@@ -190,20 +255,36 @@ public class BongoResultsReport : MonoBehaviour
                 : $"avg {Mathf.Abs(s.MeanOffsetMs):0} ms {(s.MeanOffsetMs < 0f ? "early" : "late")}";
             timingDetail.text = $"early {s.EarlyHits}  ·  late {s.LateHits}  ·  {avg}";
         }
+
+        // Grade stamp
+        bool hasGrade = !string.IsNullOrEmpty(h.Grade);
+        stamp.gameObject.SetActive(hasGrade);
+        if (hasGrade)
+        {
+            Color stampCol = h.GradeColor;
+            // Grade colours come from the old on-screen grade text (bright, for a dark
+            // background). Darken them so they read as ink on paper.
+            stampCol = Color.Lerp(stampCol, inkColor, 0.45f);
+            stampCol.a = stampInkAlpha;
+            stampLetter.text = h.Grade;
+            stampLetter.color = stampCol;
+            stampRing.color = stampCol;
+        }
     }
     #endregion
 
-    #region Entrance
-    private void PlayEntrance()
+    #region Entrance + score count-up
+    private void PlayEntrance(Headline h)
     {
-        if (_entrance != null) { StopCoroutine(_entrance); _entrance = null; }
+        if (_routine != null) { StopCoroutine(_routine); _routine = null; }
 
-        if (dropDuration <= 0f || !isActiveAndEnabled)
+        if (!isActiveAndEnabled)
         {
             SnapToRest();
+            scoreValue.text = h.Score.ToString();
             return;
         }
-        _entrance = StartCoroutine(EntranceRoutine());
+        _routine = StartCoroutine(EntranceRoutine(h));
     }
 
     private void SnapToRest()
@@ -213,28 +294,45 @@ public class BongoResultsReport : MonoBehaviour
         paperGroup.alpha = 1f;
     }
 
-    private IEnumerator EntranceRoutine()
+    private IEnumerator EntranceRoutine(Headline h)
     {
         // Unscaled time: the pause handler may have left timeScale at 0 on a game over.
-        float t = 0f;
-        Vector2 from = restPosition + new Vector2(0f, dropHeight);
-        float fromTilt = tiltDegrees + dropExtraTilt;
+        paperGroup.alpha = 1f;
+        Vector2 from = restPosition + enterOffset;
+        float fromTilt = tiltDegrees + enterExtraTilt;
 
-        while (t < dropDuration)
+        if (enterDuration > 0f)
         {
-            t += Time.unscaledDeltaTime;
-            float k = Mathf.Clamp01(t / dropDuration);
-            float e = 1f - Mathf.Pow(1f - k, 3f);                  // ease-out cubic
-            float settle = Mathf.Sin(k * Mathf.PI) * 0.12f * (1f - k); // tiny overshoot on the tilt
+            float t = 0f;
+            while (t < enterDuration)
+            {
+                t += Time.unscaledDeltaTime;
+                float k = Mathf.Clamp01(t / enterDuration);
+                float e = 1f - Mathf.Pow(1f - k, 3f);                     // ease-out cubic
+                float settle = Mathf.Sin(k * Mathf.PI) * 0.12f * (1f - k); // tiny overshoot on the tilt
 
-            paper.anchoredPosition = Vector2.LerpUnclamped(from, restPosition, e);
-            paper.localRotation = Quaternion.Euler(0f, 0f, Mathf.LerpUnclamped(fromTilt, tiltDegrees, e) - settle * dropExtraTilt);
-            paperGroup.alpha = Mathf.Clamp01(k * 2.5f);
-            yield return null;
+                paper.anchoredPosition = Vector2.LerpUnclamped(from, restPosition, e);
+                paper.localRotation = Quaternion.Euler(0f, 0f, Mathf.LerpUnclamped(fromTilt, tiltDegrees, e) - settle * enterExtraTilt);
+                yield return null;
+            }
         }
-
         SnapToRest();
-        _entrance = null;
+
+        // Then count the score up, like the old FinalScoreTxt did.
+        if (h.ScoreCountDuration > 0f)
+        {
+            float t = 0f;
+            while (t < h.ScoreCountDuration)
+            {
+                t += Time.unscaledDeltaTime;
+                float k = Mathf.Clamp01(t / h.ScoreCountDuration);
+                float e = 1f - Mathf.Pow(1f - k, 3f);
+                scoreValue.text = Mathf.RoundToInt(Mathf.Lerp(0f, h.Score, e)).ToString();
+                yield return null;
+            }
+        }
+        scoreValue.text = h.Score.ToString();
+        _routine = null;
     }
     #endregion
 
@@ -271,17 +369,18 @@ public class BongoResultsReport : MonoBehaviour
         return tmp;
     }
 
-    /// <summary>A label on the left and a value on the right, sharing one row.</summary>
-    private TMP_Text NewRow(string name, Transform parent, TMP_FontAsset fontAsset, string label)
+    /// <summary>A label on the left and a (bold) value on the right, sharing one row. Returns the value text.</summary>
+    private TMP_Text NewRow(string name, Transform parent, TMP_FontAsset fontAsset, string label,
+                            float labelSize, float valueSize, float height)
     {
         var row = NewRect(name, parent);
         var le = row.gameObject.AddComponent<LayoutElement>();
-        le.preferredHeight = rowFontSize + 16f;
-        le.minHeight = le.preferredHeight;
+        le.preferredHeight = height;
+        le.minHeight = height;
 
-        var l = NewStretchText("Label", row, fontAsset, rowFontSize, inkColor, TextAlignmentOptions.MidlineLeft);
+        var l = NewStretchText("Label", row, fontAsset, labelSize, inkColor, TextAlignmentOptions.MidlineLeft);
         l.text = label;
-        var v = NewStretchText("Value", row, fontAsset, rowFontSize, inkColor, TextAlignmentOptions.MidlineRight);
+        var v = NewStretchText("Value", row, fontAsset, valueSize, inkColor, TextAlignmentOptions.MidlineRight);
         v.fontStyle = FontStyles.Bold;
         return v;
     }
@@ -331,7 +430,7 @@ public class BongoResultsReport : MonoBehaviour
     }
     #endregion
 
-    #region Placeholder paper texture
+    #region Placeholder textures
     /// <summary>
     /// Procedural "slightly crumpled paper": warm off-white base, fine grain, soft
     /// broad shading, sharp ridged creases, a faint darkening toward the edges and a
@@ -397,6 +496,43 @@ public class BongoResultsReport : MonoBehaviour
 
         var sprite = Sprite.Create(tex, new Rect(0, 0, width, height), new Vector2(0.5f, 0.5f), 100f);
         sprite.name = "BongoReportPaper (generated)";
+        return sprite;
+    }
+
+    /// <summary>A slightly uneven inked ring (white, tinted by the Image colour) for the grade stamp.</summary>
+    public static Sprite GenerateRingSprite(int size = 128, int seed = 3)
+    {
+        var tex = new Texture2D(size, size, TextureFormat.RGBA32, false)
+        {
+            name = "BongoReportStampRing (generated)",
+            wrapMode = TextureWrapMode.Clamp,
+            filterMode = FilterMode.Bilinear,
+        };
+        var pixels = new Color32[size * size];
+        float so = seed * 7.77f;
+        float c = (size - 1) * 0.5f;
+
+        for (int y = 0; y < size; y++)
+        for (int x = 0; x < size; x++)
+        {
+            float dx = (x - c) / c, dy = (y - c) / c;
+            float r = Mathf.Sqrt(dx * dx + dy * dy);
+            float ang = Mathf.Atan2(dy, dx);
+            // ring radius wobbles a little around the circle; ink thickness varies too
+            float wob = (Mathf.PerlinNoise(Mathf.Cos(ang) * 1.6f + so, Mathf.Sin(ang) * 1.6f + so) - 0.5f) * 0.05f;
+            float ringR = 0.90f + wob;
+            float thick = 0.045f + (Mathf.PerlinNoise(Mathf.Cos(ang) * 3f - so, Mathf.Sin(ang) * 3f) - 0.5f) * 0.02f;
+            float d = Mathf.Abs(r - ringR);
+            float a = 1f - Mathf.SmoothStep(thick * 0.6f, thick, d);
+            // patchy ink coverage
+            a *= 0.75f + 0.25f * Mathf.PerlinNoise(x * 0.25f + so, y * 0.25f);
+            pixels[y * size + x] = new Color(1f, 1f, 1f, Mathf.Clamp01(a));
+        }
+
+        tex.SetPixels32(pixels);
+        tex.Apply(false, false);
+        var sprite = Sprite.Create(tex, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f), 100f);
+        sprite.name = "BongoReportStampRing (generated)";
         return sprite;
     }
     #endregion

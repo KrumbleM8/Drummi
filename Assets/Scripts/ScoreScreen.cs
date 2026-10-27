@@ -36,6 +36,12 @@ public class ScoreScreen : MonoBehaviour
     private int displayedScore;
     private bool isAnimating;
 
+    // Last DisplayScore call, re-used by ShowBongoReport so the paper can carry
+    // the score / grade / high score instead of the separate on-screen texts.
+    private int _lastScore;
+    private bool _lastIsNewHighScore;
+    private string _lastHighScoreKey;
+
     private void OnEnable()
     {
         if (!animateScore && targetScore > 0)
@@ -52,6 +58,9 @@ public class ScoreScreen : MonoBehaviour
                              string highScoreKey = null)
     {
         targetScore = score;
+        _lastScore = score;
+        _lastIsNewHighScore = isNewHighScore;
+        _lastHighScoreKey = highScoreKey;
 
         if (animateScore)
         {
@@ -106,6 +115,7 @@ public class ScoreScreen : MonoBehaviour
         if (stats == null)
         {
             if (bongoReport != null) bongoReport.Hide();
+            SetLegacyElementsVisible(true);
             return;
         }
 
@@ -121,8 +131,63 @@ public class ScoreScreen : MonoBehaviour
             }
         }
 
-        bongoReport.Show(stats);
+        // The paper carries score / grade / high score itself, so the separate
+        // on-screen texts and the grade icon go away while it is up.
+        SetLegacyElementsVisible(false);
+        if (isAnimating) { StopAllCoroutines(); isAnimating = false; }
+
+        string grade = CalculateGrade(_lastScore);
+        string highScoreText;
+        if (_lastIsNewHighScore)
+        {
+            highScoreText = $"NEW! {_lastScore}";
+        }
+        else
+        {
+            int highScore = PlayerPrefs.GetInt(string.IsNullOrEmpty(_lastHighScoreKey) ? "GlitchyHS" : _lastHighScoreKey, 0);
+            highScoreText = highScore.ToString();
+        }
+
+        bongoReport.Show(stats, new BongoResultsReport.Headline
+        {
+            Score = _lastScore,
+            ScoreCountDuration = animateScore ? scoreAnimationDuration : 0f,
+            Grade = grade,
+            GradeColor = GradeColor(grade),
+            HighScoreText = highScoreText,
+            IsNewHighScore = _lastIsNewHighScore,
+        });
     }
+
+    /// <summary>
+    /// Shows or hides the original separate result elements (final score, perfect
+    /// hits, high score, grade letter, grade icon). Hidden while the Bongo paper
+    /// report is up; restored for modes that don't use it.
+    /// </summary>
+    private void SetLegacyElementsVisible(bool visible)
+    {
+        SetVisible(finalScoreText, visible);
+        SetVisible(perfectHitsText, visible);
+        SetVisible(highScoreText, visible);
+        SetVisible(gradeText, visible);
+        SetVisible(gradeImage, visible);
+    }
+
+    private static void SetVisible(Component c, bool visible)
+    {
+        if (c != null && c.gameObject.activeSelf != visible) c.gameObject.SetActive(visible);
+    }
+
+    /// <summary>Display colour for a grade letter (as used by the on-screen grade text).</summary>
+    public static Color GradeColor(string grade) => grade switch
+    {
+        "S" => new Color(1f, 0.84f, 0f),
+        "A" => new Color(0f, 1f, 0.5f),
+        "B" => new Color(0.3f, 0.7f, 1f),
+        "C" => new Color(1f, 0.6f, 0.2f),
+        "D" => new Color(0.7f, 0.7f, 0.7f),
+        _ => Color.white
+    };
 
     /// <summary>
     /// Shows <paramref name="title"/> above the results, or hides the title when
@@ -188,15 +253,7 @@ public class ScoreScreen : MonoBehaviour
         {
             gradeText.text = grade;
 
-            gradeText.color = grade switch
-            {
-                "S" => new Color(1f, 0.84f, 0f),
-                "A" => new Color(0f, 1f, 0.5f),
-                "B" => new Color(0.3f, 0.7f, 1f),
-                "C" => new Color(1f, 0.6f, 0.2f),
-                "D" => new Color(0.7f, 0.7f, 0.7f),
-                _ => Color.white
-            };
+            gradeText.color = GradeColor(grade);
         }
 
         if (gradeImage != null)
