@@ -11,6 +11,15 @@ public class ScreenTransition : MonoBehaviour
     [Tooltip("Set to true if you want the transition to complete automatically on start (i.e. finish the last half).")]
     public bool autoRevealOnStart = true;
 
+    [Tooltip("With Auto Reveal On Start: hold the cover this many seconds (realtime) after the scene's first " +
+             "rendered frame before revealing, so the reveal plays on a settled scene instead of during the " +
+             "load hitch. 0 = reveal on the first frame (old behaviour).")]
+    public float revealDelayOnStart = 0f;
+
+    [Tooltip("Longest single frame step the wipe will advance by. Keeps a load hitch or a long frame from " +
+             "jumping the panel most of the way across in one go.")]
+    public float maxFrameStep = 1f / 30f;
+
     // Reference to the RectTransform on the UI Image component.
     private RectTransform _rectTransform;
 
@@ -65,9 +74,25 @@ public class ScreenTransition : MonoBehaviour
             // Then call a reveal that only moves over the remaining half.
             //
             // In this example the script simply plays the full reveal transition.
-            Invoke("StartReveal", 0);
+            StartCoroutine(AutoRevealRoutine());
         }
     }
+
+    /// <summary>
+    /// Auto-reveal on scene start: let the scene render its first frame (the one that
+    /// absorbs the load hitch), optionally hold the cover for revealDelayOnStart, then wipe.
+    /// </summary>
+    private IEnumerator AutoRevealRoutine()
+    {
+        yield return new WaitForEndOfFrame();
+        yield return null;
+        if (revealDelayOnStart > 0f)
+            yield return new WaitForSecondsRealtime(revealDelayOnStart);
+        StartReveal();
+    }
+
+    /// <summary>Realtime frame step for the wipes, clamped so one long frame can't skip most of the animation.</summary>
+    private float FrameStep => maxFrameStep > 0f ? Mathf.Min(Time.unscaledDeltaTime, maxFrameStep) : Time.unscaledDeltaTime;
 
     /// <summary>
     /// Begins the reveal transition. The black panel will animate from covering the screen (position 0)
@@ -113,7 +138,7 @@ public class ScreenTransition : MonoBehaviour
         {
             float t = elapsed / transitionDuration;
             _rectTransform.anchoredPosition = Vector2.Lerp(startPos, endPos, t);
-            elapsed += Time.unscaledDeltaTime;
+            elapsed += FrameStep;
             yield return null;
         }
 
@@ -146,7 +171,7 @@ public class ScreenTransition : MonoBehaviour
         {
             float t = elapsed / transitionDuration;
             _rectTransform.anchoredPosition = Vector2.Lerp(startPos, endPos, t);
-            elapsed += Time.unscaledDeltaTime;
+            elapsed += FrameStep;
             yield return null;
         }
         // Snap to final position.
