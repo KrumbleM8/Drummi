@@ -68,6 +68,18 @@ namespace KrumbleHut.Drummi.Dungeons
         public float longNoteChance = 0.35f;
 
         /// <summary>
+        /// ON from the first speed-up: a card that reads as a repeat — the same
+        /// block twice in a row, an A-B-A-B alternation (crotchet-rest-crotchet-
+        /// rest), or a card identical to the previous one — is re-rolled with
+        /// repeatRerollChance, at most maxRepeatRerolls times. Repeats still
+        /// happen, just less often. Set by the owning controller at stage-up.
+        /// </summary>
+        public bool  discourageRepeats;
+        public float repeatRerollChance = 0.75f;
+        public int   maxRepeatRerolls   = 3;
+        private SquareTemplate[] _lastTemplates;
+
+        /// <summary>
         /// ON-BEAT cards required after an episode resolves before a new one can
         /// start, so the player settles into the normal grid between episodes.
         /// Counted in generation order, which equals play order (preview → next →
@@ -165,62 +177,72 @@ namespace KrumbleHut.Drummi.Dungeons
             bool hasRest = (vocab & FlashCardVocab.Rest) != 0;
             minNotes = Mathf.Clamp(minNotes, 1, slotCount);
             maxNotes = Mathf.Clamp(maxNotes, minNotes, slotCount);
-            if (!hasRest) { minNotes = slotCount; maxNotes = slotCount; }
-            int noteCount = Random.Range(minNotes, maxNotes + 1);
-
-            // Rests must never land on consecutive slots (default rule). Slot 0 is
-            // always a note, so at most slotCount/2 rests fit among slots
-            // 1..slotCount-1 without two touching — raise noteCount when the roll
-            // would exceed that. allowAdjacentRests (Classic) keeps the rolled count.
-            if (!allowAdjacentRests)
-                noteCount = Mathf.Max(noteCount, slotCount - slotCount / 2);
-            int restCount = slotCount - noteCount;
-
             templates = new SquareTemplate[slotCount];
+            int noteCount;
+            for (int attempt = 0; ; attempt++)
+            {
+                noteCount = Random.Range(minNotes, maxNotes + 1);
 
-            if (allowAdjacentRests)
-            {
-                // Original placement: rests drawn uniformly from slots 1..slotCount-1
-                // with no adjacency constraint (partial Fisher–Yates over the slots).
-                _freeSlots.Clear();
-                for (int v = 1; v < slotCount; v++) _freeSlots.Add(v);
-                for (int i = 0; i < restCount; i++)
-                {
-                    int pick = Random.Range(i, _freeSlots.Count);
-                    (_freeSlots[i], _freeSlots[pick]) = (_freeSlots[pick], _freeSlots[i]);
-                }
-                for (int i = 0; i < restCount; i++)
-                    templates[_freeSlots[i]] = SquareTemplate.Rest;
-            }
-            else
-            {
-                // Place the rests: draw uniformly over all non-adjacent combinations of
-                // slots 1..slotCount-1 (gap method — sample a plain combination from a
-                // range shrunk by the mandatory one-slot gaps, then re-expand each
-                // sorted pick by its index).
-                _freeSlots.Clear();
-                for (int v = 0; v < slotCount - restCount; v++) _freeSlots.Add(v);
-                for (int i = 0; i < restCount; i++)
-                {
-                    int pick = Random.Range(i, _freeSlots.Count);
-                    (_freeSlots[i], _freeSlots[pick]) = (_freeSlots[pick], _freeSlots[i]);
-                }
-                _freeSlots.Sort(0, restCount, null);
-                for (int i = 0; i < restCount; i++)
-                    templates[1 + _freeSlots[i] + i] = SquareTemplate.Rest;
-            }
+                // Rests must never land on consecutive slots (default rule). Slot 0 is
+                // always a note, so at most slotCount/2 rests fit among slots
+                // 1..slotCount-1 without two touching — raise noteCount when the roll
+                // would exceed that. allowAdjacentRests (Classic) keeps the rolled count.
+                if (!allowAdjacentRests)
+                    noteCount = Mathf.Max(noteCount, slotCount - slotCount / 2);
+                int restCount = slotCount - noteCount;
 
-            // Fill every non-rest slot. Slot 0 anchor: downbeat-bearing template
-            // only; other row-start slots (s % 4 == 0) also draw from the anchor
-            // pool so each visual row opens readably WHEN it opens with a note at
-            // all; remaining slots draw uniformly from the note pool.
-            templates[0] = _anchorPool[Random.Range(0, _anchorPool.Count)];
-            for (int s = 1; s < slotCount; s++)
-            {
-                if (templates[s] == SquareTemplate.Rest) continue;
-                var pool = s % SlotsPerRow == 0 ? _anchorPool : _notePool;
-                templates[s] = pool[Random.Range(0, pool.Count)];
+                System.Array.Clear(templates, 0, slotCount); // default Quarter; rests stamped below
+
+                if (allowAdjacentRests)
+                {
+                    // Original placement: rests drawn uniformly from slots 1..slotCount-1
+                    // with no adjacency constraint (partial Fisher–Yates over the slots).
+                    _freeSlots.Clear();
+                    for (int v = 1; v < slotCount; v++) _freeSlots.Add(v);
+                    for (int i = 0; i < restCount; i++)
+                    {
+                        int pick = Random.Range(i, _freeSlots.Count);
+                        (_freeSlots[i], _freeSlots[pick]) = (_freeSlots[pick], _freeSlots[i]);
+                    }
+                    for (int i = 0; i < restCount; i++)
+                        templates[_freeSlots[i]] = SquareTemplate.Rest;
+                }
+                else
+                {
+                    // Place the rests: draw uniformly over all non-adjacent combinations of
+                    // slots 1..slotCount-1 (gap method — sample a plain combination from a
+                    // range shrunk by the mandatory one-slot gaps, then re-expand each
+                    // sorted pick by its index).
+                    _freeSlots.Clear();
+                    for (int v = 0; v < slotCount - restCount; v++) _freeSlots.Add(v);
+                    for (int i = 0; i < restCount; i++)
+                    {
+                        int pick = Random.Range(i, _freeSlots.Count);
+                        (_freeSlots[i], _freeSlots[pick]) = (_freeSlots[pick], _freeSlots[i]);
+                    }
+                    _freeSlots.Sort(0, restCount, null);
+                    for (int i = 0; i < restCount; i++)
+                        templates[1 + _freeSlots[i] + i] = SquareTemplate.Rest;
+                }
+
+                // Fill every non-rest slot. Slot 0 anchor: downbeat-bearing template
+                // only; other row-start slots (s % 4 == 0) also draw from the anchor
+                // pool so each visual row opens readably WHEN it opens with a note at
+                // all; remaining slots draw uniformly from the note pool.
+                templates[0] = _anchorPool[Random.Range(0, _anchorPool.Count)];
+                for (int s = 1; s < slotCount; s++)
+                {
+                    if (templates[s] == SquareTemplate.Rest) continue;
+                    var pool = s % SlotsPerRow == 0 ? _anchorPool : _notePool;
+                    templates[s] = pool[Random.Range(0, pool.Count)];
+                }
+
+                // Repeat damping (post speed-up): usually re-roll a repetitive card.
+                if (!discourageRepeats || attempt >= maxRepeatRerolls ||
+                    !IsRepetitive(templates, slotCount) || Random.value >= repeatRerollChance)
+                    break;
             }
+            _lastTemplates = (SquareTemplate[])templates.Clone();
 
             // Long-note blocks: pick a random run of two adjacent plain note slots
             // (never rests, so the rest rules above stay intact). The Minim fuses
@@ -359,6 +381,22 @@ namespace KrumbleHut.Drummi.Dungeons
                 cursor += templates[s].BeatLength();
             }
             return beats;
+        }
+
+        /// <summary>
+        /// True when the card reads as a repeat: the same block twice in a row,
+        /// an A-B-A-B alternation, or the same card as the previous one.
+        /// </summary>
+        private bool IsRepetitive(SquareTemplate[] t, int n)
+        {
+            for (int i = 1; i < n; i++)
+                if (t[i] == t[i - 1]) return true;
+            for (int i = 3; i < n; i++)
+                if (t[i] == t[i - 2] && t[i - 1] == t[i - 3]) return true;
+            if (_lastTemplates == null || _lastTemplates.Length != n) return false;
+            for (int i = 0; i < n; i++)
+                if (t[i] != _lastTemplates[i]) return false;
+            return true;
         }
 
         /// <summary>

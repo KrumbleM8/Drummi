@@ -1214,6 +1214,8 @@ namespace KrumbleHut.Drummi.Dungeons
                 // idle with the cooldown running (its in-flight cards died with the
                 // discarded preview).
                 _cardGenerator.ResetEpisode();
+                // From the first speed-up on, repetitive cards are mostly re-rolled.
+                _cardGenerator.discourageRepeats = true;
 
                 _baseBpm          = _runBpm * _pendingStageMultiplier;
                 _baseBeatInterval = 60.0 / _baseBpm;
