@@ -45,9 +45,19 @@ public class DrumPadTouch : MonoBehaviour
     /// <summary>Fired when the right pad is tapped or the right key is pressed.</summary>
     public event Action OnRightHit;
 
+    /// <summary>
+    /// Fired the frame the LAST held pad touch / pad key lifts — nothing is held
+    /// any more. Held-note release for FlashCards; pad-agnostic on purpose (a
+    /// stray tap on the other pad while holding never counts as a release).
+    /// </summary>
+    public event Action OnAllReleased;
+
     // ── Private ───────────────────────────────────────────────────────────
 
     private readonly HashSet<int> _processedFingers = new HashSet<int>();
+    private readonly HashSet<int> _padFingers       = new HashSet<int>(); // fingers that began on a pad and are still down
+    private readonly HashSet<int> _liveFingers      = new HashSet<int>();
+    private bool _anyHeld;
 
     private RectTransform _defaultLeftPad;
     private RectTransform _defaultRightPad;
@@ -91,15 +101,26 @@ public class DrumPadTouch : MonoBehaviour
         _processedFingers.Clear();
         HandleTouch();
         HandleKeyboard();
+
+        Keyboard kb = Keyboard.current;
+        bool held = _padFingers.Count > 0 || (kb != null &&
+                    (kb[leftKey].isPressed || kb[rightKey].isPressed ||
+                     (CenterPadEnabled && centerPad != null && kb[centerKey].isPressed)));
+        if (_anyHeld && !held) OnAllReleased?.Invoke();
+        _anyHeld = held;
     }
 
     // ── Input Detection ───────────────────────────────────────────────────
 
     private void HandleTouch()
     {
+        _liveFingers.Clear();
         foreach (Touch touch in Touch.activeTouches)
         {
-            if (touch.phase != UnityEngine.InputSystem.TouchPhase.Began) continue;
+            var phase = touch.phase;
+            if (phase != UnityEngine.InputSystem.TouchPhase.Ended && phase != UnityEngine.InputSystem.TouchPhase.Canceled)
+                _liveFingers.Add(touch.finger.index);
+            if (phase != UnityEngine.InputSystem.TouchPhase.Began) continue;
 
             int fingerId = touch.finger.index;
             if (_processedFingers.Contains(fingerId)) continue;
@@ -109,12 +130,14 @@ public class DrumPadTouch : MonoBehaviour
 
             if (leftPad != null && RectTransformUtility.RectangleContainsScreenPoint(leftPad, screenPos))
             {
+                _padFingers.Add(fingerId);
                 FireHit(false);
                 continue;
             }
 
             if (CenterPadEnabled && centerPad != null && RectTransformUtility.RectangleContainsScreenPoint(centerPad, screenPos))
             {
+                _padFingers.Add(fingerId);
                 OnCenterHit?.Invoke();
                 Debug.Log("[DrumPadTouch] Center hit");
                 continue;
@@ -122,9 +145,12 @@ public class DrumPadTouch : MonoBehaviour
 
             if (rightPad != null && RectTransformUtility.RectangleContainsScreenPoint(rightPad, screenPos))
             {
+                _padFingers.Add(fingerId);
                 FireHit(true);
             }
         }
+        // A pad finger counts as held only while its touch is still live (also drops fingers lost without an Ended phase).
+        _padFingers.IntersectWith(_liveFingers);
     }
 
     private void HandleKeyboard()

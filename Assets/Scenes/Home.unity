@@ -10435,7 +10435,7 @@ MonoBehaviour:
     expandChance: 0.3
     tempoMultiplier: 1
   - minBlocksCleared: 40
-    vocab: 27
+    vocab: 795
     noteRange: {x: 3, y: 4}
     doubleTimeChance: 0
     rows: 1
@@ -10443,7 +10443,7 @@ MonoBehaviour:
     expandChance: 0.35
     tempoMultiplier: 1.1
   - minBlocksCleared: 64
-    vocab: 91
+    vocab: 859
     noteRange: {x: 3, y: 4}
     doubleTimeChance: 0
     rows: 1
@@ -10451,7 +10451,7 @@ MonoBehaviour:
     expandChance: 0.3
     tempoMultiplier: 1.2
   - minBlocksCleared: 88
-    vocab: 91
+    vocab: 859
     noteRange: {x: 3, y: 4}
     doubleTimeChance: 0
     rows: 1
@@ -10459,7 +10459,7 @@ MonoBehaviour:
     expandChance: 0.25
     tempoMultiplier: 1.3
   - minBlocksCleared: 112
-    vocab: 91
+    vocab: 859
     noteRange: {x: 3, y: 4}
     doubleTimeChance: 0
     rows: 1
@@ -10467,7 +10467,7 @@ MonoBehaviour:
     expandChance: 0.25
     tempoMultiplier: 1.4
   - minBlocksCleared: 140
-    vocab: 91
+    vocab: 859
     noteRange: {x: 3, y: 4}
     doubleTimeChance: 0
     rows: 1
@@ -10609,6 +10609,9 @@ MonoBehaviour:
   sixteenthQuadSprite: {fileID: 21300000, guid: da8644eef08176d42b443d60dd496f53, type: 3}
   tripletSprite: {fileID: 21300000, guid: 77dbab6979eb88d4d82e43d1a2746240, type: 3}
   halfRestSprite: {fileID: 21300000, guid: 739f3ed097cfc874187bd007fb56ebc8, type: 3}
+  minimSprite: {fileID: 21300000, guid: fa157d10a345417cab4029d9c24e79f3, type: 3}
+  dottedCrotchetSprite: {fileID: 21300000, guid: a0b426a44f4a4c8bacbddc0880ff9045, type: 3}
+  quaverSprite: {fileID: 21300000, guid: 0160d1ebdf224a248e065fbdf46a8e1a, type: 3}
   faceDownColor: {r: 0.16, g: 0.13, b: 0.22, a: 1}
   noteFaceColor: {r: 0.96, g: 0.93, b: 0.82, a: 1}
   restFaceColor: {r: 0.62, g: 0.6, b: 0.68, a: 1}

@@ -124,14 +124,14 @@ namespace KrumbleHut.Drummi.FlashCards
             // doubleTimeChance intentionally 0 everywhere for now — the in-run DT
             // mechanic is built and verified but disabled pending tuning; re-enable
             // per step when wanted.
-            new() { minBlocksCleared = 40,  vocab = FlashCardVocab.Quarter | FlashCardVocab.EighthPair | FlashCardVocab.OffbeatEighth | FlashCardVocab.Rest,                                 noteRange = new Vector2Int(3, 4), rows = 1, expandRows = 2, expandChance = 0.35f, tempoMultiplier = 1.1f },
+            new() { minBlocksCleared = 40,  vocab = FlashCardVocab.Quarter | FlashCardVocab.EighthPair | FlashCardVocab.OffbeatEighth | FlashCardVocab.Rest | FlashCardVocab.Minim | FlashCardVocab.DottedPair,                                 noteRange = new Vector2Int(3, 4), rows = 1, expandRows = 2, expandChance = 0.35f, tempoMultiplier = 1.1f },
             // HalfRest (off-beat episodes) is built + wired but DISABLED pending a
             // playable difficulty pass — add FlashCardVocab.HalfRest to a step's
             // vocab to re-enable (always alongside Rest).
-            new() { minBlocksCleared = 64,  vocab = FlashCardVocab.Quarter | FlashCardVocab.EighthPair | FlashCardVocab.OffbeatEighth | FlashCardVocab.Triplet | FlashCardVocab.Rest,        noteRange = new Vector2Int(3, 4), rows = 1, expandRows = 3, expandChance = 0.30f, tempoMultiplier = 1.2f },
-            new() { minBlocksCleared = 88,  vocab = FlashCardVocab.Quarter | FlashCardVocab.EighthPair | FlashCardVocab.OffbeatEighth | FlashCardVocab.Triplet | FlashCardVocab.Rest,                                 noteRange = new Vector2Int(3, 4), rows = 1, expandRows = 5, expandChance = 0.25f, tempoMultiplier = 1.3f },
-            new() { minBlocksCleared = 112, vocab = FlashCardVocab.Quarter | FlashCardVocab.EighthPair | FlashCardVocab.OffbeatEighth | FlashCardVocab.Triplet | FlashCardVocab.Rest,                                 noteRange = new Vector2Int(3, 4), rows = 1, expandRows = 5, expandChance = 0.25f, tempoMultiplier = 1.4f },
-            new() { minBlocksCleared = 140, vocab = FlashCardVocab.Quarter | FlashCardVocab.EighthPair | FlashCardVocab.OffbeatEighth | FlashCardVocab.Triplet | FlashCardVocab.Rest,                                 noteRange = new Vector2Int(3, 4), rows = 1, expandRows = 5, expandChance = 0.25f, tempoMultiplier = 1.5f },
+            new() { minBlocksCleared = 64,  vocab = FlashCardVocab.Quarter | FlashCardVocab.EighthPair | FlashCardVocab.OffbeatEighth | FlashCardVocab.Triplet | FlashCardVocab.Rest | FlashCardVocab.Minim | FlashCardVocab.DottedPair,        noteRange = new Vector2Int(3, 4), rows = 1, expandRows = 3, expandChance = 0.30f, tempoMultiplier = 1.2f },
+            new() { minBlocksCleared = 88,  vocab = FlashCardVocab.Quarter | FlashCardVocab.EighthPair | FlashCardVocab.OffbeatEighth | FlashCardVocab.Triplet | FlashCardVocab.Rest | FlashCardVocab.Minim | FlashCardVocab.DottedPair,                                 noteRange = new Vector2Int(3, 4), rows = 1, expandRows = 5, expandChance = 0.25f, tempoMultiplier = 1.3f },
+            new() { minBlocksCleared = 112, vocab = FlashCardVocab.Quarter | FlashCardVocab.EighthPair | FlashCardVocab.OffbeatEighth | FlashCardVocab.Triplet | FlashCardVocab.Rest | FlashCardVocab.Minim | FlashCardVocab.DottedPair,                                 noteRange = new Vector2Int(3, 4), rows = 1, expandRows = 5, expandChance = 0.25f, tempoMultiplier = 1.4f },
+            new() { minBlocksCleared = 140, vocab = FlashCardVocab.Quarter | FlashCardVocab.EighthPair | FlashCardVocab.OffbeatEighth | FlashCardVocab.Triplet | FlashCardVocab.Rest | FlashCardVocab.Minim | FlashCardVocab.DottedPair,                                 noteRange = new Vector2Int(3, 4), rows = 1, expandRows = 5, expandChance = 0.25f, tempoMultiplier = 1.5f },
         };
 
         [Header("Card Expansion")]
@@ -543,7 +543,11 @@ namespace KrumbleHut.Drummi.FlashCards
                       $"vocab={step.vocab} notes={step.noteRange.x}-{step.noteRange.y} dtChance={dtChance:F2} " +
                       $"rows={step.rows} expandRows={step.expandRows} expandChance={step.expandChance:F2} " +
                       $"tempo=x{TempoFor(step):F2}");
-            cardController.SetCardConfig(step.vocab, step.noteRange, dtChance, SlotCountFor(step),
+            // Long-note blocks are Snake-only: the grid view has no tall / half cells.
+            var vocab = _activeLayout == FlashCardLayout.ColumnScroll
+                ? step.vocab
+                : step.vocab & ~(FlashCardVocab.Minim | FlashCardVocab.DottedPair);
+            cardController.SetCardConfig(vocab, step.noteRange, dtChance, SlotCountFor(step),
                                          ExpandSlotsFor(step), step.expandChance, ExpandCadence());
 
             // STAGE UP: the step carries a higher tempo — queue the base-grid retune

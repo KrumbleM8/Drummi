@@ -88,6 +88,12 @@ namespace KrumbleHut.Drummi.Dungeons
                  "Double Time cards and in dungeon rooms.")]
         [SerializeField, Range(0f, 1f)] private float halfRestChance = 0.35f;
 
+        [Tooltip("Chance that a card turns two adjacent note slots into a long-note block (held Minim, or DottedCrotchet + Quaver) when the vocab allows them.")]
+        [SerializeField, Range(0f, 1f)] private float longNoteChance = 0.35f;
+
+        [Tooltip("Held Minim: the pad must stay down at least this many card-beats after the press (block is 2 beats); an earlier release fails the block.")]
+        [SerializeField, Min(0f)] private float minimHoldBeats = 1.5f;
+
         [Tooltip("ON-BEAT cards guaranteed after an off-beat episode resolves before a new one can start.")]
         [SerializeField, Min(0)] private int halfRestCooldownCards = 2;
 
@@ -389,6 +395,10 @@ namespace KrumbleHut.Drummi.Dungeons
         private bool[] _beatConsumed;  // parallel to _cardBeats
         private int[]  _beatSlot;      // parallel to _cardBeats: host slot
         private int    _nextJudgeSlot; // monotonic judging cursor
+        // Held note in progress: slot whose Minim press was credited and is still down.
+        private int    _holdSlot = -1;
+        private double _holdStart;
+        private InputMatch.MatchQuality _holdQuality;
         private int    _groupStart;    // first slot of the currently judging bar group
 
         // Bar-group size for sounds/score/streak — one visual row.
@@ -647,6 +657,7 @@ namespace KrumbleHut.Drummi.Dungeons
             _cardGenerator     = new FlashCardPatternGenerator
             {
                 halfRestChance         = halfRestChance,
+                longNoteChance         = longNoteChance,
                 halfRestCooldownCards  = halfRestCooldownCards,
                 offbeatCardsPerEpisode = offbeatCardsPerEpisode,
                 allowAdjacentRests     = _allowAdjacentRests,
@@ -674,6 +685,7 @@ namespace KrumbleHut.Drummi.Dungeons
                 inputReader.SuppressSpawnMarkers      = true;
                 inputReader.OnHit                    += HitCallback;
                 inputReader.OnMissTap                += MissCallback;
+                inputReader.OnAllPadsReleased        += ReleaseCallback;
             }
 
             // ── Beat-grid snap (same approach as CallAndResponseController) ──
@@ -942,6 +954,7 @@ namespace KrumbleHut.Drummi.Dungeons
             _beatSlot      = new int[_cardBeats.Count];
             _nextJudgeSlot = 0;
             _groupStart    = 0;
+            _holdSlot      = -1;
 
             // Same slot resolution as HitCallback: slots measured on the uncompressed
             // reveal timeline, mapped through the cumulative slot starts.
@@ -992,6 +1005,13 @@ namespace KrumbleHut.Drummi.Dungeons
         private void JudgeSlot(int slot)
         {
             _slotJudged[slot] = true;
+            // A Minim still held at its window close is a completed hold (last-slot
+            // holds run into the next card): credit the release now, visually too.
+            if (slot == _holdSlot)
+            {
+                _holdSlot = -1;
+                OnPlayerHit?.Invoke(slot, _holdQuality);
+            }
             bool cleared = _slotHits[slot] >= _slotExpected[slot];
 
             Debug.Log($"[FlashCard] BlockJudged  | card={_cardIndex} slot={slot} " +
@@ -1100,6 +1120,7 @@ namespace KrumbleHut.Drummi.Dungeons
                     inputReader.SuppressSpawnMarkers      = false;
                     inputReader.OnHit                    -= HitCallback;
                     inputReader.OnMissTap                -= MissCallback;
+                    inputReader.OnAllPadsReleased        -= ReleaseCallback;
                     inputReader.CoyoteWindowStartOverride = null;
                 }
                 Debug.Log("[FlashCard] === ENCOUNTER COMPLETE ===");
@@ -1454,6 +1475,7 @@ namespace KrumbleHut.Drummi.Dungeons
                 inputReader.ResetInputs();
                 inputReader.OnHit                    -= HitCallback;
                 inputReader.OnMissTap                -= MissCallback;
+                    inputReader.OnAllPadsReleased        -= ReleaseCallback;
                 inputReader.CoyoteWindowStartOverride = null;
             }
         }
@@ -1481,7 +1503,13 @@ namespace KrumbleHut.Drummi.Dungeons
             }
             if (nearest == null) return;
 
-            ConsumeHit(now, timeOffset, quality);
+            int credited = ConsumeHit(now, timeOffset, quality);
+            if (credited >= 0 && _templates != null && credited < _templates.Length && _templates[credited].IsHeld())
+            {
+                _holdSlot    = credited;
+                _holdStart   = now;
+                _holdQuality = quality;
+            }
 
             // Cumulative slot lookup so offbeat/subdivided notes map to their host
             // square. Slots are measured on the uncompressed reveal timeline (see BuildCard).
@@ -1496,10 +1524,11 @@ namespace KrumbleHut.Drummi.Dungeons
         /// note from crediting a neighbor. A confirmed hit with no consumable note
         /// (reader/judge disagreement on a double-tap) credits nothing — cosmetic
         /// pop only. Visual slot resolution above is intentionally untouched.
+        /// Returns the credited slot, or -1 when nothing was credited.
         /// </summary>
-        private void ConsumeHit(double now, double timeOffset, InputMatch.MatchQuality quality)
+        private int ConsumeHit(double now, double timeOffset, InputMatch.MatchQuality quality)
         {
-            if (!_endless || _beatConsumed == null) return;
+            if (!_endless || _beatConsumed == null) return -1;
 
             int    bestIdx   = -1;
             double bestDelta = double.MaxValue;
@@ -1509,16 +1538,17 @@ namespace KrumbleHut.Drummi.Dungeons
                 double delta = Math.Abs(now - (_cardBeats[i].scheduledTime + timeOffset));
                 if (delta < bestDelta) { bestDelta = delta; bestIdx = i; }
             }
-            if (bestIdx < 0) return;
+            if (bestIdx < 0) return -1;
 
             double goodWindow = (60.0 / metronome.bpm) *
                                 (evaluator != null ? evaluator.EffectiveGoodWindowBeats : 0.25f);
-            if (bestDelta > goodWindow) return;
+            if (bestDelta > goodWindow) return -1;
 
             _beatConsumed[bestIdx] = true;
             int s = _beatSlot[bestIdx];
             _slotHits[s]++;
             if (quality == InputMatch.MatchQuality.Perfect) _slotPerfect[s]++;
+            return s;
         }
 
         /// <summary>Out-of-window tap: resolves the square nearest the tap time and notifies the view.</summary>
@@ -1532,6 +1562,33 @@ namespace KrumbleHut.Drummi.Dungeons
             int    slot = SlotFromBeats((now - _current.ResponseStartTime) / _cardBeatInterval);
             if (_endless && _slotStrays != null && slot < _slotStrays.Length)
                 _slotStrays[slot]++;
+            OnPlayerMissTap?.Invoke(slot);
+        }
+
+        /// <summary>
+        /// Every pad lifted. Only matters while a Minim press is being held: a
+        /// hold of at least minimHoldBeats completes the block (second OnPlayerHit
+        /// = the view's destroy pop); anything shorter un-credits the press and
+        /// fails the block (OnPlayerMissTap = the view's miss tell).
+        /// </summary>
+        private void ReleaseCallback()
+        {
+            if (_holdSlot < 0 || !_running || GameClock.Instance == null) return;
+            int slot  = _holdSlot;
+            _holdSlot = -1;
+            double heldBeats = (GameClock.Instance.GameTime - _holdStart) / _cardBeatInterval;
+            if (heldBeats >= minimHoldBeats)
+            {
+                Debug.Log($"[FlashCard] HoldComplete | card={_cardIndex} slot={slot} held={heldBeats:F2}b");
+                OnPlayerHit?.Invoke(slot, _holdQuality);
+                return;
+            }
+            Debug.Log($"[FlashCard] HoldDropped  | card={_cardIndex} slot={slot} held={heldBeats:F2}b (< {minimHoldBeats})");
+            if (_slotHits != null && slot < _slotHits.Length)
+            {
+                _slotHits[slot]    = 0;
+                _slotPerfect[slot] = 0;
+            }
             OnPlayerMissTap?.Invoke(slot);
         }
         #endregion

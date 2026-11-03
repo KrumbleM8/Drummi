@@ -4,7 +4,8 @@ namespace KrumbleHut.Drummi.Dungeons
 {
     /// <summary>
     /// Rhythmic content of one Flash Card square. Every square is exactly one
-    /// beat EXCEPT HalfRest (half a beat); no durations cross square boundaries.
+    /// beat EXCEPT HalfRest/Quaver (half), DottedCrotchet (1.5) and Minim (2);
+    /// no durations cross square boundaries.
     /// Subdivided positions sit at fractional slots on the beat grid (eighths
     /// +0.5, sixteenths +0.25 steps, triplets +1/3 steps).
     ///
@@ -40,6 +41,19 @@ namespace KrumbleHut.Drummi.Dungeons
         /// net-zero in time (bar alignment never drifts).
         /// </summary>
         HalfRest,
+
+        /// <summary>
+        /// Held note: TWO beats, one press on the downbeat that must stay held for
+        /// at least FlashCardController.minimHoldBeats (release earlier = block
+        /// failed). Replaces two one-beat note slots, so the card keeps its length.
+        /// </summary>
+        Minim,
+
+        /// <summary>Dotted crotchet (1.5 beats, one tap on the downbeat). ALWAYS followed by a Quaver.</summary>
+        DottedCrotchet,
+
+        /// <summary>Quaver (0.5 beat, one tap on its start = the 'and' of the dotted crotchet's second beat). ALWAYS preceded by a DottedCrotchet.</summary>
+        Quaver,
     }
 
     /// <summary>
@@ -62,6 +76,10 @@ namespace KrumbleHut.Drummi.Dungeons
         SixteenthQuad  = 1 << 5,
         Triplet        = 1 << 6,
         HalfRest       = 1 << 7,
+        /// <summary>Held two-beat note (Snake only).</summary>
+        Minim          = 1 << 8,
+        /// <summary>DottedCrotchet + Quaver pair, two blocks spanning exactly two beats (Snake only).</summary>
+        DottedPair     = 1 << 9,
     }
 
     /// <summary>Shared template/vocabulary queries used by the generator and views.</summary>
@@ -78,6 +96,10 @@ namespace KrumbleHut.Drummi.Dungeons
         public static bool IsPhaseFlip(this SquareTemplate t)
             => t == SquareTemplate.HalfRest;
 
+        /// <summary>True for the held note (Minim): the press must be held, release is judged.</summary>
+        public static bool IsHeld(this SquareTemplate t)
+            => t == SquareTemplate.Minim;
+
         /// <summary>
         /// True when the template has a note ON the downbeat — required for the
         /// slot-0 anchor rule (the card must start with a readable downbeat note).
@@ -86,7 +108,9 @@ namespace KrumbleHut.Drummi.Dungeons
             => t == SquareTemplate.Quarter
             || t == SquareTemplate.EighthPair
             || t == SquareTemplate.SixteenthQuad
-            || t == SquareTemplate.Triplet;
+            || t == SquareTemplate.Triplet
+            || t == SquareTemplate.Minim
+            || t == SquareTemplate.DottedCrotchet;
 
         /// <summary>
         /// True when the template contains any sub-beat rhythm (eighths, sixteenths,
@@ -97,7 +121,8 @@ namespace KrumbleHut.Drummi.Dungeons
             || t == SquareTemplate.OffbeatEighth
             || t == SquareTemplate.SixteenthQuad
             || t == SquareTemplate.Triplet
-            || t == SquareTemplate.HalfRest; // half-beat windows need the same guard
+            || t == SquareTemplate.HalfRest  // half-beat windows need the same guard
+            || t == SquareTemplate.Quaver;   // its tap sits on an off-beat half
 
         /// <summary>Number of tappable notes in the template (expected taps per square).</summary>
         public static int NoteCount(this SquareTemplate t) => t switch
@@ -107,6 +132,9 @@ namespace KrumbleHut.Drummi.Dungeons
             SquareTemplate.OffbeatEighth => 1,
             SquareTemplate.SixteenthQuad => 4,
             SquareTemplate.Triplet       => 3,
+            SquareTemplate.Minim         => 1,
+            SquareTemplate.DottedCrotchet=> 1,
+            SquareTemplate.Quaver        => 1,
             _                            => 0,
         };
 
@@ -119,12 +147,21 @@ namespace KrumbleHut.Drummi.Dungeons
             SquareTemplate.SixteenthQuad => 'S',
             SquareTemplate.Triplet       => 'T',
             SquareTemplate.HalfRest      => 'h',
+            SquareTemplate.Minim         => 'M',
+            SquareTemplate.DottedCrotchet=> 'D',
+            SquareTemplate.Quaver        => 'q',
             _                            => '.',
         };
 
-        /// <summary>Duration of the square in beats: 0.5 for HalfRest, 1 otherwise.</summary>
-        public static float BeatLength(this SquareTemplate t)
-            => t == SquareTemplate.HalfRest ? 0.5f : 1f;
+        /// <summary>Duration of the square in beats: 0.5 HalfRest/Quaver, 1.5 DottedCrotchet, 2 Minim, 1 otherwise.</summary>
+        public static float BeatLength(this SquareTemplate t) => t switch
+        {
+            SquareTemplate.HalfRest       => 0.5f,
+            SquareTemplate.Quaver         => 0.5f,
+            SquareTemplate.DottedCrotchet => 1.5f,
+            SquareTemplate.Minim          => 2f,
+            _                             => 1f,
+        };
 
         /// <summary>
         /// Cumulative slot start positions in beats: length N+1, entry i is where

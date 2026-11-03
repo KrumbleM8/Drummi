@@ -29,6 +29,10 @@ namespace KrumbleHut.Drummi.Dungeons
     ///     Rest rules (never slot 0, never adjacent to another rest, counts toward
     ///     the rest quota) and shortens the card by half a beat — all later slots
     ///     shift onto the off-beats.
+    ///   - Long notes (Minim / DottedPair in vocab): with longNoteChance, ONE run of
+    ///     two adjacent plain note slots becomes a held Minim (one 2-beat slot — the
+    ///     card loses a slot but not a beat) or a DottedCrotchet + Quaver pair
+    ///     (1.5 + 0.5 beats, two slots). Always exactly two beats: bars never drift.
     ///
     /// Output shape matches DungeonPatternGenerator: a list of DungeonBeat whose
     /// timeSlots may be half-integral (offbeat eighths), so scheduling and
@@ -59,6 +63,9 @@ namespace KrumbleHut.Drummi.Dungeons
         /// placed Rests into a HalfRest. Set by the owning controller.
         /// </summary>
         public float halfRestChance = 0.35f;
+
+        /// <summary>Chance that a card carries one long-note block (Minim or DottedCrotchet+Quaver) when its vocab allows them. Set by the owning controller.</summary>
+        public float longNoteChance = 0.35f;
 
         /// <summary>
         /// ON-BEAT cards required after an episode resolves before a new one can
@@ -215,6 +222,36 @@ namespace KrumbleHut.Drummi.Dungeons
                 templates[s] = pool[Random.Range(0, pool.Count)];
             }
 
+            // Long-note blocks: pick a random run of two adjacent plain note slots
+            // (never rests, so the rest rules above stay intact). The Minim fuses
+            // the pair into one 2-beat slot; the dotted pair keeps two slots.
+            bool minimOk  = (vocab & FlashCardVocab.Minim)      != 0;
+            bool dottedOk = (vocab & FlashCardVocab.DottedPair) != 0;
+            if ((minimOk || dottedOk) && Random.value < longNoteChance)
+            {
+                _freeSlots.Clear();
+                for (int s = 0; s + 1 < slotCount; s++)
+                    if (templates[s].IsNoteBearing() && templates[s + 1].IsNoteBearing()) _freeSlots.Add(s);
+                if (_freeSlots.Count > 0)
+                {
+                    int at = _freeSlots[Random.Range(0, _freeSlots.Count)];
+                    if (minimOk && (!dottedOk || Random.value < 0.5f))
+                    {
+                        var fused = new SquareTemplate[slotCount - 1];
+                        System.Array.Copy(templates, fused, at);
+                        fused[at] = SquareTemplate.Minim;
+                        System.Array.Copy(templates, at + 2, fused, at + 1, slotCount - at - 2);
+                        templates = fused;
+                        slotCount--; // every rule below indexes the ACTUAL slot count
+                    }
+                    else
+                    {
+                        templates[at]     = SquareTemplate.DottedCrotchet;
+                        templates[at + 1] = SquareTemplate.Quaver;
+                    }
+                }
+            }
+
             // Off-beat episode machine. The starting HALF-REST converts ONE placed
             // Rest (inheriting every Rest rule for free — never slot 0, never
             // adjacent to another rest, counts toward the rest quota, max one per
@@ -289,6 +326,15 @@ namespace KrumbleHut.Drummi.Dungeons
                 {
                     case SquareTemplate.Quarter:
                         beats.Add(new DungeonBeat(1f, t, constantType));
+                        break;
+                    case SquareTemplate.Minim:
+                        beats.Add(new DungeonBeat(2f, t, constantType));
+                        break;
+                    case SquareTemplate.DottedCrotchet:
+                        beats.Add(new DungeonBeat(1.5f, t, constantType));
+                        break;
+                    case SquareTemplate.Quaver:
+                        beats.Add(new DungeonBeat(0.5f, t, constantType));
                         break;
                     case SquareTemplate.EighthPair:
                         beats.Add(new DungeonBeat(0.5f, t,        constantType));

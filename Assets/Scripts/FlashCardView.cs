@@ -96,6 +96,12 @@ namespace KrumbleHut.Drummi.Dungeons
         [SerializeField] private Sprite tripletSprite;
         [Tooltip("Eighth-rest glyph for the HalfRest square (falls back to restSprite when unset).")]
         [SerializeField] private Sprite halfRestSprite;
+        [Tooltip("Held two-beat note glyph (placeholder).")]
+        [SerializeField] private Sprite minimSprite;
+        [Tooltip("Dotted crotchet glyph (placeholder).")]
+        [SerializeField] private Sprite dottedCrotchetSprite;
+        [Tooltip("Quaver glyph (placeholder).")]
+        [SerializeField] private Sprite quaverSprite;
 
         [Header("Colors")]
         [SerializeField] private Color faceDownColor     = new Color(0.16f, 0.13f, 0.22f, 1f);
@@ -281,6 +287,8 @@ namespace KrumbleHut.Drummi.Dungeons
         // Index of the current card's HalfRest slot (-1 = none) + one-shot latch
         // for its anticipatory pulse/cue.
         private int  _halfRestSlot = -1;
+        private double _columnScrollBeats;     // beat the column is scrolled to (space = time)
+        private double _columnParkBeats = 1.0; // handoff park: previous card's beats still above the scroll
         private bool _halfRestPulsed;
         // Off-beat tick cursor: next slot whose start-beat tick is due (ticks play
         // only on phase-shifted slots).
@@ -602,6 +610,7 @@ namespace KrumbleHut.Drummi.Dungeons
             _columnScrollTween?.Kill();
             _columnScrollTween = null;
             if (_columnRoot != null) _columnRoot.anchoredPosition = Vector2.zero;
+            _columnScrollBeats = 0.0;
             for (int i = 0; i < _slotHolders.Length; i++)
             {
                 _holderScaleTweens[i]?.Kill();
@@ -612,12 +621,12 @@ namespace KrumbleHut.Drummi.Dungeons
         }
 
         /// <summary>
-        /// Column mode per-card layout: UNIFORM one-pitch spacing — every slot,
-        /// including the flip notches, gets its own evenly-spaced cell so nothing
-        /// ever crowds or overlaps. Time compression is carried by the CURSOR
-        /// (the step past a notch comes half a beat early), not by the geometry.
-        /// X carries the phase: off-beat blocks nudge right, notches sit at the
-        /// midpoint. Runs after EnsureGrid whenever a card becomes current.
+        /// Column mode per-card layout: SPACE = TIME. A slot's cell spans its
+        /// beat length (one pitch per beat: a Minim is two pitches tall, a Quaver
+        /// half a pitch) and sits at its cumulative start, so every block's bottom
+        /// edge meets the hit line exactly when its beat arrives. X carries the
+        /// phase: off-beat blocks nudge right, notches sit at the midpoint. Runs
+        /// after EnsureGrid whenever a card becomes current.
         /// </summary>
         private void LayoutColumnForCard()
         {
@@ -634,15 +643,16 @@ namespace KrumbleHut.Drummi.Dungeons
                                : shifted ? offbeatLaneOffsetX : 0f;
                 if (flip) shifted = !shifted;
 
+                float len = template.BeatLength();
                 _holderBaseX[i] = x;
                 if (_slotHolders[i] != null)
-                    _slotHolders[i].anchoredPosition = new Vector2(x, columnHitZoneY + i * columnPitch);
+                    _slotHolders[i].anchoredPosition = new Vector2(x, ColumnCenterY(SlotStartBeat(i), len));
 
                 var sq = squares[i];
                 if (sq?.root == null) continue;
                 sq.root.sizeDelta = flip
                     ? new Vector2(cellSize * halfRestNotchScale.x, cellSize * halfRestNotchScale.y)
-                    : new Vector2(cellSize, cellSize);
+                    : new Vector2(cellSize, ColumnCellHeight(len));
             }
         }
 
@@ -715,10 +725,7 @@ namespace KrumbleHut.Drummi.Dungeons
         {
             if (_columnRoot == null) return;
 
-            _columnScrollTween?.Kill();
-            _columnScrollTween = _columnRoot.DOAnchorPosY(-idx * columnPitch, columnStepDuration)
-                                            .SetEase(Ease.OutCubic)
-                                            .SetLink(_columnRoot.gameObject);
+            ScrollColumnToBeat(SlotStartBeat(idx));
 
             for (int i = 0; i < _slotHolders.Length; i++)
             {
@@ -784,8 +791,9 @@ namespace KrumbleHut.Drummi.Dungeons
             if (_state != ViewState.Performing) return;
             if (GameClock.Instance == null || GameClock.Instance.IsPaused) return;
 
-            double now = GameClock.Instance.GameTime;
-            int idx = SlotFromBeats((now - _timing.ResponseStartTime) / _beatInterval);
+            double now   = GameClock.Instance.GameTime;
+            double beats = (now - _timing.ResponseStartTime) / _beatInterval;
+            int idx = SlotFromBeats(beats);
             if (idx != _cursorIndex)
             {
                 // Crossing PAST the HalfRest slot is the moment the grid flips —
@@ -805,6 +813,17 @@ namespace KrumbleHut.Drummi.Dungeons
                         SetBorder(EffectivePhaseShifted() ? borderOffbeatPhaseColor : borderYourTurnColor,
                                   animate: true);
                 }
+            }
+
+            // Held blocks (2+ beats): the stream keeps stepping once per beat while
+            // the player holds, so the hold reads as motion rather than a stall.
+            if (_layoutMode == FlashCardLayout.ColumnScroll && _columnRoot != null &&
+                idx < _templates.Length && _templates[idx].BeatLength() >= 2f)
+            {
+                double start    = SlotStartBeat(idx);
+                double stepBeat = start + System.Math.Floor(beats - start);
+                if (stepBeat > _columnScrollBeats + 1e-6 && stepBeat < SlotEndBeats(idx) - 1e-6)
+                    ScrollColumnToBeat(stepBeat);
             }
 
             // Rests the player correctly left alone auto-destroy once their beat
@@ -865,6 +884,26 @@ namespace KrumbleHut.Drummi.Dungeons
         /// <summary>Slot start in card-beats — cumulative when available, linear otherwise.</summary>
         private double SlotStartBeat(int i)
             => _slotStartBeats != null && i < _slotStartBeats.Count ? _slotStartBeats[i] : i;
+
+        /// <summary>Whole card length in beats (the on-deck stack starts here).</summary>
+        private double CardLengthBeats() => SlotStartBeat(squares.Length);
+
+        /// <summary>Column cell height for a block of <paramref name="len"/> beats — one pitch per extra beat, so bottom edges stay on one line.</summary>
+        private float ColumnCellHeight(float len) => cellSize + (len - 1f) * columnPitch;
+
+        /// <summary>Unscrolled column center Y of a block of <paramref name="len"/> beats starting at <paramref name="startBeat"/>.</summary>
+        private float ColumnCenterY(double startBeat, float len)
+            => columnHitZoneY + ((float)startBeat + (len - 1f) * 0.5f) * columnPitch;
+
+        /// <summary>Tweens the column so card-beat <paramref name="beat"/> sits on the hit line.</summary>
+        private void ScrollColumnToBeat(double beat)
+        {
+            _columnScrollBeats = beat;
+            _columnScrollTween?.Kill();
+            _columnScrollTween = _columnRoot.DOAnchorPosY(-(float)beat * columnPitch, columnStepDuration)
+                                            .SetEase(Ease.OutCubic)
+                                            .SetLink(_columnRoot.gameObject);
+        }
 
         /// <summary>
         /// Audible off-beat rail: a soft tick on each of the PLAYER's beats (slot
@@ -1067,7 +1106,7 @@ namespace KrumbleHut.Drummi.Dungeons
             if (sq?.root == null) return;
 
             _hitCounts[slot]++;
-            int expected = _templates[slot].NoteCount();
+            int expected = _templates[slot].NoteCount() + (_templates[slot].IsHeld() ? 1 : 0); // held: press + completed hold
             Color tint = quality == InputMatch.MatchQuality.Perfect ? hitPerfectColor : hitGoodColor;
 
             KillSquareTweens(slot);
@@ -1310,7 +1349,7 @@ namespace KrumbleHut.Drummi.Dungeons
         /// preview only) and the in-perform deal (both) share one code path.
         /// </summary>
         private void DealOnDeckColumn()
-            => DealColumnStack(columnHitZoneY + _builtSlotCount * columnPitch,
+            => DealColumnStack(columnHitZoneY + (float)CardLengthBeats() * columnPitch,
                                controller.IsPhaseShifted ^ (_halfRestSlot >= 0),
                                controller.NextTemplates, controller.PreviewTemplates);
 
@@ -1356,12 +1395,16 @@ namespace KrumbleHut.Drummi.Dungeons
             int   idx       = 0;
             float trailCell = cellSize * columnTrailScale;
             bool  shifted   = startShifted;
+            float cum       = 0f; // cumulative beats through the stack (space = time)
             foreach (var tier in tiers)
             {
                 if (tier == null) continue;
                 for (int j = 0; j < tier.Count && idx < _onDeckSquares.Length; j++, idx++)
                 {
                     var sq = _onDeckSquares[idx];
+                    float len = tier[j].BeatLength();
+                    float y   = (cum + (len - 1f) * 0.5f) * columnPitch;
+                    cum += len;
                     if (sq?.root == null) continue;
                     _onDeckTweens[idx]?.Kill();
                     _onDeckTweens[idx] = null;
@@ -1370,10 +1413,10 @@ namespace KrumbleHut.Drummi.Dungeons
                     float x = flip ? offbeatLaneOffsetX * 0.5f
                                    : shifted ? offbeatLaneOffsetX : 0f;
                     if (flip) shifted = !shifted;
-                    sq.root.anchoredPosition = new Vector2(x, idx * columnPitch);
+                    sq.root.anchoredPosition = new Vector2(x, y);
                     sq.root.sizeDelta        = flip
                         ? new Vector2(trailCell * halfRestNotchScale.x, trailCell * halfRestNotchScale.y)
-                        : new Vector2(trailCell, trailCell);
+                        : new Vector2(trailCell, ColumnCellHeight(len) * columnTrailScale);
                     sq.root.localRotation = Quaternion.identity;
                     sq.root.localScale    = Vector3.one;
                     // The whole visible stream wobbles in unison with the active card —
@@ -1402,7 +1445,7 @@ namespace KrumbleHut.Drummi.Dungeons
                 // classic reveal (_promoteOnPerform — run start / post-stage-break)
                 // there is no live card below: park slot 0 one pitch above the hit
                 // zone, ready to step in at perform start.
-                int stackBase = _promoteOnPerform ? 1 : _builtSlotCount;
+                float stackBase = _promoteOnPerform ? 1f : (float)CardLengthBeats();
                 _onDeckRoot.anchoredPosition = new Vector2(0f, columnHitZoneY + stackBase * columnPitch);
                 _onDeckRoot.localScale = Vector3.one;
             }
@@ -1465,6 +1508,9 @@ namespace KrumbleHut.Drummi.Dungeons
         /// </summary>
         private void HandleCardHandoff(int cardIndex)
         {
+            // Outgoing card's beats still above the hit line — the park offset that
+            // keeps the promotion world-seamless (1 pitch unless the last block was long/short).
+            _columnParkBeats = CardLengthBeats() - _columnScrollBeats;
             SyncCardTimingState();
             EnsureGrid(_timing.PhraseLength);
             LayoutColumnForCard();
@@ -1501,7 +1547,8 @@ namespace KrumbleHut.Drummi.Dungeons
                 // whole column down — the handoff reads as one more slither step,
                 // not a rebuild.
                 ResetColumnScroll();
-                _columnRoot.anchoredPosition = new Vector2(0f, columnPitch);
+                _columnRoot.anchoredPosition = new Vector2(0f, (float)_columnParkBeats * columnPitch);
+                _columnParkBeats = 1.0;
             }
 
             var templates = controller.CurrentTemplates;
@@ -1794,6 +1841,9 @@ namespace KrumbleHut.Drummi.Dungeons
             SquareTemplate.SixteenthQuad => sixteenthQuadSprite,
             SquareTemplate.Triplet       => tripletSprite,
             SquareTemplate.HalfRest      => halfRestSprite != null ? halfRestSprite : restSprite,
+            SquareTemplate.Minim         => minimSprite,
+            SquareTemplate.DottedCrotchet=> dottedCrotchetSprite,
+            SquareTemplate.Quaver        => quaverSprite,
             _                            => restSprite,
         };
 

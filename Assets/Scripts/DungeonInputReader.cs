@@ -54,6 +54,9 @@ public class DungeonInputReader : MonoBehaviour
     /// </summary>
     public event Action<DungeonEnemyType, InputMatch.MatchQuality> OnMissTap;
 
+    /// <summary>Forwarded DrumPadTouch.OnAllReleased: every pad touch/key is up (held-note release). Ungated — the consumer decides.</summary>
+    public event Action OnAllPadsReleased;
+
     // Controlled by DungeonBeatManager — false outside the response window.
     // Property wraps a backing field purely to fire AllowInputChanged on transitions;
     // gating semantics are identical to the previous public field.
@@ -145,6 +148,7 @@ public class DungeonInputReader : MonoBehaviour
             drumPadTouch.OnLeftHit   += OnLeft;
             drumPadTouch.OnCenterHit += OnCenter;
             drumPadTouch.OnRightHit  += OnRight;
+            drumPadTouch.OnAllReleased += OnReleased;
         }
         else
         {
@@ -159,6 +163,7 @@ public class DungeonInputReader : MonoBehaviour
             drumPadTouch.OnLeftHit   -= OnLeft;
             drumPadTouch.OnCenterHit -= OnCenter;
             drumPadTouch.OnRightHit  -= OnRight;
+            drumPadTouch.OnAllReleased -= OnReleased;
         }
     }
 
@@ -176,6 +181,7 @@ public class DungeonInputReader : MonoBehaviour
     private void OnLeft()   { PlayPadEcho(static a => a.PlayPadLeft());   TriggerInput(DungeonEnemyType.Left);   }
     private void OnCenter() { PlayPadEcho(static a => a.PlayPadCenter()); TriggerInput(DungeonEnemyType.Center); }
     private void OnRight()  { PlayPadEcho(static a => a.PlayPadRight());  TriggerInput(DungeonEnemyType.Right);  }
+    private void OnReleased() => OnAllPadsReleased?.Invoke();
 
     /// <summary>Instrument override when set (all pads share one voice), else the default pad sound.</summary>
     private void PlayPadEcho(System.Action<AudioManager> defaultSound)
