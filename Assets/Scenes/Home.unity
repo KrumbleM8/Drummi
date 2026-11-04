@@ -9623,7 +9623,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!224 &828217575
 RectTransform:
   m_ObjectHideFlags: 0
@@ -10538,6 +10538,8 @@ MonoBehaviour:
   maxNotes: 6
   vocabulary: 17
   halfRestChance: 0.35
+  longNoteChance: 0.35
+  minimHoldBeats: 1.5
   halfRestCooldownCards: 2
   offbeatCardsPerEpisode: 1
   compressReveal: 1
@@ -19058,7 +19060,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 3958006029565952366, guid: 739076fc8a2db3d4285f9d644daecc73, type: 3}
       propertyPath: m_Name
-      value: MenuSign_Classic
+      value: MenuSign_Pulse
       objectReference: {fileID: 0}
     - target: {fileID: 5425629841168750780, guid: 739076fc8a2db3d4285f9d644daecc73, type: 3}
       propertyPath: m_Camera
@@ -19071,11 +19073,11 @@ PrefabInstance:
     - target: {fileID: 8769215976315606097, guid: 739076fc8a2db3d4285f9d644daecc73, type: 3}
       propertyPath: preview
       value: 
-      objectReference: {fileID: 828217577}
+      objectReference: {fileID: 0}
     - target: {fileID: 8769215976315606097, guid: 739076fc8a2db3d4285f9d644daecc73, type: 3}
       propertyPath: definition
       value: 
-      objectReference: {fileID: 11400000, guid: 1ae5fff08abc513438ab3041d2ea5029, type: 2}
+      objectReference: {fileID: 11400000, guid: 12e9c5b8d9fff0b4084c432fbf2c46bf, type: 2}
     - target: {fileID: 8769215976315606097, guid: 739076fc8a2db3d4285f9d644daecc73, type: 3}
       propertyPath: lockedByDefault
       value: 0
