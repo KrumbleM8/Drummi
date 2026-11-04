@@ -1,5 +1,4 @@
 using System.Collections;
-using System.Collections.Generic;
 using DG.Tweening;
 using TMPro;
 using UnityEngine;
@@ -10,10 +9,16 @@ namespace KrumbleHut.Drummi.Pulse
     /// "Keep a steady pulse" mode. The player taps one centre pad on every
     /// quarter-note of a fixed beat grid; each tap plays a shaker clip that is
     /// exactly one beat of four semiquavers, so steady tapping fills the bar.
-    /// A streak of judged taps escalates through <see cref="stages"/>, each of
-    /// which sets a volume per looping stem (layers can also drop out, which is
-    /// how the pulse is hidden later). Endless; the run ends after
-    /// <see cref="missLimit"/> consecutive missed beats.
+    /// There is no count-in: the base layer starts on the grid origin and the
+    /// player finds the pulse by ear.
+    ///
+    /// Stages: a streak of judged taps climbs through <see cref="stages"/>, each
+    /// of which sets a volume per looping stem (layers can also drop out, which
+    /// is how the pulse is hidden later). Mistakes (missed beat or stray tap):
+    ///   • one mistake only loses the progress toward the next stage;
+    ///   • 2+ mistakes in one bar (4 beats) drop one stage;
+    ///   • 2+ mistakes in each of two consecutive bars revert to stage 0.
+    /// Endless — there is no game over; the player leaves via Home.
     ///
     /// Timing: the grid is one integer beat index from the GameManager's shared
     /// virtual start, so judging and missed-beat detection cannot drift apart.
@@ -26,7 +31,9 @@ namespace KrumbleHut.Drummi.Pulse
         [System.Serializable]
         public class PulseStage
         {
-            [Tooltip("Streak needed to enter this stage. Stage 0 should be 0.")]
+            [Tooltip("Cumulative good-tap streak needed to enter this stage (ascending; stage 0 = 0). " +
+                     "After a drop the streak is floored at the new stage's value, so the gap to the next " +
+                     "entry is what must be re-earned.")]
             public int streak;
             [Tooltip("Target volume per stem (same order as stems). Lowering a layer is allowed.")]
             public float[] layerVolumes;
@@ -44,10 +51,6 @@ namespace KrumbleHut.Drummi.Pulse
         [SerializeField] private float layerFadeSeconds = 0.5f;
 
         [Header("Rules")]
-        [Tooltip("Consecutive missed/stray beats that end the run.")]
-        [SerializeField] private int missLimit = 4;
-        [Tooltip("Count-in beats (shaker plays on each) before judging starts.")]
-        [SerializeField] private int leadInBeats = 8;
         [SerializeField] private double perfectFraction = 0.08;
         [SerializeField] private double goodFraction = 0.25;
 
@@ -59,14 +62,16 @@ namespace KrumbleHut.Drummi.Pulse
 
         private const string HsKey = "PulseHS";
         private const int PerfectReward = 200, GoodReward = 100;
+        private const int BeatsPerBar = GameConstants.BEATS_PER_BAR;
         private const float DriftLogSeconds = 60f;
 
         private AudioSource[] _stemSources;
-        private readonly List<AudioSource> _countInVoices = new();
         private bool   _running;
         private double _origin, _interval;
         private long   _nextBeat;          // first beat index not yet judged or missed
-        private int    _score, _perfectHits, _streak, _misses, _stage = -1, _startHighScore;
+        private int    _score, _perfectHits, _streak, _stage = -1, _startHighScore;
+        private long   _mistakeBar = -1;   // bar of the most recent mistake
+        private int    _barMistakes, _prevBarMistakes;
         private float  _driftLogTimer;
 
         public override string ModeId => "Pulse";
@@ -111,11 +116,11 @@ namespace KrumbleHut.Drummi.Pulse
             if (!_running || GameClock.Instance == null || GameClock.Instance.IsPaused) return;
 
             double now = GameClock.Instance.GameTime;
-            while (_running && now > BeatTime(_nextBeat) + GoodWindow)
+            while (now > BeatTime(_nextBeat) + GoodWindow)
             {
                 Debug.Log($"[Pulse] beat {_nextBeat} MISSED (no tap)");
+                RegisterMistake(_nextBeat);
                 _nextBeat++;
-                RegisterMiss();
             }
 
             _driftLogTimer -= Time.unscaledDeltaTime;
@@ -134,20 +139,20 @@ namespace KrumbleHut.Drummi.Pulse
 
             _interval = 60.0 / bpm;
             _origin   = virtualStartTime;
-            _nextBeat = leadInBeats;
+            _nextBeat = 0;
             _startHighScore = PlayerPrefs.GetInt(HsKey, 0);
             _stage = -1;
+            _mistakeBar = -1;
+            _barMistakes = _prevBarMistakes = 0;
             _driftLogTimer = DriftLogSeconds;
 
             foreach (var src in _stemSources) src.PlayScheduled(realDspStartTime);
-            for (int k = 0; k < leadInBeats; k++)
-                ScheduleCountIn(GameClock.Instance.VirtualToRealDsp(BeatTime(k)));
 
             if (drumPad != null) drumPad.OnCenterHit += HandleTap;
             _running = true;
             ApplyStage();
             UpdateHud();
-            Debug.Log($"[Pulse] Started: bpm={bpm} interval={_interval:F4}s perfect=±{PerfectWindow * 1000:F0}ms good=±{GoodWindow * 1000:F0}ms leadIn={leadInBeats} stems={stems.Length}");
+            Debug.Log($"[Pulse] Started: bpm={bpm} interval={_interval:F4}s perfect=±{PerfectWindow * 1000:F0}ms good=±{GoodWindow * 1000:F0}ms stems={stems.Length}");
         }
 
         public override void Cleanup()
@@ -159,7 +164,7 @@ namespace KrumbleHut.Drummi.Pulse
         public override void ResetToInitialState()
         {
             StopRun();
-            _score = _perfectHits = _streak = _misses = 0;
+            _score = _perfectHits = _streak = 0;
             _stage = -1;
             UpdateHud();
         }
@@ -167,13 +172,11 @@ namespace KrumbleHut.Drummi.Pulse
         public override void OnPause()
         {
             foreach (var src in _stemSources) src.Pause();
-            foreach (var v in _countInVoices) if (v != null) v.Pause();
         }
 
         public override void OnResume()
         {
             foreach (var src in _stemSources) src.UnPause();
-            foreach (var v in _countInVoices) if (v != null) v.UnPause();
             LogStemAlignment("POST-RESUME");
         }
 
@@ -186,23 +189,22 @@ namespace KrumbleHut.Drummi.Pulse
             PlayShaker();
             double t = GameClock.Instance.GameTime;
             long k = (long)System.Math.Round((t - _origin) / _interval);
-            if (k < leadInBeats) return; // joining in during the count-in is free
+            if (k < 0) return;
 
             // Beats between the pending one and the tapped one were skipped.
-            while (_running && k > _nextBeat)
+            while (k > _nextBeat)
             {
                 Debug.Log($"[Pulse] beat {_nextBeat} MISSED (skipped)");
+                RegisterMistake(_nextBeat);
                 _nextBeat++;
-                RegisterMiss();
             }
-            if (!_running) return;
 
             double err = t - BeatTime(k);
             double abs = System.Math.Abs(err);
             if (k < _nextBeat || abs > GoodWindow)
             {
                 Debug.Log($"[Pulse] beat {k} STRAY tap err={err * 1000:+0;-0}ms");
-                RegisterMiss();
+                RegisterMistake(k);
                 return;
             }
 
@@ -210,25 +212,37 @@ namespace KrumbleHut.Drummi.Pulse
             _score += perfect ? PerfectReward : GoodReward;
             if (perfect) _perfectHits++;
             _streak++;
-            _misses = 0;
             _nextBeat = k + 1;
             Debug.Log($"[Pulse] beat {k} {(perfect ? "PERFECT" : "GOOD")} err={err * 1000:+0;-0}ms streak={_streak}");
             ApplyStage();
             UpdateHud();
         }
 
-        private void RegisterMiss()
+        /// <summary>
+        /// A mistake floors the streak at the current stage's entry value (progress
+        /// toward the next stage is lost). The second mistake in a bar drops one
+        /// stage; if the previous bar also had two or more, revert to stage 0.
+        /// </summary>
+        private void RegisterMistake(long beatIndex)
         {
-            _streak = 0;
-            _misses++;
+            long bar = beatIndex / BeatsPerBar;
+            if (bar != _mistakeBar)
+            {
+                _prevBarMistakes = bar == _mistakeBar + 1 ? _barMistakes : 0;
+                _barMistakes = 0;
+                _mistakeBar = bar;
+            }
+            _barMistakes++;
+
+            int target = _stage;
+            if (_barMistakes == 2)
+            {
+                target = _prevBarMistakes >= 2 ? 0 : Mathf.Max(0, _stage - 1);
+                Debug.Log($"[Pulse] bar {bar}: 2 mistakes{(_prevBarMistakes >= 2 ? " after a 2-mistake bar — REVERT to stage 0" : " — drop one stage")}");
+            }
+            _streak = stages[Mathf.Max(0, target)].streak;
             ApplyStage();
             UpdateHud();
-            if (_misses >= missLimit)
-            {
-                Debug.Log($"[Pulse] {_misses} consecutive misses — run over. score={_score}");
-                _running = false;
-                CompletMode();
-            }
         }
 
         /// <summary>Highest stage whose streak threshold is met; fades stems to its volumes.</summary>
@@ -260,33 +274,18 @@ namespace KrumbleHut.Drummi.Pulse
             }
         }
 
-        // Count-in voice: AudioManager.PlayTurnSignal pattern (throwaway source, self-destroys).
-        private void ScheduleCountIn(double realDsp)
-        {
-            if (shakerClip == null) return;
-            var go  = new GameObject("CountInVoice");
-            go.transform.SetParent(transform);
-            var src = go.AddComponent<AudioSource>();
-            src.clip = shakerClip;
-            src.playOnAwake = false;
-            src.PlayScheduled(realDsp);
-            _countInVoices.Add(src);
-            Destroy(go, (float)(realDsp - AudioSettings.dspTime) + shakerClip.length + 1f);
-        }
-
         private void StopRun()
         {
             _running = false;
             if (drumPad != null) drumPad.OnCenterHit -= HandleTap;
             foreach (var src in _stemSources) { src.DOKill(); src.Stop(); src.volume = 0f; }
-            foreach (var v in _countInVoices) if (v != null) Destroy(v.gameObject);
-            _countInVoices.Clear();
         }
 
         private void UpdateHud()
         {
-            if (streakText != null) streakText.text = $"Streak: {_streak}";
-            if (stageText  != null) stageText.text  = $"Stage {Mathf.Max(0, _stage) + 1}";
+            int stage = Mathf.Max(0, _stage);
+            if (streakText != null) streakText.text = $"Streak: {_streak - (stages != null && stages.Length > stage ? stages[stage].streak : 0)}";
+            if (stageText  != null) stageText.text  = $"Stage {stage + 1}";
             if (scoreText  != null) scoreText.text  = _score.ToString();
         }
 
