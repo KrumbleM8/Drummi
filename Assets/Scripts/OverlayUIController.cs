@@ -1,14 +1,18 @@
 using System.Collections;
+using TMPro;
 using UnityEngine;
 using UnityEngine.Audio;
+using UnityEngine.InputSystem;
 using UnityEngine.SceneManagement;
+using UnityEngine.UI;
 
 namespace KrumbleHut.Drummi.UI
 {
     /// <summary>
-    /// Sits on the persistent OverlayUtilCanvas. Manages the settings panel
-    /// (slide-up animation, volume, vibration) and provides scene-load entry
-    /// points that mirror UIMenuManager's GoTo* methods.
+    /// Sits on each scene's OverlayUtilCanvas. Manages the pause/settings panel
+    /// (slide-up animation, resume count-in, volume, vibration), the back key and
+    /// app-backgrounding triggers, and provides scene-load entry points that
+    /// mirror UIMenuManager's GoTo* methods.
     /// </summary>
     public class OverlayUIController : MonoBehaviour
     {
@@ -17,6 +21,17 @@ namespace KrumbleHut.Drummi.UI
         [SerializeField] private RectTransform settingsPanel;
         [SerializeField] private float panelSlideDuration = 0.25f;
         [SerializeField] private AnimationCurve panelCurve = AnimationCurve.EaseInOut(0, 0, 1, 1);
+        [Tooltip("Restart button root. Hidden while a mode is selected but idle at its own menu (Home globe, song select).")]
+        [SerializeField] private GameObject restartButton;
+        [Tooltip("Big 3-2-1 number shown before a paused run resumes. Optional; without it Resume is instant.")]
+        [SerializeField] private TMP_Text countInText;
+        [Tooltip("Root toggled with the count-in (disc + number). Defaults to the text's own object.")]
+        [SerializeField] private GameObject countInRoot;
+
+        [Header("Settings Widgets")]
+        [SerializeField] private Slider musicSlider;
+        [SerializeField] private Slider sfxSlider;
+        [SerializeField] private Toggle vibrationToggle;
 
         [Header("Audio Mixer")]
         [Tooltip("Optional AudioMixer with exposed MusicVolume and SFXVolume parameters.")]
@@ -25,7 +40,7 @@ namespace KrumbleHut.Drummi.UI
         [SerializeField] private string sfxVolumeParam   = "SFXVolume";
 
         [Header("Pause")]
-        [Tooltip("Optional. When assigned, opening/closing settings automatically pauses and resumes the game. Leave null on scenes with no gameplay (e.g. Home).")]
+        [Tooltip("Optional. When assigned, opening/closing settings automatically pauses and resumes the game. Leave null on scenes with no gameplay.")]
         [SerializeField] private PauseHandler pauseHandler;
 
         [Header("Navigation")]
@@ -43,9 +58,12 @@ namespace KrumbleHut.Drummi.UI
 
         // ── Panel state ────────────────────────────────────────────────────────
         private bool       _settingsOpen;
+        private bool       _countingIn;
         private Coroutine  _panelCoroutine;
         private Vector2    _panelShownPos;
         private Vector2    _panelHiddenPos;
+
+        private static bool GameplayRunning => GameManager.instance != null && GameManager.instance.IsPlaying;
 
         // ── Unity ─────────────────────────────────────────────────────────────
 
@@ -59,8 +77,30 @@ namespace KrumbleHut.Drummi.UI
                 settingsPanel.anchoredPosition = _panelHiddenPos;
                 settingsPanel.gameObject.SetActive(false);
             }
+            if (countInText != null && countInRoot == null) countInRoot = countInText.gameObject;
+            if (countInRoot != null) countInRoot.SetActive(false);
+
+            if (musicSlider     != null) musicSlider.SetValueWithoutNotify(GetMusicVolume());
+            if (sfxSlider       != null) sfxSlider.SetValueWithoutNotify(GetSfxVolume());
+            if (vibrationToggle != null) vibrationToggle.SetIsOnWithoutNotify(GetVibration());
 
             LoadAndApplySettings();
+        }
+
+        private void Update()
+        {
+            // Android's back button arrives as the Escape key.
+            var keyboard = Keyboard.current;
+            if (keyboard == null || !keyboard.escapeKey.wasPressedThisFrame || _countingIn) return;
+            if (_settingsOpen) Resume();
+            else OpenSettings();
+        }
+
+        private void OnApplicationPause(bool paused)
+        {
+            // Switching apps or taking a call mid-run: freeze the run and show the menu.
+            if (paused && pauseHandler != null && GameplayRunning && !_settingsOpen && !_countingIn)
+                OpenSettings();
         }
 
         // ── Settings Panel ─────────────────────────────────────────────────────
@@ -68,13 +108,16 @@ namespace KrumbleHut.Drummi.UI
         /// <summary>Opens the settings panel with a slide-up animation and pauses the game if a PauseHandler is assigned.</summary>
         public void OpenSettings()
         {
-            if (_settingsOpen) return;
+            if (_settingsOpen || _countingIn) return;
             _settingsOpen = true;
             pauseHandler?.TogglePause();
+            // Restart is pointless while a mode is selected but idle at its own menu.
+            if (restartButton != null)
+                restartButton.SetActive(GameManager.instance == null || GameManager.instance.ActiveMode == null || GameplayRunning);
             AnimatePanel(show: true);
         }
 
-        /// <summary>Closes the settings panel with a slide-down animation and resumes the game if a PauseHandler is assigned.</summary>
+        /// <summary>Closes the settings panel with a slide-down animation and resumes the game immediately if a PauseHandler is assigned.</summary>
         public void CloseSettings()
         {
             if (!_settingsOpen) return;
@@ -83,11 +126,40 @@ namespace KrumbleHut.Drummi.UI
             AnimatePanel(show: false);
         }
 
+        /// <summary>Resume button: counts 3-2-1 on the beat when a run is in progress, otherwise closes immediately.</summary>
+        public void Resume()
+        {
+            if (!_settingsOpen || _countingIn) return;
+            if (pauseHandler == null || countInText == null || !GameplayRunning)
+            {
+                CloseSettings();
+                return;
+            }
+            _settingsOpen = false;
+            AnimatePanel(show: false);
+            StartCoroutine(CountInRoutine());
+        }
+
         /// <summary>Toggles the settings panel open or closed.</summary>
         public void ToggleSettings()
         {
-            if (_settingsOpen) CloseSettings();
+            if (_settingsOpen) Resume();
             else OpenSettings();
+        }
+
+        private IEnumerator CountInRoutine()
+        {
+            _countingIn = true;
+            float step = Mathf.Clamp((float)pauseHandler.BeatInterval, 0.4f, 1f);
+            countInRoot.SetActive(true);
+            for (int n = 3; n >= 1; n--)
+            {
+                countInText.text = n.ToString();
+                yield return new WaitForSecondsRealtime(step);
+            }
+            countInRoot.SetActive(false);
+            _countingIn = false;
+            pauseHandler.TogglePause();
         }
 
         private void AnimatePanel(bool show)

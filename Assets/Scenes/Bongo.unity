@@ -9679,7 +9679,7 @@ AudioSource:
   m_GameObject: {fileID: 1433809950}
   m_Enabled: 1
   serializedVersion: 4
-  OutputAudioMixerGroup: {fileID: 0}
+  OutputAudioMixerGroup: {fileID: 24300005, guid: 76ca992d2b144cc7b0c4442ed5f6200e, type: 2}
   m_audioClip: {fileID: 8300000, guid: 2a969eb5f12f98a4894a5f8e7a1fb3c6, type: 3}
   m_Resource: {fileID: 8300000, guid: 2a969eb5f12f98a4894a5f8e7a1fb3c6, type: 3}
   m_PlayOnAwake: 0
@@ -11685,28 +11685,28 @@ MonoBehaviour:
   - pageName: Main
     pageTransform: {fileID: 686828141}
     onScreenPosition: {x: 0, y: 0}
-    offScreenLeftPosition: {x: -1136, y: 0}
-    offScreenRightPosition: {x: 1136, y: 0}
+    offScreenLeftPosition: {x: -652.08, y: 0}
+    offScreenRightPosition: {x: 652.08, y: 0}
   - pageName: Song
     pageTransform: {fileID: 498961237}
     onScreenPosition: {x: 0, y: 0}
-    offScreenLeftPosition: {x: -1136, y: 0}
-    offScreenRightPosition: {x: 1136, y: 0}
+    offScreenLeftPosition: {x: -652.08, y: 0}
+    offScreenRightPosition: {x: 652.08, y: 0}
   - pageName: Difficulty
     pageTransform: {fileID: 1373578963}
     onScreenPosition: {x: 0, y: 0}
-    offScreenLeftPosition: {x: -1136, y: 0}
-    offScreenRightPosition: {x: 1136, y: 0}
+    offScreenLeftPosition: {x: -652.08, y: 0}
+    offScreenRightPosition: {x: 652.08, y: 0}
   - pageName: Customize
     pageTransform: {fileID: 1030085468}
     onScreenPosition: {x: 0, y: 0}
-    offScreenLeftPosition: {x: -1136, y: 0}
-    offScreenRightPosition: {x: 1136, y: 0}
+    offScreenLeftPosition: {x: -652.08, y: 0}
+    offScreenRightPosition: {x: 652.08, y: 0}
   - pageName: Score
     pageTransform: {fileID: 373518197}
     onScreenPosition: {x: 0, y: 0}
-    offScreenLeftPosition: {x: -1136, y: 0}
-    offScreenRightPosition: {x: 1136, y: 0}
+    offScreenLeftPosition: {x: -652.08, y: 0}
+    offScreenRightPosition: {x: 652.08, y: 0}
   startingPageName: Song
   transitionDuration: 0.5
   transitionCurve:
@@ -15665,33 +15665,29 @@ PrefabInstance:
       propertyPath: m_Delegates.Array.data[0].callback.m_PersistentCalls.m_Calls.Array.size
       value: 1
       objectReference: {fileID: 0}
-    - target: {fileID: 2398158072135118117, guid: 4fb77e020c598954dbb5efaddf76e2e9, type: 3}
-      propertyPath: m_Delegates.Array.data[0].callback.m_PersistentCalls.m_Calls.Array.data[1].m_Mode
-      value: 1
+    - target: {fileID: 2504482032548577779, guid: 4fb77e020c598954dbb5efaddf76e2e9, type: 3}
+      propertyPath: m_AnchorMax.x
+      value: 0
       objectReference: {fileID: 0}
-    - target: {fileID: 2398158072135118117, guid: 4fb77e020c598954dbb5efaddf76e2e9, type: 3}
-      propertyPath: m_Delegates.Array.data[0].callback.m_PersistentCalls.m_Calls.Array.data[1].m_Target
-      value: 
-      objectReference: {fileID: 891851652}
-    - target: {fileID: 2398158072135118117, guid: 4fb77e020c598954dbb5efaddf76e2e9, type: 3}
-      propertyPath: m_Delegates.Array.data[0].callback.m_PersistentCalls.m_Calls.Array.data[1].m_CallState
-      value: 2
-      objectReference: {fileID: 0}
-    - target: {fileID: 2398158072135118117, guid: 4fb77e020c598954dbb5efaddf76e2e9, type: 3}
-      propertyPath: m_Delegates.Array.data[0].callback.m_PersistentCalls.m_Calls.Array.data[1].m_MethodName
-      value: TogglePause
-      objectReference: {fileID: 0}
-    - target: {fileID: 2398158072135118117, guid: 4fb77e020c598954dbb5efaddf76e2e9, type: 3}
-      propertyPath: m_Delegates.Array.data[0].callback.m_PersistentCalls.m_Calls.Array.data[1].m_TargetAssemblyTypeName
-      value: PauseHandler, Assembly-CSharp
-      objectReference: {fileID: 0}
-    - target: {fileID: 2398158072135118117, guid: 4fb77e020c598954dbb5efaddf76e2e9, type: 3}
-      propertyPath: m_Delegates.Array.data[0].callback.m_PersistentCalls.m_Calls.Array.data[1].m_Arguments.m_ObjectArgumentAssemblyTypeName
-      value: UnityEngine.Object, UnityEngine
+    - target: {fileID: 2504482032548577779, guid: 4fb77e020c598954dbb5efaddf76e2e9, type: 3}
+      propertyPath: m_AnchorMax.y
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 2540076732884628323, guid: 4fb77e020c598954dbb5efaddf76e2e9, type: 3}
       propertyPath: revealDelayOnStart
       value: 0.35
+      objectReference: {fileID: 0}
+    - target: {fileID: 3419182534593081760, guid: 4fb77e020c598954dbb5efaddf76e2e9, type: 3}
+      propertyPath: m_AnchorMax.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3419182534593081760, guid: 4fb77e020c598954dbb5efaddf76e2e9, type: 3}
+      propertyPath: m_AnchorMax.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3419182534593081760, guid: 4fb77e020c598954dbb5efaddf76e2e9, type: 3}
+      propertyPath: m_AnchorMin.x
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 3951095963666198796, guid: 4fb77e020c598954dbb5efaddf76e2e9, type: 3}
       propertyPath: m_Name
@@ -15775,6 +15771,26 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 6510314504084187459, guid: 4fb77e020c598954dbb5efaddf76e2e9, type: 3}
       propertyPath: m_LocalEulerAnglesHint.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 7043190979549196602, guid: 4fb77e020c598954dbb5efaddf76e2e9, type: 3}
+      propertyPath: m_AnchorMax.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 7043190979549196602, guid: 4fb77e020c598954dbb5efaddf76e2e9, type: 3}
+      propertyPath: m_AnchorMax.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 7043190979549196602, guid: 4fb77e020c598954dbb5efaddf76e2e9, type: 3}
+      propertyPath: m_AnchorMin.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 7550408114677921066, guid: 4fb77e020c598954dbb5efaddf76e2e9, type: 3}
+      propertyPath: m_AnchorMax.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 7550408114677921066, guid: 4fb77e020c598954dbb5efaddf76e2e9, type: 3}
+      propertyPath: m_AnchorMax.y
       value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 8432586498176499567, guid: 4fb77e020c598954dbb5efaddf76e2e9, type: 3}

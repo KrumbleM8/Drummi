@@ -165,6 +165,7 @@ public class AudioManager : MonoBehaviour
         var src = go.AddComponent<AudioSource>();
         src.clip = otherSounds[5];
         src.playOnAwake = false;
+        if (speakers.Length > 1) src.outputAudioMixerGroup = speakers[1].outputAudioMixerGroup; // SFX group
         src.PlayScheduled(scheduledDspTime);
 
         // destroy when done

@@ -10,6 +10,9 @@ public class PauseHandler : MonoBehaviour
 
     public bool IsPaused => GameClock.Instance.IsPaused;
 
+    /// <summary>Seconds per beat of the scene's metronome; 0.75 when there is none.</summary>
+    public double BeatInterval => metronome != null && metronome.bpm > 0 ? 60.0 / metronome.bpm : 0.75;
+
     public void TogglePause()
     {
         if (!GameClock.Instance.IsPaused)

@@ -654,6 +654,7 @@ MonoBehaviour:
   rotationAmount: 10.5
   rotationDuration: 0.04
   rangeMultiplier: 1.14
+  drumPadTouch: {fileID: 0}
 --- !u!1 &210816715
 GameObject:
   m_ObjectHideFlags: 0
@@ -1337,7 +1338,7 @@ AudioSource:
   m_GameObject: {fileID: 637621838}
   m_Enabled: 1
   serializedVersion: 4
-  OutputAudioMixerGroup: {fileID: 0}
+  OutputAudioMixerGroup: {fileID: 24300005, guid: 76ca992d2b144cc7b0c4442ed5f6200e, type: 2}
   m_audioClip: {fileID: 8300000, guid: 2a969eb5f12f98a4894a5f8e7a1fb3c6, type: 3}
   m_Resource: {fileID: 8300000, guid: 2a969eb5f12f98a4894a5f8e7a1fb3c6, type: 3}
   m_PlayOnAwake: 0
@@ -2147,8 +2148,8 @@ MonoBehaviour:
   - pageName: Main
     pageTransform: {fileID: 90957050}
     onScreenPosition: {x: 0, y: 0}
-    offScreenLeftPosition: {x: -423.16, y: 0}
-    offScreenRightPosition: {x: 423.16, y: 0}
+    offScreenLeftPosition: {x: -389.08, y: 0}
+    offScreenRightPosition: {x: 389.08, y: 0}
   startingPageName: Main
   transitionDuration: 0.5
   transitionCurve:
@@ -2488,6 +2489,26 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 0}
     m_Modifications:
+    - target: {fileID: 2504482032548577779, guid: 4fb77e020c598954dbb5efaddf76e2e9, type: 3}
+      propertyPath: m_AnchorMax.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2504482032548577779, guid: 4fb77e020c598954dbb5efaddf76e2e9, type: 3}
+      propertyPath: m_AnchorMax.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3419182534593081760, guid: 4fb77e020c598954dbb5efaddf76e2e9, type: 3}
+      propertyPath: m_AnchorMax.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3419182534593081760, guid: 4fb77e020c598954dbb5efaddf76e2e9, type: 3}
+      propertyPath: m_AnchorMax.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3419182534593081760, guid: 4fb77e020c598954dbb5efaddf76e2e9, type: 3}
+      propertyPath: m_AnchorMin.x
+      value: 0
+      objectReference: {fileID: 0}
     - target: {fileID: 3951095963666198796, guid: 4fb77e020c598954dbb5efaddf76e2e9, type: 3}
       propertyPath: m_Name
       value: OverlayUtilCanvas
@@ -2570,6 +2591,26 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 6510314504084187459, guid: 4fb77e020c598954dbb5efaddf76e2e9, type: 3}
       propertyPath: m_LocalEulerAnglesHint.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 7043190979549196602, guid: 4fb77e020c598954dbb5efaddf76e2e9, type: 3}
+      propertyPath: m_AnchorMax.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 7043190979549196602, guid: 4fb77e020c598954dbb5efaddf76e2e9, type: 3}
+      propertyPath: m_AnchorMax.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 7043190979549196602, guid: 4fb77e020c598954dbb5efaddf76e2e9, type: 3}
+      propertyPath: m_AnchorMin.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 7550408114677921066, guid: 4fb77e020c598954dbb5efaddf76e2e9, type: 3}
+      propertyPath: m_AnchorMax.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 7550408114677921066, guid: 4fb77e020c598954dbb5efaddf76e2e9, type: 3}
+      propertyPath: m_AnchorMax.y
       value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 8432586498176499567, guid: 4fb77e020c598954dbb5efaddf76e2e9, type: 3}

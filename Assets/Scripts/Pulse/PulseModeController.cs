@@ -2,6 +2,7 @@ using System.Collections;
 using DG.Tweening;
 using TMPro;
 using UnityEngine;
+using UnityEngine.Audio;
 
 namespace KrumbleHut.Drummi.Pulse
 {
@@ -47,6 +48,8 @@ namespace KrumbleHut.Drummi.Pulse
         [SerializeField] private AudioClip shakerClip;
         [Tooltip("Equal-length loop stems, all started on the shared DSP tick.")]
         [SerializeField] private AudioClip[] stems;
+        [Tooltip("Mixer group the stems play through (Music), so the settings slider reaches them.")]
+        [SerializeField] private AudioMixerGroup stemOutput;
         [SerializeField] private PulseStage[] stages;
         [SerializeField] private float layerFadeSeconds = 0.5f;
 
@@ -98,6 +101,7 @@ namespace KrumbleHut.Drummi.Pulse
                 src.loop        = true;
                 src.clip        = stems[i];
                 src.volume      = 0f;
+                src.outputAudioMixerGroup = stemOutput;
                 _stemSources[i] = src;
             }
         }

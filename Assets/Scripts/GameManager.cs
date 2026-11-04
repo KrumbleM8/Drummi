@@ -68,6 +68,9 @@ public class GameManager : MonoBehaviour
 
     /// <summary>The currently active mode controller. Null until SetMode() is called.</summary>
     public ModeController ActiveMode => _activeMode;
+
+    /// <summary>True while a run is in progress (between StartGame and results).</summary>
+    public bool IsPlaying => currentPhase == GamePhase.Playing;
     #endregion
 
     #region Mode Registry

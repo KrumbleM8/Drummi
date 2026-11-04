@@ -442,6 +442,8 @@ namespace KrumbleHut.Drummi.Dungeons
             var src = go.AddComponent<AudioSource>();
             src.clip        = clip;
             src.playOnAwake = false;
+            if (AudioManager.instance != null && AudioManager.instance.speakers.Length > 1)
+                src.outputAudioMixerGroup = AudioManager.instance.speakers[1].outputAudioMixerGroup; // SFX group
             src.PlayScheduled(realDspTime);
             Destroy(go, clip.length + 3f);
             return src;
