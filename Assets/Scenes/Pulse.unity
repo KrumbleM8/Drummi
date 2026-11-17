@@ -1672,7 +1672,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   drumPad: {fileID: 1277097560}
-  shakerClip: {fileID: 8300000, guid: ae0b13b4d44388a4dbbf0dfa21df89bf, type: 3}
+  shakerClip: {fileID: 8300000, guid: 3e52228fda3fad64aabad0a85443b431, type: 3}
   stems:
   - {fileID: 8300000, guid: bf8e2d92e9e35bb4ea0bc44359d0b92e, type: 3}
   - {fileID: 8300000, guid: 42226dcba5fe88e46b581e6475d9b94b, type: 3}

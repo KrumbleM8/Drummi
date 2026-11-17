@@ -41,7 +41,19 @@
       "mcp__claude_ai_Google_Drive__create_file",
       "mcp__claude_ai_Google_Drive__read_file_content",
       "Bash(python:*)",
-      "Bash(awk 'NR>=5560 && NR<=5690 && \\(/m_Name/ || /GameObject/ || /--- !u!/\\)' \"D:/UnityProjects/Unity Projects/Drummi 2/Assets/Scenes/Dungeon.unity\")"
+      "Bash(awk 'NR>=5560 && NR<=5690 && \\(/m_Name/ || /GameObject/ || /--- !u!/\\)' \"D:/UnityProjects/Unity Projects/Drummi 2/Assets/Scenes/Dungeon.unity\")",
+      "Bash(grep -E \"guid\" Assets/ScriptableObjects/Rooms/*.asset.meta)",
+      "Bash(openssl rand:*)",
+      "mcp__coplay-mcp__play_game",
+      "mcp__coplay-mcp__stop_game",
+      "mcp__coplay-mcp__capture_ui_canvas",
+      "Bash(cp \"D:\\\\UnityProjects\\\\Unity Projects\\\\Drummi 2\\\\Temp\\\\flashcard_capture.png\" /tmp/flash_reveal.png)",
+      "Read(//tmp/**)",
+      "Bash(grep -n \"flashCardVocabulary\" Assets/ScriptableObjects/Rooms/*.asset)",
+      "Bash(grep -rn \"OverlayUtilCanvas\\\\|SceneLoadManager\" \"D:\\\\UnityProjects\\\\Unity Projects\\\\Drummi 2\\\\Assets\\\\Scripts\" --include=*.cs -l)",
+      "Bash(grep -vE \"m_Name: $\")",
+      "Bash(grep -B2 -A2 \"propertyPath: transitionDuration\" Assets/Scenes/*.unity)",
+      "Bash(grep -n \"class GameClock\\\\|GameTime\\\\|\\\\.GameTime\" \"D:\\\\UnityProjects\\\\Unity Projects\\\\Drummi 2/Assets/Scripts\"/*.cs)"
     ]
   }
 }
